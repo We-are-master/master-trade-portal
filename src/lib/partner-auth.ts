@@ -21,7 +21,7 @@ export async function getPartnerSession(): Promise<PartnerSession | null> {
 
   const { data, error } = await supabase
     .from("partners")
-    .select("id, company_name, contact_name, email, phone, trade, rating, jobs_completed, location, partner_address")
+    .select("id, company_name, contact_name, email, phone, trade, trades, rating, jobs_completed, location, partner_address")
     .eq("auth_user_id", user.id)
     .maybeSingle();
 

@@ -14,6 +14,7 @@ export interface PartnerRow {
   email: string | null;
   phone: string | null;
   trade: string | null;
+  trades: string[] | null;
   rating: number | null;
   jobs_completed: number | null;
   location: string | null;
@@ -40,6 +41,7 @@ export function mapPartner(row: PartnerRow): Partner {
   const contact = row.contact_name?.trim() || row.company_name?.trim() || "Partner";
   const [firstName, ...rest] = contact.split(/\s+/);
   const primary = (row.trade?.trim() || "General Maintenance") as Trade;
+  const enabled = (row.trades && row.trades.length ? row.trades : [primary]) as Trade[];
 
   return {
     id: row.id,
@@ -49,7 +51,7 @@ export function mapPartner(row: PartnerRow): Partner {
     phone: row.phone || "",
     initials: initialsFrom(contact),
     avatarBg: "#020040",
-    trades: [primary],
+    trades: enabled,
     primaryTrade: primary,
     postcode: (row.location || row.partner_address || "").trim(),
     radiusMiles: 8, // no column yet — sensible default

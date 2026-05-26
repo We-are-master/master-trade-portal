@@ -15,13 +15,14 @@ import {
   Modal,
   SectionHeader,
   Tabs,
-  Toggle,
 } from "@/components/ui/primitives";
 import { formatGBP, formatGBPdec } from "@/lib/format";
-import { AVAILABLE_JOBS, LEADS, MARCUS } from "@/lib/mock-data";
+import { LEADS, MARCUS } from "@/lib/mock-data";
 import { usePartner } from "@/components/partner-context";
+import { useMyJobs } from "@/components/jobs-context";
 import { createClient } from "@/lib/supabase/client";
 import { fetchAvailableQuotes, submitBid } from "@/lib/queries/quotes";
+import { fetchAvailableJobs } from "@/lib/queries/available-jobs";
 import type { AvailableJob, Lead, QuoteRequest, QuoteRequestStatus } from "@/types";
 import type { ToastInput } from "@/components/ui/toast";
 
@@ -341,54 +342,104 @@ function MetaItem({ icon, label, value, sub }: { icon: string; label: string; va
 // AVAILABLE JOBS
 // ============================================================
 export function AvailableJobsView({ onShowToast }: { onShowToast: ShowToast }) {
-  const [accepted, setAccepted] = useState<Record<string, boolean>>({});
-  const [emergencyOnly, setEmergencyOnly] = useState(false);
+  const partner = usePartner();
+  const myJobs = useMyJobs();
+  const [jobs, setJobs] = useState<AvailableJob[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [acceptingId, setAcceptingId] = useState<string | null>(null);
 
-  const jobs = AVAILABLE_JOBS.filter((j) => !emergencyOnly || j.emergency);
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      setJobs(await fetchAvailableJobs(createClient(), partner.id));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to load offers");
+    } finally {
+      setLoading(false);
+    }
+  }, [partner.id]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const accept = async (job: AvailableJob) => {
+    setAcceptingId(job.id);
+    try {
+      const res = await fetch("/api/jobs/accept", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ jobId: job.id }),
+      });
+      const json = await res.json();
+      if (res.ok && json.accepted) {
+        onShowToast({ icon: "check-circle-2", text: `Accepted ${job.reference ?? "job"}. Moved to My jobs.` });
+        setJobs((prev) => prev.filter((j) => j.id !== job.id));
+        myJobs.refresh();
+      } else if (res.ok) {
+        onShowToast({ icon: "lock", text: "Too late — another trade took this one." });
+        setJobs((prev) => prev.filter((j) => j.id !== job.id));
+      } else {
+        onShowToast({ icon: "alert-triangle", tone: "coral", text: json.error || "Couldn't accept job" });
+      }
+    } catch (e) {
+      onShowToast({ icon: "alert-triangle", tone: "coral", text: e instanceof Error ? e.message : "Couldn't accept job" });
+    } finally {
+      setAcceptingId(null);
+    }
+  };
 
   return (
     <div style={{ padding: 24, display: "flex", flexDirection: "column", gap: 18, flex: 1, overflow: "auto" }}>
       <SectionHeader
         title="Available jobs"
         subtitle="Fixfy-quoted work, customer's already signed off. First to accept wins."
-        actions={<Toggle on={emergencyOnly} onChange={setEmergencyOnly} label="Emergency only" />}
+        actions={
+          <Button variant="secondary" size="sm" icon="refresh-cw" onClick={load}>
+            Refresh
+          </Button>
+        }
       />
 
-      <Card style={{ padding: "10px 14px", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-        <FilterPill icon="briefcase" label="All trades" />
-        <FilterPill icon="map-pin" label="Within 5 mi" />
-        <FilterPill icon="banknote" label="£75–£500" />
-        <FilterPill icon="calendar" label="Any timing" />
-        <span style={{ flex: 1 }} />
-        <span style={{ fontSize: 12.5, color: T.mute }}>
-          <b style={{ color: T.ink, fontWeight: 500 }}>{jobs.length}</b> jobs · sorted by best match
-        </span>
-      </Card>
-
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 12 }}>
-        {jobs.map((j) => (
-          <AvailableJobCard
-            key={j.id}
-            job={j}
-            accepted={!!accepted[j.id]}
-            onAccept={() => {
-              setAccepted((a) => ({ ...a, [j.id]: true }));
-              onShowToast({ icon: "check-circle-2", text: `Accepted ${j.id}. Customer notified, moved to My jobs.` });
-            }}
-          />
-        ))}
-      </div>
+      {loading ? (
+        <div style={{ padding: 8, color: T.mute, fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}>
+          <Icon name="loader" size={14} color={T.mute} /> Loading offers…
+        </div>
+      ) : error ? (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10, alignItems: "flex-start" }}>
+          <div style={{ fontSize: 13, color: T.coral }}>{error}</div>
+          <Button variant="secondary" size="sm" icon="refresh-cw" onClick={load}>
+            Retry
+          </Button>
+        </div>
+      ) : jobs.length === 0 ? (
+        <EmptyState icon="briefcase" title="No offers right now" hint="When Fixfy broadcasts a job that matches your trades and area, it'll appear here to accept." />
+      ) : (
+        <>
+          <span style={{ fontSize: 12.5, color: T.mute }}>
+            <b style={{ color: T.ink, fontWeight: 500 }}>{jobs.length}</b> {jobs.length === 1 ? "offer" : "offers"} · first to accept wins
+          </span>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 12 }}>
+            {jobs.map((j) => (
+              <AvailableJobCard key={j.id} job={j} accepting={acceptingId === j.id} onAccept={() => accept(j)} />
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 }
 
-function AvailableJobCard({ job, accepted, onAccept }: { job: AvailableJob; accepted: boolean; onAccept: () => void }) {
+function AvailableJobCard({ job, accepting, onAccept }: { job: AvailableJob; accepting: boolean; onAccept: () => void }) {
+  const expiring = job.expiresMin != null;
   const [timer, setTimer] = useState((job.expiresMin ?? 0) * 60);
   useEffect(() => {
-    if (!job.emergency) return;
+    if (!expiring) return;
     const id = setInterval(() => setTimer((t) => Math.max(0, t - 1)), 1000);
     return () => clearInterval(id);
-  }, [job.emergency]);
+  }, [expiring]);
   const mm = String(Math.floor(timer / 60)).padStart(2, "0");
   const ss = String(timer % 60).padStart(2, "0");
 
@@ -399,11 +450,11 @@ function AvailableJobCard({ job, accepted, onAccept }: { job: AvailableJob; acce
         padding: 0,
         position: "relative",
         overflow: "hidden",
-        borderColor: job.emergency ? T.coral : T.line,
-        borderWidth: job.emergency ? 1.5 : 1,
+        borderColor: expiring ? T.coral : T.line,
+        borderWidth: expiring ? 1.5 : 1,
       }}
     >
-      {job.emergency && (
+      {expiring && (
         <div
           style={{
             padding: "6px 14px",
@@ -419,7 +470,7 @@ function AvailableJobCard({ job, accepted, onAccept }: { job: AvailableJob; acce
         >
           <Icon name="zap" size={13} />
           <span>
-            EMERGENCY · expires in{" "}
+            OFFER · expires in{" "}
             <span className="fx-mono" style={{ fontWeight: 600 }}>
               {mm}:{ss}
             </span>
@@ -439,7 +490,7 @@ function AvailableJobCard({ job, accepted, onAccept }: { job: AvailableJob; acce
       <div style={{ padding: 16 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
           <span className="fx-mono" style={{ fontSize: 11, color: T.mute }}>
-            {job.id}
+            {job.reference ?? job.id.slice(0, 8)}
           </span>
           <span style={{ width: 3, height: 3, borderRadius: 9999, background: T.line }} />
           <Badge tone="soft" size="sm">{job.trade}</Badge>
@@ -481,24 +532,16 @@ function AvailableJobCard({ job, accepted, onAccept }: { job: AvailableJob; acce
             borderTop: `1px solid ${T.line}`,
           }}
         >
-          <MetaItem icon="map-pin" label="Location" value={job.postcode} sub={`${job.distance} mi away`} />
+          <MetaItem icon="map-pin" label="Location" value={job.postcode || "—"} sub="Address on accept" />
           <MetaItem icon="clock" label="Duration" value={job.duration} sub={job.timing} />
-          <MetaItem icon="user" label="Customer" value="Pre-vetted" sub="Address on accept" />
+          <MetaItem icon="user" label="Customer" value="Pre-vetted" sub="Fixfy-quoted" />
         </div>
 
         <div style={{ marginTop: 14, display: "flex", alignItems: "center", gap: 10 }}>
-          <Button variant="ghost" size="sm" icon="map">View on map</Button>
           <span style={{ flex: 1 }} />
-          {accepted ? (
-            <Badge tone="success" icon="check-circle-2">Accepted — moved to My jobs</Badge>
-          ) : (
-            <>
-              <Button variant="ghost" size="sm">Skip</Button>
-              <Button variant={job.emergency ? "primary" : "dark"} size="sm" icon="check" onClick={onAccept}>
-                Accept job
-              </Button>
-            </>
-          )}
+          <Button variant="dark" size="sm" icon="check" onClick={onAccept} disabled={accepting}>
+            {accepting ? "Accepting…" : "Accept job"}
+          </Button>
         </div>
       </div>
     </Card>

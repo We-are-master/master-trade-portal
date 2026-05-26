@@ -77,7 +77,8 @@ export interface Lead {
 
 // master-os: jobs that are quoted + customer-signed-off, open to first trade to accept.
 export interface AvailableJob {
-  id: string;
+  id: string; // real jobs.id (uuid) — used to accept the offer
+  reference?: string; // human-facing code (jobs.reference)
   title: string;
   desc: string;
   trade: Trade;

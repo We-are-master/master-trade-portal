@@ -14,8 +14,8 @@ import { createClient } from "@/lib/supabase/client";
 import { formatGBPdec } from "@/lib/format";
 import { fetchSelfBills, type SelfBill } from "@/lib/queries/self-bills";
 import { fetchPartnerDocuments, type PartnerDoc } from "@/lib/queries/partner-documents";
-import { MARCUS } from "@/lib/mock-data";
 import { openBillingPortal, startCheckout } from "@/lib/billing";
+import type { Trade } from "@/types";
 
 export interface SettingsPage {
   id: string;
@@ -268,82 +268,124 @@ function ProfilePage() {
 }
 
 // ---------- TRADES & SKILLS ----------
-interface TradeRow {
-  name: string;
-  enabled: boolean;
-  primary: boolean;
-  sub?: string[];
-  cert?: { name: string; n: string; status: "verified" | "required" };
-}
+const ALL_TRADES: Trade[] = [
+  "Plumbing",
+  "General Maintenance",
+  "Light Carpentry",
+  "Electrical",
+  "Painting & Decorating",
+  "Tiling",
+  "Plastering",
+  "Flooring",
+];
 
 export function TradesPage() {
-  const trades: TradeRow[] = [
-    { name: "Plumbing", enabled: true, primary: true, sub: ["Boiler installs", "Emergency repairs", "Tap & valve swaps"], cert: { name: "Gas Safe", n: "189204", status: "verified" } },
-    { name: "General Maintenance", enabled: true, primary: false, sub: ["Re-grout & seal", "Tiling small areas"] },
-    { name: "Light Carpentry", enabled: true, primary: false, sub: ["Door re-hangs", "Shelf fitting", "Floorboard repairs"] },
-    { name: "Electrical", enabled: false, primary: false, cert: { name: "NICEIC", n: "", status: "required" } },
-    { name: "Painting & Decorating", enabled: false, primary: false },
-    { name: "Tiling", enabled: false, primary: false },
-    { name: "Plastering", enabled: false, primary: false },
-    { name: "Flooring", enabled: false, primary: false },
-  ];
+  const partner = usePartner();
+  const toast = useToast();
+  const initialEnabled = partner.trades;
+  const initialPrimary = partner.primaryTrade;
+  const [enabled, setEnabled] = useState<Trade[]>(initialEnabled);
+  const [primary, setPrimary] = useState<Trade>(initialPrimary);
+  const [saving, setSaving] = useState(false);
+
+  const dirty =
+    primary !== initialPrimary ||
+    enabled.length !== initialEnabled.length ||
+    enabled.some((t) => !initialEnabled.includes(t));
+
+  const toggle = (t: Trade) => {
+    setEnabled((prev) => {
+      if (prev.includes(t)) {
+        const next = prev.filter((x) => x !== t);
+        if (t === primary) setPrimary(next[0] ?? t); // reassign primary if it was disabled
+        return next;
+      }
+      return [...prev, t];
+    });
+  };
+
+  const makePrimary = (t: Trade) => {
+    setEnabled((prev) => (prev.includes(t) ? prev : [...prev, t]));
+    setPrimary(t);
+  };
+
+  const save = async () => {
+    if (enabled.length === 0) {
+      toast({ text: "Enable at least one trade.", icon: "alert-triangle", tone: "coral" });
+      return;
+    }
+    setSaving(true);
+    try {
+      const trades = enabled.includes(primary) ? enabled : [primary, ...enabled];
+      const { error } = await createClient()
+        .from("partners")
+        .update({ trades, trade: primary })
+        .eq("id", partner.id);
+      if (error) throw error;
+      toast({ text: "Trades saved", icon: "check" });
+    } catch (e) {
+      toast({ text: e instanceof Error ? e.message : "Couldn't save trades", icon: "alert-triangle", tone: "coral" });
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <>
       <SettingsHeader title="Trades & skills" subtitle="What you do, what you don't. We only send leads matching enabled trades." />
       <PageCard title="Trades">
         <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 10 }}>
-          {trades.map((t) => (
-            <div
-              key={t.name}
-              style={{ padding: 14, borderRadius: 10, border: `1px solid ${T.line}`, background: t.enabled ? T.white : T.paper, opacity: t.enabled ? 1 : 0.85 }}
-            >
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <span style={{ fontSize: 13.5, fontWeight: 500, color: T.ink, flex: 1 }}>{t.name}</span>
-                {t.primary && <Badge tone="coral" size="sm">Primary</Badge>}
-                <Toggle on={t.enabled} onChange={() => {}} />
+          {ALL_TRADES.map((name) => {
+            const on = enabled.includes(name);
+            const isPrimary = on && name === primary;
+            return (
+              <div
+                key={name}
+                style={{ padding: 14, borderRadius: 10, border: `1px solid ${isPrimary ? T.coral : T.line}`, background: on ? T.white : T.paper, opacity: on ? 1 : 0.85 }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ fontSize: 13.5, fontWeight: 500, color: T.ink, flex: 1 }}>{name}</span>
+                  {isPrimary && <Badge tone="coral" size="sm">Primary</Badge>}
+                  <Toggle on={on} onChange={() => toggle(name)} />
+                </div>
+                {on && !isPrimary && (
+                  <button
+                    onClick={() => makePrimary(name)}
+                    style={{
+                      marginTop: 10,
+                      padding: 0,
+                      background: "transparent",
+                      border: "none",
+                      color: T.coral,
+                      fontFamily: T.sans,
+                      fontSize: 12,
+                      fontWeight: 500,
+                      cursor: "pointer",
+                    }}
+                  >
+                    Make primary
+                  </button>
+                )}
               </div>
-              {t.cert && (
-                <div
-                  style={{
-                    marginTop: 10,
-                    padding: "8px 10px",
-                    background: t.cert.status === "verified" ? T.green50 : T.amber50,
-                    borderRadius: 6,
-                    fontSize: 11.5,
-                    color: t.cert.status === "verified" ? T.green : T.amber,
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 6,
-                  }}
-                >
-                  <Icon name={t.cert.status === "verified" ? "shield-check" : "shield-alert"} size={12} />
-                  <span>
-                    {t.cert.status === "verified" ? (
-                      <>
-                        {t.cert.name} verified · <span className="fx-mono">#{t.cert.n}</span>
-                      </>
-                    ) : (
-                      <>{t.cert.name} certificate required to enable</>
-                    )}
-                  </span>
-                </div>
-              )}
-              {t.enabled && t.sub && (
-                <div style={{ marginTop: 10, display: "flex", flexWrap: "wrap", gap: 5 }}>
-                  {t.sub.map((s) => (
-                    <span key={s} style={{ padding: "3px 8px", background: T.paper2, borderRadius: 9999, fontSize: 11, color: T.slate }}>
-                      {s}
-                    </span>
-                  ))}
-                  <span style={{ padding: "3px 8px", background: "transparent", border: `1px dashed ${T.line}`, borderRadius: 9999, fontSize: 11, color: T.mute, cursor: "pointer" }}>
-                    + add
-                  </span>
-                </div>
-              )}
-            </div>
-          ))}
+            );
+          })}
         </div>
       </PageCard>
+      <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+        <Button
+          variant="ghost"
+          onClick={() => {
+            setEnabled(initialEnabled);
+            setPrimary(initialPrimary);
+          }}
+          disabled={!dirty || saving}
+        >
+          Cancel
+        </Button>
+        <Button variant="primary" icon="check" onClick={save} disabled={!dirty || saving}>
+          {saving ? "Saving…" : "Save trades"}
+        </Button>
+      </div>
     </>
   );
 }
@@ -600,29 +642,97 @@ function PreferencesPage() {
 }
 
 // ---------- BILLING & PLAN ----------
+interface SubInfo {
+  subscription_status: string | null;
+  plan: string | null;
+  trial_ends_at: string | null;
+  current_period_end: string | null;
+}
+
+function fmtDate(iso: string | null): string {
+  if (!iso) return "";
+  return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "Europe/London" });
+}
+function daysLeft(iso: string | null): number {
+  if (!iso) return 0;
+  const ms = new Date(iso).getTime() - Date.now();
+  return ms <= 0 ? 0 : Math.ceil(ms / 86_400_000);
+}
+
+const PRO_FEATURES = [
+  "0% commission on every job",
+  "Unlimited leads and jobs",
+  "Card-to-bank payouts (Net-7)",
+  "Self-bill PDFs auto-generated",
+  "Customer report templates",
+  "24/7 emergency dispatch",
+];
+
 function BillingPage() {
+  const partner = usePartner();
+  // Best-effort read of the subscription columns (migration 196). If 196 isn't applied yet the
+  // query errors on the missing columns — we swallow it and fall back to the "start trial" state,
+  // so this never breaks the page (and stays out of the critical auth select).
+  const [sub, setSub] = useState<SubInfo | null>(null);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data, error } = await createClient()
+          .from("partners")
+          .select("subscription_status, plan, trial_ends_at, current_period_end")
+          .eq("id", partner.id)
+          .maybeSingle();
+        if (!cancelled && !error && data) setSub(data as SubInfo);
+      } catch {
+        /* 196 not applied — fall back below */
+      } finally {
+        if (!cancelled) setLoaded(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [partner.id]);
+
+  const status = sub?.subscription_status ?? null;
+  const isActive = status === "active";
+  const isTrialing = status === "trialing" || (!status && daysLeft(sub?.trial_ends_at ?? null) > 0);
+  const trialDays = daysLeft(sub?.trial_ends_at ?? null);
+
+  const statusBadge = isActive
+    ? "FIXFY PRO · ACTIVE"
+    : isTrialing
+      ? `FREE TRIAL · ${trialDays} DAY${trialDays === 1 ? "" : "S"} LEFT`
+      : status
+        ? `PLAN · ${status.toUpperCase()}`
+        : "NO ACTIVE PLAN";
+
+  const subline = isActive
+    ? sub?.current_period_end
+      ? `Renews ${fmtDate(sub.current_period_end)}.`
+      : "Subscription active."
+    : isTrialing
+      ? sub?.trial_ends_at
+        ? `Trial ends ${fmtDate(sub.trial_ends_at)}.`
+        : "Trial in progress."
+      : "Start your Fixfy Pro plan to keep receiving work.";
+
   return (
     <>
       <SettingsHeader title="Billing & plan" />
       <Card style={{ marginBottom: 14, padding: 0, background: T.navy, color: T.white, borderColor: T.navy }}>
         <div style={{ padding: "18px 20px", display: "flex", alignItems: "flex-start", gap: 20 }}>
           <div style={{ flex: 1 }}>
-            <Badge tone="coral" size="sm">FREE TRIAL · DAY 2 OF 3</Badge>
+            <Badge tone="coral" size="sm">{statusBadge}</Badge>
             <div style={{ fontSize: 26, fontWeight: 600, marginTop: 8, letterSpacing: -0.4 }}>
               Fixfy Pro <span style={{ color: T.coral }}>· £99</span>/month
             </div>
-            <div style={{ fontSize: 13, color: "rgba(255,255,255,0.7)", marginTop: 4 }}>
-              Trial ends <span className="fx-mono">{MARCUS.trialEndsOn}</span>. Card on file: Visa •• 4271
-            </div>
+            <div style={{ fontSize: 13, color: "rgba(255,255,255,0.7)", marginTop: 4 }}>{subline}</div>
             <ul style={{ margin: "16px 0 0", padding: 0, listStyle: "none", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-              {[
-                "0% commission on every job",
-                "Unlimited leads and jobs",
-                "Card-to-bank payouts (Net-7)",
-                "Self-bill PDFs auto-generated",
-                "Customer report templates",
-                "24/7 emergency dispatch",
-              ].map((f) => (
+              {PRO_FEATURES.map((f) => (
                 <li key={f} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, color: "rgba(255,255,255,0.85)" }}>
                   <Icon name="check" size={13} color={T.coral} />
                   {f}
@@ -631,78 +741,40 @@ function BillingPage() {
             </ul>
           </div>
           <div style={{ width: 1, alignSelf: "stretch", background: "rgba(255,255,255,0.12)" }} />
-          <div style={{ width: 220, display: "flex", flexDirection: "column", gap: 10 }}>
-            <div style={{ fontSize: 11, color: "rgba(255,255,255,0.6)", letterSpacing: 0.4 }}>TRIAL ENDS IN</div>
-            <div style={{ fontFamily: T.mono, fontSize: 44, fontWeight: 500, lineHeight: 1, letterSpacing: -1 }}>
-              22<span style={{ fontSize: 18, opacity: 0.6, fontWeight: 400 }}>:</span>14
-              <span style={{ fontSize: 18, opacity: 0.6, fontWeight: 400 }}>:</span>06
-            </div>
-            <div style={{ fontSize: 11.5, color: "rgba(255,255,255,0.6)" }}>hours · minutes · seconds</div>
-            <Button variant="primary" size="md" icon="arrow-right" full onClick={startCheckout}>Switch to Pro now</Button>
-            <Button variant="ghost_dark" size="sm" full onClick={openBillingPortal}>Cancel trial</Button>
+          <div style={{ width: 220, display: "flex", flexDirection: "column", gap: 10, justifyContent: "center" }}>
+            {isTrialing && (
+              <>
+                <div style={{ fontSize: 11, color: "rgba(255,255,255,0.6)", letterSpacing: 0.4 }}>TRIAL ENDS IN</div>
+                <div style={{ fontFamily: T.mono, fontSize: 44, fontWeight: 500, lineHeight: 1, letterSpacing: -1 }}>
+                  {trialDays}
+                  <span style={{ fontSize: 16, opacity: 0.6, fontWeight: 400 }}> day{trialDays === 1 ? "" : "s"}</span>
+                </div>
+              </>
+            )}
+            {isActive ? (
+              <Button variant="ghost_dark" size="sm" full onClick={openBillingPortal}>Manage subscription</Button>
+            ) : (
+              <>
+                <Button variant="primary" size="md" icon="arrow-right" full onClick={startCheckout}>
+                  {isTrialing ? "Switch to Pro now" : "Start Fixfy Pro"}
+                </Button>
+                <Button variant="ghost_dark" size="sm" full onClick={openBillingPortal}>Manage billing</Button>
+              </>
+            )}
           </div>
         </div>
       </Card>
 
-      <PageCard title="Payment method">
+      <PageCard title="Payment & invoices" subtitle="Cards, receipts and plan changes are managed securely by Stripe.">
         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-          <div
-            style={{
-              width: 56,
-              height: 36,
-              borderRadius: 6,
-              background: T.navy,
-              color: T.white,
-              display: "inline-flex",
-              alignItems: "center",
-              justifyContent: "center",
-              fontFamily: T.mono,
-              fontSize: 11,
-              fontWeight: 600,
-              letterSpacing: 1,
-            }}
-          >
-            VISA
+          <div style={{ width: 36, height: 36, borderRadius: 9, background: T.paper2, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
+            <Icon name="credit-card" size={18} color={T.navy} />
           </div>
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 13.5, color: T.ink, fontWeight: 500 }}>Visa ending in 4271</div>
-            <div style={{ fontSize: 11.5, color: T.mute, marginTop: 2 }}>Expires 09/28 · Set as default</div>
+            <div style={{ fontSize: 13.5, color: T.ink, fontWeight: 500 }}>Open the billing portal</div>
+            <div style={{ fontSize: 11.5, color: T.mute, marginTop: 2 }}>Update your card, download invoices, or change your plan.</div>
           </div>
-          <Button variant="secondary" icon="pencil" onClick={openBillingPortal}>Update</Button>
-        </div>
-      </PageCard>
-
-      <PageCard title="Billing history">
-        <div style={{ overflow: "auto" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
-            <thead>
-              <tr>
-                {["Date", "Description", "Amount", "Status", ""].map((h, i) => (
-                  <th key={i} style={{ textAlign: "left", padding: "8px 12px", fontSize: 10.5, letterSpacing: 0.4, color: T.mute, fontWeight: 500, borderBottom: `1px solid ${T.line}`, textTransform: "uppercase" }}>
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {[
-                { date: "22 May 2026", desc: "Fixfy Pro · trial started", amount: "£0.00 (trial)", status: "trial" },
-                { date: "24 May 2026", desc: "Fixfy Pro · monthly", amount: "£99.00", status: "upcoming" },
-              ].map((r, i) => (
-                <tr key={i} style={{ borderBottom: `1px solid ${T.line}` }}>
-                  <td style={{ padding: 12, fontSize: 13, fontFamily: T.mono, color: T.slate }}>{r.date}</td>
-                  <td style={{ padding: 12, fontSize: 13, color: T.ink }}>{r.desc}</td>
-                  <td style={{ padding: 12, fontSize: 13, fontFamily: T.mono, color: T.ink }}>{r.amount}</td>
-                  <td style={{ padding: 12 }}>
-                    <Badge tone={r.status === "trial" ? "info" : "neutral"}>{r.status === "trial" ? "Trial" : "Upcoming"}</Badge>
-                  </td>
-                  <td style={{ padding: 12 }}>
-                    <Button variant="ghost" size="xs" icon="download">PDF</Button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <Button variant="secondary" icon="external-link" onClick={openBillingPortal} disabled={!loaded}>Manage</Button>
         </div>
       </PageCard>
     </>
