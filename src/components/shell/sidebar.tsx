@@ -7,6 +7,7 @@ import { useState, type CSSProperties } from "react";
 import { T } from "@/lib/tokens";
 import { Avatar, Icon } from "@/components/ui/primitives";
 import { usePartner } from "@/components/partner-context";
+import { useMyJobs } from "@/components/jobs-context";
 import { createClient } from "@/lib/supabase/client";
 
 interface NavItem {
@@ -17,20 +18,21 @@ interface NavItem {
   hot?: boolean;
 }
 
+// Badges are derived from real data at render time (see Sidebar). No hardcoded counts.
 const NAV: { section: string; items: NavItem[] }[] = [
   { section: "Workspace", items: [{ id: "dashboard", label: "Dashboard", icon: "layout-dashboard" }] },
   {
     section: "Opportunities",
     items: [
-      { id: "leads", label: "Leads", icon: "sparkles", badge: 8 },
-      { id: "available", label: "Available jobs", icon: "wrench", badge: 12, hot: true },
-      { id: "quotes", label: "Available quotes", icon: "file-text", badge: 5 },
+      { id: "leads", label: "Leads", icon: "sparkles" },
+      { id: "available", label: "Available jobs", icon: "wrench" },
+      { id: "quotes", label: "Available quotes", icon: "file-text" },
     ],
   },
   {
     section: "Operations",
     items: [
-      { id: "jobs", label: "My jobs", icon: "briefcase", badge: 6 },
+      { id: "jobs", label: "My jobs", icon: "briefcase" },
       { id: "schedule", label: "Schedule", icon: "calendar" },
     ],
   },
@@ -66,6 +68,11 @@ export function Sidebar({
   density?: "comfortable" | "compact";
 }) {
   const isDense = density === "compact";
+  const { jobs } = useMyJobs();
+  const activeJobs = jobs.filter((j) => j.status === "scheduled" || j.status === "in_progress").length;
+  // Real, derived badges only (no fabricated counts). Available/quotes/leads would need their
+  // own fetch, so they stay unbadged until there's a shared count source.
+  const badgeFor = (id: string): number | undefined => (id === "jobs" && activeJobs > 0 ? activeJobs : undefined);
 
   function Row({ item }: { item: NavItem }) {
     const sel = item.id === active;
@@ -175,9 +182,10 @@ export function Sidebar({
               {section.section}
             </div>
             <nav style={{ display: "flex", flexDirection: "column", gap: 1 }}>
-              {section.items.map((i) => (
-                <Row key={i.id} item={i} />
-              ))}
+              {section.items.map((i) => {
+                const badge = badgeFor(i.id);
+                return <Row key={i.id} item={badge != null ? { ...i, badge } : i} />;
+              })}
             </nav>
           </div>
         ))}
