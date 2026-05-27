@@ -11,7 +11,6 @@ export const PARTNER_DOC_SELECT = [
   "status",
   "expires_at",
   "notes",
-  "counts_toward_compliance",
   "preview_image_path",
   "created_at",
 ].join(",");
@@ -25,7 +24,6 @@ export interface PartnerDocRow {
   status: string | null;
   expires_at: string | null;
   notes: string | null;
-  counts_toward_compliance: boolean | null;
   preview_image_path: string | null;
   created_at: string | null;
 }
@@ -35,6 +33,7 @@ export type DocStatus = "verified" | "pending" | "expired" | "rejected" | "requi
 export interface PartnerDoc {
   id: string;
   name: string;
+  docType: string;
   kind: string;
   status: DocStatus;
   expires: string;
@@ -43,6 +42,23 @@ export interface PartnerDoc {
   fileName: string;
   fileUrl: string | null;
   warning?: string;
+}
+
+// Canonical required documents — mirrors master-os REQUIRED_PARTNER_DOCS (doc_type values must
+// match so the OS compliance/verification recognises portal uploads). A partner can only use the
+// platform once all of these are on file (uploaded — pending review is enough to unlock).
+export const REQUIRED_PARTNER_DOCS = [
+  { docType: "id_proof", name: "Photo ID", description: "Passport or driving license" },
+  { docType: "proof_of_address", name: "Proof of Address", description: "Utility bill or bank statement (last 3 months)" },
+  { docType: "right_to_work", name: "Right to Work", description: "Share code, birth certificate, or passport" },
+  { docType: "insurance", name: "Public Liability Insurance", description: "Active public liability policy" },
+] as const;
+
+// Required doc_types still missing (no uploaded row, or only a rejected one). Empty = unlocked.
+export function missingRequiredDocs(docs: Pick<PartnerDoc, "docType" | "status">[]): typeof REQUIRED_PARTNER_DOCS[number][] {
+  return REQUIRED_PARTNER_DOCS.filter(
+    (req) => !docs.some((d) => d.docType === req.docType && d.status !== "rejected"),
+  );
 }
 
 const LONDON = "Europe/London";
@@ -90,10 +106,13 @@ export function mapPartnerDoc(row: PartnerDocRow): PartnerDoc {
   return {
     id: row.id,
     name: row.name || "Document",
+    docType,
     kind: row.notes || prettyType(docType),
     status,
     expires: fmtMonthYear(row.expires_at),
-    required: row.counts_toward_compliance ?? false,
+    // partner_documents has no compliance flag column — a doc is "required" when its type is one
+    // of the mandatory REQUIRED_PARTNER_DOCS.
+    required: REQUIRED_PARTNER_DOCS.some((r) => r.docType === docType),
     icon: ICON_BY_TYPE[docType] ?? "file",
     fileName: row.file_name || `${(row.name || "document").toLowerCase().replace(/\s+/g, "-")}.pdf`,
     fileUrl: row.file_url,

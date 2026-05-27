@@ -4,7 +4,7 @@
 // Several pages (Trades, Service area, Availability, Rate card, Documents) are reused
 // by the onboarding flow, so they're exported.
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { T } from "@/lib/tokens";
 import { Avatar, Badge, Button, Card, Icon, Input, Modal, Toggle } from "@/components/ui/primitives";
@@ -15,7 +15,7 @@ import { usePartner } from "@/components/partner-context";
 import { createClient } from "@/lib/supabase/client";
 import { formatGBPdec } from "@/lib/format";
 import { fetchSelfBills, type SelfBill } from "@/lib/queries/self-bills";
-import { fetchPartnerDocuments, type PartnerDoc } from "@/lib/queries/partner-documents";
+import { fetchPartnerDocuments, REQUIRED_PARTNER_DOCS, missingRequiredDocs, type PartnerDoc } from "@/lib/queries/partner-documents";
 import { fetchContracts, type PartnerContract } from "@/lib/queries/contracts";
 import { fetchRateCard, saveRateCard, catalogIdsForTrades, type ServicePrice } from "@/lib/queries/rate-card";
 import {
@@ -1270,34 +1270,56 @@ function RadioOption({ selected, label, hint }: { selected: boolean; label: stri
 }
 
 // ---------- DOCS ----------
-export function DocsPage() {
+export function DocsPage({ onChanged }: { onChanged?: () => void } = {}) {
   const partner = usePartner();
+  const toast = useToast();
   const [docs, setDocs] = useState<PartnerDoc[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [busyType, setBusyType] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setError(null);
+    try {
+      const rows = await fetchPartnerDocuments(createClient(), partner.id);
+      setDocs(rows);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to load documents");
+    } finally {
+      setLoading(false);
+    }
+  }, [partner.id]);
 
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const rows = await fetchPartnerDocuments(createClient(), partner.id);
-        if (!cancelled) setDocs(rows);
-      } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load documents");
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [partner.id]);
+    void load();
+  }, [load]);
+
+  const upload = async (docType: string, name: string, file: File) => {
+    setBusyType(docType);
+    try {
+      const form = new FormData();
+      form.set("docType", docType);
+      form.set("name", name);
+      form.set("file", file);
+      const res = await fetch("/api/partner/documents", { method: "POST", body: form });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json.error || "Upload failed");
+      toast({ text: `${name} uploaded — we'll review it shortly`, icon: "check" });
+      await load();
+      onChanged?.();
+    } catch (e) {
+      toast({ text: e instanceof Error ? e.message : "Upload failed", icon: "alert-triangle", tone: "coral" });
+    } finally {
+      setBusyType(null);
+    }
+  };
+
+  const missing = missingRequiredDocs(docs);
+  const extraDocs = docs.filter((d) => !REQUIRED_PARTNER_DOCS.some((r) => r.docType === d.docType));
 
   return (
     <>
-      <SettingsHeader title="Documents & certifications" subtitle="What we need on file to dispatch jobs to you." />
+      <SettingsHeader title="Documents & certifications" subtitle="What we need on file before you can pick up work." />
       {loading ? (
         <div style={{ padding: 8, color: T.mute, fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}>
           <Icon name="loader" size={14} color={T.mute} /> Loading documents…
@@ -1305,19 +1327,110 @@ export function DocsPage() {
       ) : error ? (
         <div style={{ padding: 8, color: T.coral, fontSize: 13 }}>{error}</div>
       ) : (
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-          {docs.map((d) => (
-            <DocCard key={d.id} doc={d} />
-          ))}
-          {docs.length === 0 && (
-            <div style={{ gridColumn: "1 / -1", padding: 16, color: T.mute, fontSize: 13 }}>
-              No documents on file yet. Upload your insurance, certifications and ID to start receiving jobs.
-            </div>
-          )}
-          <DocUploadCard />
-        </div>
+        <>
+          <div
+            style={{
+              marginBottom: 14,
+              padding: "10px 12px",
+              borderRadius: 10,
+              fontSize: 12.5,
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              background: missing.length === 0 ? T.green50 : T.coralTint,
+              color: missing.length === 0 ? T.green : T.coral,
+            }}
+          >
+            <Icon name={missing.length === 0 ? "shield-check" : "alert-triangle"} size={15} />
+            {missing.length === 0
+              ? "All required documents are on file. You're cleared to work."
+              : `${missing.length} required document${missing.length === 1 ? "" : "s"} still needed before you can use the platform.`}
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            {REQUIRED_PARTNER_DOCS.map((req) => {
+              const doc = docs.find((d) => d.docType === req.docType && d.status !== "rejected");
+              return (
+                <RequiredDocCard
+                  key={req.docType}
+                  req={req}
+                  doc={doc}
+                  busy={busyType === req.docType}
+                  onUpload={(file) => upload(req.docType, req.name, file)}
+                />
+              );
+            })}
+            {extraDocs.map((d) => (
+              <DocCard key={d.id} doc={d} />
+            ))}
+            <DocUploadCard busy={busyType === "other"} onUpload={(name, file) => upload("other", name || "Document", file)} />
+          </div>
+        </>
       )}
     </>
+  );
+}
+
+function RequiredDocCard({
+  req,
+  doc,
+  busy,
+  onUpload,
+}: {
+  req: { docType: string; name: string; description: string };
+  doc?: PartnerDoc;
+  busy: boolean;
+  onUpload: (file: File) => void;
+}) {
+  const statusMap = {
+    verified: { tone: "success", label: "Verified", icon: "shield-check" },
+    pending: { tone: "warning", label: "In review", icon: "hourglass" },
+    expired: { tone: "danger", label: "Expired", icon: "alert-triangle" },
+    rejected: { tone: "danger", label: "Rejected", icon: "x-circle" },
+    required: { tone: "neutral", label: "Required", icon: "upload" },
+  } as const;
+  const s = doc ? statusMap[doc.status] : null;
+  return (
+    <Card style={{ padding: 16, display: "flex", flexDirection: "column", gap: 10, border: doc ? undefined : `1px solid ${T.coral}` }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <div style={{ width: 36, height: 36, borderRadius: 9, background: T.paper2, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
+          <Icon name={doc ? statusMap[doc.status].icon : "upload"} size={18} color={T.navy} />
+        </div>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 13.5, fontWeight: 500, color: T.ink }}>{req.name}</div>
+          <div style={{ fontSize: 11.5, color: T.mute }}>{req.description}</div>
+        </div>
+        <Badge tone={s ? s.tone : "danger"} icon={s ? s.icon : "alert-triangle"} size="sm">
+          {s ? s.label : "Required"}
+        </Badge>
+      </div>
+      <label style={{ cursor: busy ? "default" : "pointer" }}>
+        <input
+          type="file"
+          accept="image/*,application/pdf"
+          style={{ display: "none" }}
+          disabled={busy}
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) onUpload(f);
+            e.target.value = "";
+          }}
+        />
+        <span
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 6,
+            fontSize: 12.5,
+            fontWeight: 500,
+            color: doc ? T.slate : T.coral,
+          }}
+        >
+          <Icon name={busy ? "loader" : doc ? "refresh-cw" : "upload"} size={13} color={doc ? T.slate : T.coral} />
+          {busy ? "Uploading…" : doc ? "Replace" : "Upload"}
+        </span>
+      </label>
+    </Card>
   );
 }
 
@@ -1368,17 +1481,37 @@ function DocCard({ doc }: { doc: PartnerDoc }) {
   );
 }
 
-function DocUploadCard() {
+function DocUploadCard({ busy, onUpload }: { busy: boolean; onUpload: (name: string, file: File) => void }) {
+  const [name, setName] = useState("");
   return (
-    <Card style={{ padding: 16, border: `1.5px dashed ${T.line}`, background: T.paper, display: "flex", alignItems: "center", gap: 12 }}>
-      <div style={{ width: 36, height: 36, borderRadius: 9, background: T.white, border: `1px solid ${T.line}`, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
-        <Icon name="upload" size={18} color={T.mute} />
+    <Card style={{ padding: 16, border: `1.5px dashed ${T.line}`, background: T.paper, display: "flex", flexDirection: "column", gap: 10 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        <div style={{ width: 36, height: 36, borderRadius: 9, background: T.white, border: `1px solid ${T.line}`, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
+          <Icon name="upload" size={18} color={T.mute} />
+        </div>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 13.5, fontWeight: 500, color: T.ink }}>Add another document</div>
+          <div style={{ fontSize: 11.5, color: T.mute, marginTop: 2 }}>e.g. a trade certificate · PDF/JPG/PNG · max 10 MB</div>
+        </div>
       </div>
-      <div style={{ flex: 1 }}>
-        <div style={{ fontSize: 13.5, fontWeight: 500, color: T.ink }}>Add another document</div>
-        <div style={{ fontSize: 11.5, color: T.mute, marginTop: 2 }}>PDF/JPG/PNG · max 10 MB · signed URLs</div>
-      </div>
-      <Button variant="primary" size="sm" icon="plus">Upload</Button>
+      <Input value={name} onChange={setName} placeholder="Document name (e.g. NICEIC certificate)" />
+      <label style={{ cursor: busy ? "default" : "pointer", alignSelf: "flex-start" }}>
+        <input
+          type="file"
+          accept="image/*,application/pdf"
+          style={{ display: "none" }}
+          disabled={busy}
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) onUpload(name, f);
+            e.target.value = "";
+            setName("");
+          }}
+        />
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, fontWeight: 500, color: T.coral }}>
+          <Icon name={busy ? "loader" : "plus"} size={13} color={T.coral} /> {busy ? "Uploading…" : "Choose file & upload"}
+        </span>
+      </label>
     </Card>
   );
 }

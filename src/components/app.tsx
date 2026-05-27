@@ -4,10 +4,13 @@
 // Ported from app.jsx. Navigation is internal state (faithful to the prototype);
 // real URL routes can be layered on in a later phase.
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { T } from "@/lib/tokens";
 import { Button } from "@/components/ui/primitives";
 import { useToast } from "@/components/ui/toast";
+import { usePartner } from "@/components/partner-context";
+import { createClient } from "@/lib/supabase/client";
+import { fetchPartnerDocuments, missingRequiredDocs } from "@/lib/queries/partner-documents";
 import { Sidebar } from "@/components/shell/sidebar";
 import { TopBar } from "@/components/shell/topbar";
 import { Dashboard } from "@/components/screens/dashboard";
@@ -32,7 +35,23 @@ export function TradePortalApp() {
   const [route, setRoute] = useState("dashboard");
   const [drawerJobId, setDrawerJobId] = useState<string | null>(null);
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [docsLocked, setDocsLocked] = useState(false);
+  const partner = usePartner();
   const toast = useToast();
+
+  // Gate: a partner can only use the platform once their required documents are on file. Check on
+  // load — if any are missing, force onboarding open and locked until they upload them. Re-run
+  // after each document change inside onboarding to release the lock the moment they're complete.
+  const checkDocs = useCallback(async () => {
+    try {
+      const docs = await fetchPartnerDocuments(createClient(), partner.id);
+      const missing = missingRequiredDocs(docs);
+      setDocsLocked(missing.length > 0);
+      if (missing.length > 0) setShowOnboarding(true);
+    } catch {
+      /* network hiccup — don't lock the user out on a transient error */
+    }
+  }, [partner.id]);
 
   // Fresh sign-ups land at /?welcome=1 — open onboarding straight away, then clean the URL so a
   // refresh doesn't reopen it.
@@ -42,7 +61,8 @@ export function TradePortalApp() {
       setShowOnboarding(true);
       window.history.replaceState(null, "", window.location.pathname);
     }
-  }, []);
+    void checkDocs();
+  }, [checkDocs]);
 
   const [page, subpage] = route.split(":");
 
@@ -78,7 +98,13 @@ export function TradePortalApp() {
 
       {drawerJobId && <JobDrawer jobId={drawerJobId} onClose={() => setDrawerJobId(null)} onShowToast={toast} />}
 
-      {showOnboarding && <Onboarding onClose={() => setShowOnboarding(false)} />}
+      {showOnboarding && (
+        <Onboarding
+          locked={docsLocked}
+          onDocsChanged={checkDocs}
+          onClose={() => setShowOnboarding(false)}
+        />
+      )}
     </div>
   );
 }

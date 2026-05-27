@@ -34,14 +34,36 @@ const ONBOARDING_STEPS = [
   { id: "done", label: "You're in", icon: "check-circle-2" },
 ];
 
-export function Onboarding({ onClose }: { onClose: () => void }) {
+const DOCS_STEP_INDEX = ONBOARDING_STEPS.findIndex((s) => s.id === "docs");
+
+export function Onboarding({
+  onClose,
+  locked = false,
+  onDocsChanged,
+}: {
+  onClose: () => void;
+  // When true the partner is missing required documents — they can't leave onboarding until they
+  // upload them. Closing/finishing jumps them to the Documents step instead.
+  locked?: boolean;
+  onDocsChanged?: () => void;
+}) {
   const [step, setStep] = useState(0);
+  const toast = useToast();
   const total = ONBOARDING_STEPS.length;
   const next = () => setStep((s) => Math.min(total - 1, s + 1));
   const prev = () => setStep((s) => Math.max(0, s - 1));
 
+  const handleClose = () => {
+    if (locked) {
+      setStep(DOCS_STEP_INDEX);
+      toast({ text: "Upload your required documents to start using Fixfy.", icon: "alert-triangle", tone: "coral" });
+      return;
+    }
+    onClose();
+  };
+
   return (
-    <Modal onClose={onClose} width={980}>
+    <Modal onClose={handleClose} width={980}>
       <div style={{ display: "grid", gridTemplateColumns: "260px 1fr", minHeight: 600 }}>
         {/* Step rail */}
         <div style={{ borderRight: `1px solid ${T.line}`, background: T.navy, color: T.white, padding: 24, position: "relative" }}>
@@ -102,7 +124,7 @@ export function Onboarding({ onClose }: { onClose: () => void }) {
         {/* Step content */}
         <div style={{ display: "flex", flexDirection: "column" }}>
           <div style={{ flex: 1, padding: 32, overflow: "auto" }}>
-            <OnboardingStep step={step} setStep={setStep} />
+            <OnboardingStep step={step} setStep={setStep} onDocsChanged={onDocsChanged} />
           </div>
           <div style={{ padding: 16, borderTop: `1px solid ${T.line}`, display: "flex", alignItems: "center", gap: 10 }}>
             <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 10 }}>
@@ -121,7 +143,7 @@ export function Onboarding({ onClose }: { onClose: () => void }) {
                 Continue
               </Button>
             ) : (
-              <Button variant="success" icon="check" onClick={onClose}>
+              <Button variant="success" icon="check" onClick={handleClose}>
                 Take me to the dashboard
               </Button>
             )}
@@ -132,7 +154,7 @@ export function Onboarding({ onClose }: { onClose: () => void }) {
   );
 }
 
-function OnboardingStep({ step, setStep }: { step: number; setStep: (n: number) => void }) {
+function OnboardingStep({ step, setStep, onDocsChanged }: { step: number; setStep: (n: number) => void; onDocsChanged?: () => void }) {
   switch (step) {
     case 0:
       return <WelcomeStep />;
@@ -164,8 +186,8 @@ function OnboardingStep({ step, setStep }: { step: number; setStep: (n: number) 
       );
     case 6:
       return (
-        <StepWrap kicker="STEP 7" title="Documents" sub="ID, public liability, right to work — required before your first job. Trade certificates required by trade.">
-          <DocsPage />
+        <StepWrap kicker="STEP 7" title="Documents" sub="Photo ID, proof of address, right to work and public liability — all required before you can pick up work. Trade certificates required by trade.">
+          <DocsPage onChanged={onDocsChanged} />
         </StepWrap>
       );
     case 7:
