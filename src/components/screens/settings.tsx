@@ -5,6 +5,7 @@
 // by the onboarding flow, so they're exported.
 
 import { useEffect, useState, type ReactNode } from "react";
+import { useRouter } from "next/navigation";
 import { T } from "@/lib/tokens";
 import { Avatar, Badge, Button, Card, Icon, Input, Modal, Toggle } from "@/components/ui/primitives";
 import { MapBackground } from "@/components/ui/map-background";
@@ -303,6 +304,7 @@ const ALL_TRADES: Trade[] = [
 export function TradesPage() {
   const partner = usePartner();
   const toast = useToast();
+  const router = useRouter();
   const initialEnabled = partner.trades;
   const initialPrimary = partner.primaryTrade;
   const [enabled, setEnabled] = useState<Trade[]>(initialEnabled);
@@ -338,12 +340,18 @@ export function TradesPage() {
     setSaving(true);
     try {
       const trades = enabled.includes(primary) ? enabled : [primary, ...enabled];
-      const { error } = await createClient()
+      const { data, error } = await createClient()
         .from("partners")
         .update({ trades, trade: primary })
-        .eq("id", partner.id);
+        .eq("id", partner.id)
+        .select("id");
       if (error) throw error;
+      // RLS-scoped UPDATE that matches 0 rows returns no error but no data — surface it.
+      if (!data || data.length === 0) {
+        throw new Error("Save was blocked. Make sure migration 198 is applied (partner self-update RLS).");
+      }
       toast({ text: "Trades saved", icon: "check" });
+      router.refresh(); // re-fetch the partner context so the saved trades persist across navigation
     } catch (e) {
       toast({ text: e instanceof Error ? e.message : "Couldn't save trades", icon: "alert-triangle", tone: "coral" });
     } finally {
