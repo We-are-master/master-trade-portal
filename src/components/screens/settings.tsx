@@ -8,6 +8,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { T } from "@/lib/tokens";
 import { Avatar, Badge, Button, Card, Icon, Input, Modal, Toggle } from "@/components/ui/primitives";
 import { MapBackground } from "@/components/ui/map-background";
+import { SignaturePad } from "@/components/ui/signature-pad";
 import { useToast } from "@/components/ui/toast";
 import { usePartner } from "@/components/partner-context";
 import { createClient } from "@/lib/supabase/client";
@@ -1257,10 +1258,43 @@ const CONTRACT_ICON: Record<string, string> = {
 
 function PoliciesPage() {
   const partner = usePartner();
+  const toast = useToast();
   const [contracts, setContracts] = useState<PartnerContract[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [reading, setReading] = useState<PartnerContract | null>(null);
+  const [signing, setSigning] = useState<PartnerContract | null>(null);
+  const [sig, setSig] = useState<string | null>(null);
+  const [signerName, setSignerName] = useState(`${partner.firstName} ${partner.lastName}`.trim());
+  const [signBusy, setSignBusy] = useState(false);
+
+  const submitSignature = async () => {
+    if (!signing || !sig || !signerName.trim()) return;
+    setSignBusy(true);
+    try {
+      const res = await fetch("/api/contracts/sign", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contractVersionId: signing.versionId,
+          contractType: signing.type,
+          signatureDataUrl: sig,
+          signerName: signerName.trim(),
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Couldn't sign");
+      const today = new Date().toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+      setContracts((prev) => prev.map((c) => (c.versionId === signing.versionId ? { ...c, signed: true, signedAt: today } : c)));
+      toast({ text: "Contract signed", icon: "check" });
+      setSigning(null);
+      setSig(null);
+    } catch (e) {
+      toast({ text: e instanceof Error ? e.message : "Couldn't sign", icon: "alert-triangle", tone: "coral" });
+    } finally {
+      setSignBusy(false);
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -1314,9 +1348,46 @@ function PoliciesPage() {
               <Button variant="ghost" size="sm" iconRight="arrow-up-right" onClick={() => setReading(c)}>
                 Read
               </Button>
+              {!c.signed && (
+                <Button variant="primary" size="sm" icon="pen-line" onClick={() => { setSig(null); setSigning(c); }}>
+                  Sign
+                </Button>
+              )}
             </Card>
           ))}
         </div>
+      )}
+
+      {signing && (
+        <Modal title={`Sign — ${signing.title}`} onClose={() => setSigning(null)} width={520}>
+          <div style={{ padding: 20, display: "flex", flexDirection: "column", gap: 14 }}>
+            <div style={{ fontSize: 12.5, color: T.slate, lineHeight: 1.5 }}>
+              By signing you agree to the {signing.title}
+              {signing.version ? ` (v${signing.version})` : ""}. Your name, the time, your IP and device are recorded for a
+              legally-valid UK e-signature.
+            </div>
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 500, color: T.ink, marginBottom: 6 }}>Full name</div>
+              <Input value={signerName} onChange={setSignerName} placeholder="Your full legal name" />
+            </div>
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 500, color: T.ink, marginBottom: 6 }}>Signature</div>
+              <SignaturePad onChange={setSig} />
+            </div>
+            <button
+              style={{ alignSelf: "flex-start", padding: 0, background: "transparent", border: "none", cursor: "pointer", display: "flex", gap: 8, alignItems: "flex-start" }}
+            >
+              <Icon name="info" size={13} color={T.mute} />
+              <span style={{ fontSize: 11.5, color: T.mute, textAlign: "left" }}>Read the full text first via the Read button.</span>
+            </button>
+          </div>
+          <div style={{ padding: 16, borderTop: `1px solid ${T.line}`, display: "flex", justifyContent: "flex-end", gap: 8 }}>
+            <Button variant="secondary" onClick={() => setSigning(null)} disabled={signBusy}>Cancel</Button>
+            <Button variant="primary" icon="check" onClick={submitSignature} disabled={signBusy || !sig || !signerName.trim()}>
+              {signBusy ? "Signing…" : "Agree & sign"}
+            </Button>
+          </div>
+        </Modal>
       )}
 
       {reading && (
