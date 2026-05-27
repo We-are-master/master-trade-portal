@@ -34,7 +34,11 @@ export async function POST(req: NextRequest) {
       admin.from("partners").select("id").ilike("email", email).limit(1),
     ]);
     const isPartner = (appUsers.data?.length ?? 0) > 0 || (partnerRows.data?.length ?? 0) > 0;
-    if (!isPartner) return NextResponse.json({ ok: true }); // not a partner — silent (enumeration defence)
+    if (!isPartner) {
+      // Silent in prod (enumeration defence); in dev, say so — a common "no email" cause.
+      const dev = process.env.NODE_ENV !== "production";
+      return NextResponse.json(dev ? { ok: true, notPartner: true } : { ok: true });
+    }
 
     const { data, error } = await admin.auth.admin.generateLink({ type: "magiclink", email });
     if (error) genError = error.message;

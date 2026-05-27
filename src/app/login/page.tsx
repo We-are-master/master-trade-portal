@@ -34,11 +34,14 @@ export default function LoginPage() {
         devCode?: string;
         emailError?: string;
         genError?: string;
+        notPartner?: boolean;
       };
       if (!res.ok) throw new Error("Couldn't send the code. Try again.");
       setStep("code");
       // Dev: prefill the code and surface why the email may not have arrived.
-      if (data.devCode) {
+      if (data.notPartner) {
+        setDevNote("This email isn't a registered partner (no partners row / external_partner). No code sent.");
+      } else if (data.devCode) {
         setCode(data.devCode);
         setDevNote(
           `Dev: code is ${data.devCode}` +
