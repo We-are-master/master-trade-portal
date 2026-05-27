@@ -15,8 +15,9 @@ const TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? "";
 const STATUS_COLOR: Record<string, string> = {
   scheduled: T.blue,
   in_progress: T.coral,
-  awaiting_signoff: T.amber,
+  final_check: T.amber,
   completed: T.green,
+  cancelled: T.mute,
 };
 
 export function JobsMap({ jobs, onOpenJob, minHeight = 460 }: { jobs: MyJob[]; onOpenJob: (id: string) => void; minHeight?: number }) {

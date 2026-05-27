@@ -73,7 +73,8 @@ export function JobDrawer({
   const statusTone: Record<string, string> = {
     scheduled: "scheduled",
     in_progress: "in_progress",
-    awaiting_signoff: "awaiting",
+    final_check: "final_check",
+    cancelled: "cancelled",
     completed: "completed",
   };
 
@@ -144,7 +145,7 @@ export function JobDrawer({
               icon={
                 job.status === "in_progress"
                   ? "loader"
-                  : job.status === "awaiting_signoff"
+                  : job.status === "final_check"
                     ? "pen-line"
                     : job.status === "completed"
                       ? "check"
@@ -181,7 +182,7 @@ export function JobDrawer({
               </button>
             </div>
           )}
-          {job.status === "awaiting_signoff" && (
+          {job.status === "final_check" && (
             <div style={{ padding: "10px 20px", background: T.amber50, color: T.amber, display: "flex", alignItems: "center", gap: 10, fontSize: 12.5 }}>
               <Icon name="hourglass" size={14} />
               <span>
@@ -249,7 +250,7 @@ export function JobDrawer({
               {progress < 1 ? `${job.checklistTotal - job.checklistDone} steps to go` : "Mark complete"}
             </Button>
           )}
-          {job.status === "awaiting_signoff" && (
+          {job.status === "final_check" && (
             <Button variant="primary" icon="send" size="lg" onClick={() => setTab("signoff")}>
               Open sign-off
             </Button>

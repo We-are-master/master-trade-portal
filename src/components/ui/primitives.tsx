@@ -30,7 +30,9 @@ const BADGE_TONES: Record<string, ToneStyle> = {
   scheduled: { bg: T.blue50, fg: T.blue },
   in_progress: { bg: T.coralTint, fg: T.coral },
   awaiting: { bg: T.amber50, fg: T.amber },
+  final_check: { bg: T.amber50, fg: T.amber },
   completed: { bg: T.green50, fg: T.green },
+  cancelled: { bg: T.paper, fg: T.slate, bd: T.line },
 };
 
 export function Badge({
@@ -754,8 +756,9 @@ export function StatusDot({ status }: { status: string }) {
     in_progress: { c: T.coral, live: true },
     scheduled: { c: T.blue },
     awaiting: { c: T.amber, live: true },
-    awaiting_signoff: { c: T.amber, live: true },
+    final_check: { c: T.amber, live: true },
     completed: { c: T.green },
+    cancelled: { c: T.mute },
     block: { c: T.mute },
   };
   const m = map[status] || map.scheduled;
@@ -776,9 +779,10 @@ export function StatusDot({ status }: { status: string }) {
 export const STATUS_LABELS: Record<string, string> = {
   scheduled: "Scheduled",
   in_progress: "In progress",
-  awaiting: "Awaiting sign-off",
-  awaiting_signoff: "Awaiting sign-off",
+  awaiting: "Final checks",
+  final_check: "Final checks",
   completed: "Completed",
+  cancelled: "Cancelled",
   block: "Time blocked",
 };
 

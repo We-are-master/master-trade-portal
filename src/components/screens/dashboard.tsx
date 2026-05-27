@@ -103,7 +103,7 @@ export function Dashboard({
     const weekEarnings = trend.reduce((s, n) => s + n, 0);
 
     const active = jobs.filter((j) => j.status === "scheduled" || j.status === "in_progress");
-    const awaiting = jobs.filter((j) => j.status === "awaiting_signoff");
+    const awaiting = jobs.filter((j) => j.status === "final_check");
     const since30 = daysAgoISO(30);
     const completed30 = jobs.filter((j) => j.status === "completed" && (j.completedDate ?? "") >= since30);
     const pendingPayout = awaiting.reduce((s, j) => s + j.total, 0);
@@ -126,12 +126,12 @@ export function Dashboard({
           when: j.completed ?? "",
           sortKey: j.completedDate,
         });
-      } else if (j.status === "awaiting_signoff") {
+      } else if (j.status === "final_check") {
         items.push({
           id: `a-${j.id}`,
           icon: "clock",
           tone: "amber",
-          text: `Awaiting sign-off — ${j.title}`,
+          text: `Final checks — ${j.title}`,
           meta: `${j.customer.name} · ${formatGBP(j.total)}`,
           when: j.scheduled ?? "",
           sortKey: j.scheduledDate ?? "9999",
@@ -275,7 +275,7 @@ export function Dashboard({
           onClick={() => onNav("jobs")}
         />
         <StatCard
-          label="Awaiting sign-off"
+          label="Final checks"
           value={d.awaiting.length}
           hint={d.pendingPayout > 0 ? `${formatGBP(d.pendingPayout)} pending` : "Nothing pending"}
           accent="coral"
@@ -398,7 +398,7 @@ export function Dashboard({
           tone="amber"
           title="Pending payout"
           line1={d.pendingPayout > 0 ? `${formatGBP(d.pendingPayout)} awaiting sign-off` : "Nothing pending"}
-          line2={`From ${d.awaiting.length} ${d.awaiting.length === 1 ? "job" : "jobs"} awaiting customer sign-off`}
+          line2={`From ${d.awaiting.length} ${d.awaiting.length === 1 ? "job" : "jobs"} in final checks`}
           cta="View self-bills"
           onCta={() => onNav("settings:selfbill")}
         />

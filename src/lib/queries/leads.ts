@@ -89,7 +89,9 @@ export async function fetchLeads(supabase: SupabaseClient, partnerId: string): P
     .eq("partner_id", partnerId)
     .in("status", ["offered", "viewed", "contacted"])
     .order("offered_at", { ascending: false });
-  if (error) throw error;
+  // Surface the real cause (e.g. "relation service_request_partner_offers does not exist" =
+  // migration 199 not applied). Supabase errors aren't Error instances, so wrap the message.
+  if (error) throw new Error(error.message || "Failed to load leads");
   return (data as unknown as OfferRow[]).map(mapOffer).filter((l): l is RealLead => l !== null);
 }
 

@@ -69,24 +69,21 @@ export function MyJobsView({ onOpenJob, defaultView = "board" }: { onOpenJob: Op
 // ============================================================
 // BOARD
 // ============================================================
-function norm(s: JobStatus): string {
-  return s === "awaiting_signoff" ? "awaiting" : s;
-}
-
 function JobsBoard({ onOpenJob, jobs }: { onOpenJob: OpenJob; jobs: MyJob[] }) {
   const columns = [
     { id: "scheduled", label: "Scheduled", accent: T.blue },
     { id: "in_progress", label: "In progress", accent: T.coral },
-    { id: "awaiting", label: "Awaiting sign-off", accent: T.amber },
+    { id: "final_check", label: "Final checks", accent: T.amber },
     { id: "completed", label: "Completed", accent: T.green },
+    { id: "cancelled", label: "Cancelled", accent: T.mute },
   ];
-  const byStatus = (id: string) => jobs.filter((j) => norm(j.status) === id);
+  const byStatus = (id: string) => jobs.filter((j) => j.status === id);
 
   return (
     <div
       style={{
         display: "grid",
-        gridTemplateColumns: "repeat(4, 1fr)",
+        gridTemplateColumns: "repeat(5, 1fr)",
         gap: 12,
         flex: 1,
         overflow: "hidden",
@@ -225,7 +222,7 @@ function BoardCard({ job, onClick }: { job: MyJob; onClick: () => void }) {
 
       <div style={{ display: "flex", alignItems: "center", gap: 8, paddingTop: 6, borderTop: `1px solid ${T.line}` }}>
         <span style={{ fontFamily: T.mono, fontSize: 13, fontWeight: 500, color: T.navy }}>{formatGBP(job.total)}</span>
-        {job.status === "awaiting_signoff" && <Badge tone="warning" size="sm">Awaiting signature</Badge>}
+        {job.status === "final_check" && <Badge tone="warning" size="sm">Final checks</Badge>}
         {job.status === "completed" && job.rating && (
           <span style={{ display: "inline-flex", alignItems: "center", gap: 3, fontSize: 11, color: T.amber }}>
             <Icon name="star" size={11} /> {job.rating}
@@ -298,8 +295,9 @@ function ListRow({ job, onClick, last }: { job: MyJob; onClick: () => void; last
   const statusTone: Record<JobStatus, string> = {
     scheduled: "scheduled",
     in_progress: "in_progress",
-    awaiting_signoff: "awaiting",
+    final_check: "final_check",
     completed: "completed",
+    cancelled: "cancelled",
   };
   return (
     <tr
@@ -356,7 +354,7 @@ function JobsMap({ onOpenJob, jobs }: { onOpenJob: OpenJob; jobs: MyJob[] }) {
     { id: "J-2026-1078", x: 52, y: 38, status: "completed" },
   ];
   const dotColor = (s: string): string =>
-    ({ in_progress: T.coral, scheduled: T.blue, awaiting: T.amber, completed: T.green }[s] ?? T.blue);
+    ({ in_progress: T.coral, scheduled: T.blue, final_check: T.amber, completed: T.green, cancelled: T.mute }[s] ?? T.blue);
 
   return (
     <div style={{ display: "grid", gridTemplateColumns: "320px 1fr", gap: 12, flex: 1, minHeight: 0 }}>
@@ -384,7 +382,7 @@ function JobsMap({ onOpenJob, jobs }: { onOpenJob: OpenJob; jobs: MyJob[] }) {
                   width: 22,
                   height: 22,
                   borderRadius: 9999,
-                  background: dotColor(norm(j.status)),
+                  background: dotColor(j.status),
                   color: T.white,
                   fontSize: 10.5,
                   fontWeight: 600,
@@ -443,7 +441,7 @@ function JobsMap({ onOpenJob, jobs }: { onOpenJob: OpenJob; jobs: MyJob[] }) {
           {[
             { s: "in_progress", label: "In progress" },
             { s: "scheduled", label: "Scheduled" },
-            { s: "awaiting", label: "Awaiting" },
+            { s: "final_check", label: "Final checks" },
             { s: "completed", label: "Done" },
           ].map((l) => (
             <span key={l.s} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>

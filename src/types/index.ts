@@ -14,13 +14,13 @@ export type Trade =
   | "Plastering"
   | "Flooring";
 
-// master-os: jobs.status
-export type JobStatus = "scheduled" | "in_progress" | "awaiting_signoff" | "completed";
+// master-os: jobs.status (aligned with the OS lifecycle)
+export type JobStatus = "scheduled" | "in_progress" | "final_check" | "completed" | "cancelled";
 
 // Where a job originated. master-os: jobs.source / derived from request|quote linkage.
 export type JobSource = "job" | "lead" | "quote";
 
-export type ScheduleStatus = JobStatus | "awaiting" | "block";
+export type ScheduleStatus = JobStatus | "block";
 
 // master-os: partners (the authenticated trade). "Marcus" seed maps here.
 export interface Partner {

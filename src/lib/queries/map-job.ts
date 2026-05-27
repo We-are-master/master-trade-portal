@@ -90,11 +90,13 @@ const STATUS_MAP: Record<string, JobStatus> = {
   scheduled: "scheduled",
   on_hold: "scheduled",
   unassigned: "scheduled",
+  auto_assigning: "scheduled",
   in_progress: "in_progress",
   late: "in_progress",
-  final_check: "awaiting_signoff",
-  awaiting_payment: "awaiting_signoff",
+  final_check: "final_check",
+  awaiting_payment: "final_check",
   completed: "completed",
+  cancelled: "cancelled",
 };
 
 function initialsFrom(name: string): string {

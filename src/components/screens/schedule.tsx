@@ -20,11 +20,12 @@ const DAY_END_HOUR = 20; // exclusive top of grid (rows 08:00..19:00)
 const STATUS_COLOR: Record<string, string> = {
   in_progress: T.coral,
   scheduled: T.blue,
-  awaiting_signoff: T.amber,
+  final_check: T.amber,
   completed: T.green,
+  cancelled: T.mute,
 };
 function badgeTone(status: string): string {
-  return status === "awaiting_signoff" ? "awaiting" : status;
+  return status; // Badge tones now cover all job statuses directly
 }
 
 interface SchedEvent {

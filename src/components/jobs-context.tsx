@@ -34,7 +34,6 @@ export function JobsProvider({ children }: { children: ReactNode }) {
         .select(JOB_SELECT)
         .eq("partner_id", partner.id)
         .is("deleted_at", null)
-        .neq("status", "cancelled")
         .order("scheduled_date", { ascending: true });
       if (error) throw error;
       setJobs((data as unknown as JobRow[]).map(mapJob));
