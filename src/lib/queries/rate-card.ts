@@ -4,6 +4,7 @@
 // Prices persist in partner_service_prices (one row per partner × catalog service).
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { serviceMatchesAnyTrade } from "@/lib/trade-match";
 
 interface CatalogRow {
   id: string;
@@ -36,26 +37,24 @@ export interface ServicePrice {
   defaultHours: number | null;
 }
 
-/** service_catalog ids whose name matches one of the given trade labels (case-insensitive). */
+/** service_catalog ids whose name matches one of the partner's trades (fuzzy: profession ⇄ activity). */
 export async function catalogIdsForTrades(supabase: SupabaseClient, trades: string[]): Promise<string[]> {
-  const lower = new Set(trades.map((t) => t.toLowerCase().trim()).filter(Boolean));
-  if (lower.size === 0) return [];
+  if (trades.length === 0) return [];
   const { data } = await supabase.from("service_catalog").select("id, name").is("deleted_at", null);
   return ((data ?? []) as { id: string; name: string | null }[])
-    .filter((c) => lower.has(String(c.name ?? "").toLowerCase().trim()))
+    .filter((c) => serviceMatchesAnyTrade(c.name ?? "", trades))
     .map((c) => c.id);
 }
 
 export async function fetchRateCard(supabase: SupabaseClient, partnerId: string, trades: string[]): Promise<ServicePrice[]> {
-  const lower = new Set(trades.map((t) => t.toLowerCase().trim()).filter(Boolean));
-  if (lower.size === 0) return [];
+  if (trades.length === 0) return [];
 
   const { data: cats } = await supabase
     .from("service_catalog")
     .select("id,name,pricing_mode,fixed_price,hourly_rate,default_hours")
     .is("deleted_at", null)
     .eq("is_active", true);
-  const matching = ((cats ?? []) as CatalogRow[]).filter((c) => lower.has(String(c.name ?? "").toLowerCase().trim()));
+  const matching = ((cats ?? []) as CatalogRow[]).filter((c) => serviceMatchesAnyTrade(c.name ?? "", trades));
 
   const { data: psps } = await supabase
     .from("partner_service_prices")
