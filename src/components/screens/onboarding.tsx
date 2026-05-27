@@ -12,10 +12,11 @@ import { useToast } from "@/components/ui/toast";
 import { createClient } from "@/lib/supabase/client";
 import {
   AvailabilityPage,
+  BillingPage,
   DocsPage,
-  PageCard,
+  PoliciesPage,
   RatesPage,
-  Row,
+  SelfBillPage,
   ServiceAreaPage,
   TradesPage,
 } from "./settings";
@@ -191,11 +192,23 @@ function OnboardingStep({ step, setStep, onDocsChanged }: { step: number; setSte
         </StepWrap>
       );
     case 7:
-      return <SelfBillStep />;
+      return (
+        <StepWrap kicker="STEP 8" title="Self-bill & payouts" sub="We invoice on your behalf for completed jobs and pay you via Stripe. Connect your payout account.">
+          <SelfBillPage />
+        </StepWrap>
+      );
     case 8:
-      return <PoliciesStep />;
+      return (
+        <StepWrap kicker="STEP 9" title="Policies" sub="Read and sign the agreements. You can re-read any time in Settings.">
+          <PoliciesPage />
+        </StepWrap>
+      );
     case 9:
-      return <PaymentStep />;
+      return (
+        <StepWrap kicker="STEP 10" title="Your plan" sub="You're on a 30-day free trial — no charge today. Add a card whenever you're ready to continue after the trial.">
+          <BillingPage />
+        </StepWrap>
+      );
     case 10:
       return <DoneStep />;
     default:
@@ -288,7 +301,6 @@ function DetailsStep() {
       <OBTitle kicker="STEP 2" title="Your details" sub="What customers see on every job report. This is your real account — edit and save." />
       <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 18 }}>
         <Avatar initials={partner.initials} size={68} bg={T.navy} />
-        <Button variant="secondary" icon="camera">Upload photo</Button>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 10 }}>
         <Field label="First name"><Input value={firstName} onChange={setFirstName} placeholder="First name" /></Field>
@@ -302,114 +314,6 @@ function DetailsStep() {
           {saving ? "Saving…" : "Save details"}
         </Button>
         {savedAt && <span style={{ fontSize: 12, color: T.green }}>Saved at {savedAt}</span>}
-      </div>
-    </div>
-  );
-}
-
-function SelfBillStep() {
-  const partner = usePartner();
-  return (
-    <div>
-      <OBTitle kicker="STEP 8" title="Self-bill agreement" sub="We invoice you on your behalf for completed jobs. Sign once, valid for 12 months." />
-      <Card style={{ padding: 20, marginBottom: 14 }}>
-        <div style={{ padding: 16, background: T.paper, borderRadius: 10, fontSize: 12.5, color: T.slate, lineHeight: 1.6, maxHeight: 180, overflow: "auto" }}>
-          <b style={{ color: T.ink }}>HMRC Self-Billing Agreement</b>
-          <br />
-          Between <b>GET FIXFY LTD</b> (the customer) and <b>{partner.tradingName}</b> (the supplier).
-          <br />
-          <br />
-          1. The customer agrees to issue self-billed invoices for all supplies made by the supplier from the date of this agreement until the date of termination.
-          <br />
-          2. The customer agrees to inform the supplier should the issue of self-billed invoices be outsourced to a third party.
-          <br />
-          3. The supplier agrees: (a) to accept the invoices issued by the customer in respect of the supplies made; (b) not to raise sales invoices for the transactions covered by this agreement…
-        </div>
-        <div style={{ marginTop: 14, display: "flex", alignItems: "flex-start", gap: 10 }}>
-          <input type="checkbox" defaultChecked style={{ accentColor: T.coral, marginTop: 3 }} />
-          <span style={{ fontSize: 13, color: T.ink, lineHeight: 1.5 }}>
-            I agree to the self-billing terms above. Valid 12 months from today.{" "}
-            <span className="fx-mono" style={{ color: T.mute }}>
-              {new Date().toLocaleDateString("en-GB")}
-            </span>
-          </span>
-        </div>
-      </Card>
-      <PageCard title="Bank details · for payouts">
-        <Row label="Account holder"><Input value="Adeyemi Plumbing Ltd" /></Row>
-        <Row label="Sort code"><Input value="" placeholder="XX-XX-XX" /></Row>
-        <Row label="Account number"><Input value="" placeholder="8 digits" /></Row>
-      </PageCard>
-    </div>
-  );
-}
-
-function PoliciesStep() {
-  return (
-    <div>
-      <OBTitle kicker="STEP 9" title="The rules of the road" sub="Six policies. They're short. Read each, then accept — you can re-read any time in Settings." />
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-        {[
-          ["Cancellation policy", "x-circle"],
-          ["No-show policy", "ban"],
-          ["Payment terms", "banknote"],
-          ["Conduct standards", "handshake"],
-          ["Insurance requirements", "umbrella"],
-          ["Strikes & ratings", "shield"],
-        ].map(([name, icon]) => (
-          <Card key={name} style={{ padding: 14, display: "flex", alignItems: "center", gap: 12 }}>
-            <div style={{ width: 32, height: 32, borderRadius: 8, background: T.paper2, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
-              <Icon name={icon} size={16} color={T.navy} />
-            </div>
-            <div style={{ flex: 1, fontSize: 13, fontWeight: 500, color: T.ink }}>{name}</div>
-            <Button variant="ghost" size="sm" iconRight="arrow-up-right">Read</Button>
-            <input type="checkbox" defaultChecked style={{ accentColor: T.coral }} />
-          </Card>
-        ))}
-      </div>
-      <div style={{ marginTop: 14, fontSize: 12, color: T.mute, textAlign: "center" }}>You must accept all six to continue.</div>
-    </div>
-  );
-}
-
-function PaymentStep() {
-  const partner = usePartner();
-  return (
-    <div>
-      <OBTitle
-        kicker="STEP 10"
-        title="Card on file"
-        sub="3-day free trial. Card captured upfront — you won't be charged until 24 May, and you can cancel any time before then."
-      />
-      <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr", gap: 14 }}>
-        <PageCard title="Payment method">
-          <Row label="Card number"><Input value="4242 4242 4242 4242" icon="credit-card" /></Row>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-            <Row label="Expiry" columns="1fr"><Input value="09 / 28" /></Row>
-            <Row label="CVC" columns="1fr"><Input value="•••" /></Row>
-          </div>
-          <Row label="Postcode"><Input value={partner.postcode} /></Row>
-          <div style={{ marginTop: 12, padding: 12, background: T.paper2, borderRadius: 8, display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: T.slate }}>
-            <Icon name="lock" size={13} color={T.mute} />
-            Secured by Stripe · PCI-DSS. Fixfy never sees your card number.
-          </div>
-        </PageCard>
-        <Card style={{ padding: 0, background: T.navy, color: T.white, borderColor: T.navy }}>
-          <div style={{ padding: 18 }}>
-            <div style={{ fontSize: 11, color: "rgba(255,255,255,0.6)", letterSpacing: 0.4 }}>SUMMARY</div>
-            <div style={{ fontSize: 22, fontWeight: 600, marginTop: 8 }}>Fixfy Pro</div>
-            <div style={{ display: "flex", alignItems: "baseline", marginTop: 12 }}>
-              <span style={{ fontFamily: T.mono, fontSize: 44, fontWeight: 500, letterSpacing: -1 }}>£99</span>
-              <span style={{ fontSize: 14, color: "rgba(255,255,255,0.5)", marginLeft: 6 }}>/month</span>
-            </div>
-            <div style={{ marginTop: 14, padding: 12, background: "rgba(237,75,0,0.12)", borderRadius: 8, display: "flex", alignItems: "center", gap: 8, fontSize: 12.5 }}>
-              <Icon name="gift" size={14} color={T.coral} />
-              <span>
-                First 3 days free · charged <b className="fx-mono">24 May</b>
-              </span>
-            </div>
-          </div>
-        </Card>
       </div>
     </div>
   );
@@ -457,8 +361,8 @@ function DoneStep() {
           </div>
         ))}
       </Card>
-      <div style={{ marginTop: 22, display: "flex", justifyContent: "center", gap: 10 }}>
-        <Button variant="dark" icon="layout-dashboard">Open dashboard</Button>
+      <div style={{ marginTop: 18, fontSize: 12.5, color: T.mute, textAlign: "center" }}>
+        Use “Take me to the dashboard” below to finish.
       </div>
     </div>
   );

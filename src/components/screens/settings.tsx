@@ -941,7 +941,7 @@ const PRO_FEATURES = [
   "24/7 emergency dispatch",
 ];
 
-function BillingPage() {
+export function BillingPage() {
   const partner = usePartner();
   // Best-effort read of the subscription columns (migration 196). If 196 isn't applied yet the
   // query errors on the missing columns — we swallow it and fall back to the "start trial" state,
@@ -1131,7 +1131,7 @@ function PayoutsCard() {
   );
 }
 
-function SelfBillPage() {
+export function SelfBillPage() {
   const partner = usePartner();
   const [bills, setBills] = useState<SelfBill[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1522,7 +1522,7 @@ const CONTRACT_ICON: Record<string, string> = {
   self_bill_agreement: "receipt",
 };
 
-function PoliciesPage() {
+export function PoliciesPage() {
   const partner = usePartner();
   const toast = useToast();
   const [contracts, setContracts] = useState<PartnerContract[]>([]);
