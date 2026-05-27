@@ -23,16 +23,16 @@ export async function POST(req: NextRequest) {
   try {
     const admin = createServiceClient();
 
-    // Gate to registered partners: only emails that belong to an external_partner app user
-    // (public.users) get a code. Checked BEFORE generateLink so non-partners never even create
-    // an auth user. The linked partners row is then ensured at sign-in (getPartnerSession RPC).
-    const { data: appUser } = await admin
-      .from("users")
-      .select("id")
-      .ilike("email", email)
-      .eq("user_type", "external_partner")
-      .maybeSingle();
-    if (!appUser) return NextResponse.json({ ok: true }); // not a partner — silent (enumeration defence)
+    // Gate to partners: send a code only if the email belongs to a partner — either an
+    // external_partner app user (public.users) OR a partners row (covers partners created in
+    // the OS directly). Checked BEFORE generateLink so random emails never create an auth user.
+    // limit(1) (not maybeSingle) so duplicate emails don't throw and silently drop the code.
+    const [appUsers, partnerRows] = await Promise.all([
+      admin.from("users").select("id").ilike("email", email).eq("user_type", "external_partner").limit(1),
+      admin.from("partners").select("id").ilike("email", email).limit(1),
+    ]);
+    const isPartner = (appUsers.data?.length ?? 0) > 0 || (partnerRows.data?.length ?? 0) > 0;
+    if (!isPartner) return NextResponse.json({ ok: true }); // not a partner — silent (enumeration defence)
 
     const { data, error } = await admin.auth.admin.generateLink({ type: "magiclink", email });
     if (!error && data?.user) {
