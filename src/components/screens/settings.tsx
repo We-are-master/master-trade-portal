@@ -17,7 +17,7 @@ import { formatGBPdec } from "@/lib/format";
 import { fetchSelfBills, type SelfBill } from "@/lib/queries/self-bills";
 import { fetchPartnerDocuments, type PartnerDoc } from "@/lib/queries/partner-documents";
 import { fetchContracts, type PartnerContract } from "@/lib/queries/contracts";
-import { fetchRateCard, saveRateCard, type ServicePrice, type RateCardPatch } from "@/lib/queries/rate-card";
+import { fetchRateCard, saveRateCard, catalogIdsForTrades, type ServicePrice } from "@/lib/queries/rate-card";
 import {
   fetchPartnerSettings,
   savePartnerSettings,
@@ -340,9 +340,12 @@ export function TradesPage() {
     setSaving(true);
     try {
       const trades = enabled.includes(primary) ? enabled : [primary, ...enabled];
-      const { data, error } = await createClient()
+      const supabase = createClient();
+      // Keep catalog_service_ids in sync (OS uses it for partner↔job matching + drives the rate card).
+      const catalogServiceIds = await catalogIdsForTrades(supabase, trades);
+      const { data, error } = await supabase
         .from("partners")
-        .update({ trades, trade: primary })
+        .update({ trades, trade: primary, catalog_service_ids: catalogServiceIds })
         .eq("id", partner.id)
         .select("id");
       if (error) throw error;
@@ -437,7 +440,7 @@ export function RatesPage() {
       setLoading(true);
       setError(null);
       try {
-        const data = await fetchRateCard(createClient(), partner.id);
+        const data = await fetchRateCard(createClient(), partner.id, partner.trades);
         if (!cancelled) {
           setRows(data);
           setInitial(data);
@@ -451,24 +454,18 @@ export function RatesPage() {
     return () => {
       cancelled = true;
     };
-  }, [partner.id]);
+    // partner.trades drives which services show — re-fetch when they change
+  }, [partner.id, partner.trades]);
 
   const dirty = JSON.stringify(rows) !== JSON.stringify(initial);
-  const update = (id: string, patch: Partial<ServicePrice>) =>
-    setRows((prev) => prev.map((r) => (r.id === id ? { ...r, ...patch } : r)));
+  const update = (catalogServiceId: string, patch: Partial<ServicePrice>) =>
+    setRows((prev) => prev.map((r) => (r.catalogServiceId === catalogServiceId ? { ...r, ...patch } : r)));
   const num = (v: string): number | null => (v.trim() === "" ? null : Number(v.replace(/[^0-9.]/g, "")) || 0);
 
   const save = async () => {
     setSaving(true);
     try {
-      const patches: RateCardPatch[] = rows.map((r) => ({
-        id: r.id,
-        use_standard: r.useStandard,
-        fixed_partner_cost: r.useStandard ? r.fixedPartnerCost : r.mode === "fixed" ? r.fixedPartnerCost : null,
-        hourly_partner_rate: r.useStandard ? r.hourlyPartnerRate : r.mode === "hourly" ? r.hourlyPartnerRate : null,
-        default_hours: r.mode === "hourly" ? r.defaultHours : null,
-      }));
-      await saveRateCard(createClient(), patches);
+      await saveRateCard(createClient(), partner.id, rows);
       setInitial(rows);
       toast({ text: "Rate card saved", icon: "check" });
     } catch (e) {
@@ -490,17 +487,19 @@ export function RatesPage() {
       ) : rows.length === 0 ? (
         <PageCard title="Services">
           <div style={{ fontSize: 13, color: T.mute }}>
-            No services set up yet. Fixfy configures which services you&apos;re offered — they&apos;ll appear here to price.
+            {partner.trades.length === 0
+              ? "Add your trades first (Trades & skills) — the matching services then appear here to price."
+              : "No catalog services match your trades yet. Once Fixfy has services for your trades, they'll appear here."}
           </div>
         </PageCard>
       ) : (
         <>
-          <PageCard title="Your services" subtitle="Toggle off &quot;standard&quot; to charge your own rate.">
+          <PageCard title="Your services" subtitle="Services for your trades. Toggle off &quot;standard&quot; to charge your own rate.">
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               {rows.map((r) => {
                 const standard = r.mode === "hourly" ? `${formatGBPdec(r.standardHourly)}/hr · ${r.standardHours}h` : formatGBPdec(r.standardFixed);
                 return (
-                  <div key={r.id} style={{ padding: 12, border: `1px solid ${T.line}`, borderRadius: 10, display: "flex", flexDirection: "column", gap: 10 }}>
+                  <div key={r.catalogServiceId} style={{ padding: 12, border: `1px solid ${T.line}`, borderRadius: 10, display: "flex", flexDirection: "column", gap: 10 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                       <div style={{ flex: 1 }}>
                         <div style={{ fontSize: 13.5, fontWeight: 500, color: T.ink }}>{r.name}</div>
@@ -509,7 +508,7 @@ export function RatesPage() {
                         </div>
                       </div>
                       <span style={{ fontSize: 12, color: T.slate }}>Use standard</span>
-                      <Toggle on={r.useStandard} onChange={(v) => update(r.id, { useStandard: v })} />
+                      <Toggle on={r.useStandard} onChange={(v) => update(r.catalogServiceId, { useStandard: v })} />
                     </div>
                     {!r.useStandard && (
                       <div style={{ display: "flex", gap: 8, paddingLeft: 2 }}>
@@ -517,7 +516,7 @@ export function RatesPage() {
                           <>
                             <Input
                               value={r.hourlyPartnerRate != null ? String(r.hourlyPartnerRate) : ""}
-                              onChange={(v) => update(r.id, { hourlyPartnerRate: num(v) })}
+                              onChange={(v) => update(r.catalogServiceId, { hourlyPartnerRate: num(v) })}
                               prefix="£"
                               suffix="/hr"
                               placeholder={String(r.standardHourly)}
@@ -525,7 +524,7 @@ export function RatesPage() {
                             />
                             <Input
                               value={r.defaultHours != null ? String(r.defaultHours) : ""}
-                              onChange={(v) => update(r.id, { defaultHours: num(v) })}
+                              onChange={(v) => update(r.catalogServiceId, { defaultHours: num(v) })}
                               suffix="hrs"
                               placeholder={String(r.standardHours)}
                               style={{ width: 120 }}
@@ -534,7 +533,7 @@ export function RatesPage() {
                         ) : (
                           <Input
                             value={r.fixedPartnerCost != null ? String(r.fixedPartnerCost) : ""}
-                            onChange={(v) => update(r.id, { fixedPartnerCost: num(v) })}
+                            onChange={(v) => update(r.catalogServiceId, { fixedPartnerCost: num(v) })}
                             prefix="£"
                             placeholder={String(r.standardFixed)}
                             style={{ width: 180 }}
