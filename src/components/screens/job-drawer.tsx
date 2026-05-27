@@ -731,8 +731,70 @@ function ChecklistItemRow({ item, onToggle, onRemove }: { item: ChecklistItem; o
 // ============================================================
 // PHOTOS TAB
 // ============================================================
+interface JobPhoto {
+  id: string;
+  url: string | null;
+}
+
 function PhotosTab({ job }: { job: MyJob }) {
+  const toast = useToast();
   const reference = job.referencePhotos ?? [];
+  const [before, setBefore] = useState<JobPhoto[]>([]);
+  const [after, setAfter] = useState<JobPhoto[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState<"before" | "after" | null>(null);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/jobs/photos?jobId=${encodeURIComponent(job.uuid)}`);
+      const json = await res.json();
+      if (res.ok) {
+        const photos = (json.photos ?? []) as { id: string; kind: "before" | "after"; url: string | null }[];
+        setBefore(photos.filter((p) => p.kind === "before"));
+        setAfter(photos.filter((p) => p.kind === "after"));
+      }
+    } catch {
+      /* leave empty */
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [job.uuid]);
+
+  const upload = async (kind: "before" | "after", file: File) => {
+    setUploading(kind);
+    try {
+      const fd = new FormData();
+      fd.append("jobId", job.uuid);
+      fd.append("kind", kind);
+      fd.append("file", file);
+      const res = await fetch("/api/jobs/photos", { method: "POST", body: fd });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Upload failed");
+      const photo: JobPhoto = { id: json.id, url: json.url };
+      (kind === "before" ? setBefore : setAfter)((prev) => [...prev, photo]);
+    } catch (e) {
+      toast({ text: e instanceof Error ? e.message : "Upload failed", icon: "alert-triangle", tone: "coral" });
+    } finally {
+      setUploading(null);
+    }
+  };
+
+  const remove = async (kind: "before" | "after", id: string) => {
+    const setter = kind === "before" ? setBefore : setAfter;
+    setter((prev) => prev.filter((p) => p.id !== id));
+    try {
+      await fetch(`/api/jobs/photos?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+    } catch {
+      void load();
+    }
+  };
+
   return (
     <div style={{ padding: 20, display: "flex", flexDirection: "column", gap: 14 }}>
       {reference.length > 0 && (
@@ -755,112 +817,99 @@ function PhotosTab({ job }: { job: MyJob }) {
         </Card>
       )}
 
-      <Card style={{ padding: 14, display: "flex", alignItems: "center", gap: 12, background: T.paper, borderColor: T.line }}>
-        <Icon name="info" size={14} color={T.mute} />
-        <span style={{ flex: 1, fontSize: 12.5, color: T.slate, lineHeight: 1.5 }}>
-          Add <b style={{ color: T.ink }}>2 before</b> and <b style={{ color: T.ink }}>2 after</b> photos. Time and location
-          stamped automatically. <span style={{ color: T.mute }}>(Upload storage coming soon.)</span>
-        </span>
-      </Card>
-
-      <PhotoGroup title="Before" count={job.beforePhotos} required={2} tone={T.blue} kind="before" />
-      <PhotoGroup title="After" count={job.afterPhotos} required={2} tone={T.green} kind="after" />
+      {loading ? (
+        <div style={{ padding: 8, color: T.mute, fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}>
+          <Icon name="loader" size={14} color={T.mute} /> Loading photos…
+        </div>
+      ) : (
+        <>
+          <PhotoGroup title="Before" required={2} tone={T.blue} photos={before} uploading={uploading === "before"} onPick={(f) => upload("before", f)} onRemove={(id) => remove("before", id)} />
+          <PhotoGroup title="After" required={2} tone={T.green} photos={after} uploading={uploading === "after"} onPick={(f) => upload("after", f)} onRemove={(id) => remove("after", id)} />
+        </>
+      )}
     </div>
   );
 }
 
-function PhotoGroup({ title, count, required, tone, kind }: { title: string; count: number; required: number; tone: string; kind: string }) {
-  const filled = count;
-  const placeholders = Math.max(0, 4 - filled);
+function PhotoGroup({
+  title,
+  required,
+  tone,
+  photos,
+  uploading,
+  onPick,
+  onRemove,
+}: {
+  title: string;
+  required: number;
+  tone: string;
+  photos: JobPhoto[];
+  uploading: boolean;
+  onPick: (f: File) => void;
+  onRemove: (id: string) => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
   return (
     <Card style={{ padding: 0 }}>
       <div style={{ padding: "12px 16px", borderBottom: `1px solid ${T.line}`, display: "flex", alignItems: "center", gap: 10 }}>
         <span style={{ width: 8, height: 8, borderRadius: 9999, background: tone }} />
         <span style={{ fontSize: 13, fontWeight: 500, color: T.navy }}>{title}</span>
-        <Badge tone={filled >= required ? "success" : "warning"} size="sm">
-          {filled} of min {required}
+        <Badge tone={photos.length >= required ? "success" : "warning"} size="sm">
+          {photos.length} of min {required}
         </Badge>
         <span style={{ flex: 1 }} />
-        <Button variant="ghost" size="sm" icon="camera">Take photo</Button>
-        <Button variant="secondary" size="sm" icon="upload">Upload</Button>
+        <input
+          ref={inputRef}
+          type="file"
+          accept="image/*"
+          style={{ display: "none" }}
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) onPick(f);
+            e.target.value = "";
+          }}
+        />
+        <Button variant="secondary" size="sm" icon="upload" onClick={() => inputRef.current?.click()} disabled={uploading}>
+          {uploading ? "Uploading…" : "Add photo"}
+        </Button>
       </div>
       <div style={{ padding: 14, display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10 }}>
-        {Array.from({ length: filled }).map((_, i) => (
-          <PhotoTile key={`f${i}`} kind={kind} index={i} />
-        ))}
-        {Array.from({ length: placeholders }).map((_, i) => (
-          <PhotoPlaceholder key={`p${i}`} />
+        {photos.length === 0 && <div style={{ gridColumn: "1 / -1", fontSize: 12.5, color: T.mute }}>No {title.toLowerCase()} photos yet.</div>}
+        {photos.map((p) => (
+          <PhotoTile key={p.id} url={p.url} onRemove={() => onRemove(p.id)} />
         ))}
       </div>
     </Card>
   );
 }
 
-function PhotoTile({ kind, index }: { kind: string; index: number }) {
-  const palettes = [
-    [T.navy, T.navySoft],
-    [T.slate, T.mute],
-    [T.coral, "#F08055"],
-    [T.green, "#3BAA80"],
-  ];
-  const p = palettes[index % palettes.length];
-  const patternId = `fx-photo-${kind}-${index}`;
+function PhotoTile({ url, onRemove }: { url: string | null; onRemove: () => void }) {
+  const [h, setH] = useState(false);
   return (
     <div
-      style={{
-        aspectRatio: "1 / 1",
-        borderRadius: 8,
-        overflow: "hidden",
-        position: "relative",
-        background: `linear-gradient(135deg, ${p[0]}, ${p[1]})`,
-        cursor: "pointer",
-      }}
+      onMouseEnter={() => setH(true)}
+      onMouseLeave={() => setH(false)}
+      style={{ aspectRatio: "1 / 1", borderRadius: 8, overflow: "hidden", position: "relative", background: T.paper2, border: `1px solid ${T.line}` }}
     >
-      <svg width="100%" height="100%" style={{ position: "absolute", inset: 0, opacity: 0.4 }}>
-        <defs>
-          <pattern id={patternId} width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
-            <line x1="0" y1="0" x2="0" y2="8" stroke="white" strokeWidth="0.5" />
-          </pattern>
-        </defs>
-        <rect width="100%" height="100%" fill={`url(#${patternId})`} />
-      </svg>
-      <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)", color: "rgba(255,255,255,0.7)" }}>
-        <Icon name="image" size={22} />
-      </div>
-      <div
-        style={{
-          position: "absolute",
-          bottom: 6,
-          left: 6,
-          right: 6,
-          fontFamily: T.mono,
-          fontSize: 10,
-          color: T.white,
-          textShadow: "0 1px 2px rgba(0,0,0,0.4)",
-        }}
-      >
-        {kind === "before" ? "09:38" : "11:12"} · 23 May
-      </div>
-    </div>
-  );
-}
-
-function PhotoPlaceholder() {
-  return (
-    <div
-      style={{
-        aspectRatio: "1 / 1",
-        borderRadius: 8,
-        border: `1.5px dashed ${T.line}`,
-        background: T.paper,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        color: T.mute,
-        cursor: "pointer",
-      }}
-    >
-      <Icon name="plus" size={18} />
+      {url ? (
+        <a href={url} target="_blank" rel="noreferrer">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={url} alt="Job photo" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+        </a>
+      ) : (
+        <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", color: T.mute }}>
+          <Icon name="image" size={20} />
+        </div>
+      )}
+      {h && (
+        <button
+          onClick={onRemove}
+          aria-label="Remove photo"
+          style={{ position: "absolute", top: 4, right: 4, width: 22, height: 22, borderRadius: 6, border: "none", background: "rgba(2,0,64,0.6)", color: "#fff", cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center" }}
+        >
+          <Icon name="x" size={12} />
+        </button>
+      )}
     </div>
   );
 }
