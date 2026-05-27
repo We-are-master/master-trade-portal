@@ -16,7 +16,7 @@ interface OfferRow {
   contacted_at: string | null;
   service_requests: {
     id: string;
-    title: string | null;
+    service_type: string | null;
     description: string | null;
     postcode: string | null;
     location: string | null;
@@ -70,7 +70,7 @@ function mapOffer(row: OfferRow): RealLead | null {
   return {
     offerId: row.id,
     status: row.status,
-    title: sr.title || "Customer enquiry",
+    title: sr.service_type || "Customer enquiry",
     desc: sr.description || "",
     postcode: sr.postcode || extractPostcode(sr.location),
     budget: sr.budget,
@@ -84,7 +84,7 @@ export async function fetchLeads(supabase: SupabaseClient, partnerId: string): P
   const { data, error } = await supabase
     .from("service_request_partner_offers")
     .select(
-      "id,status,offered_at,contacted_at,service_requests(id,title,description,postcode,location,budget,priority,request_kind,created_at)",
+      "id,status,offered_at,contacted_at,service_requests(id,service_type,description,postcode,location,budget,priority,request_kind,created_at)",
     )
     .eq("partner_id", partnerId)
     .in("status", ["offered", "viewed", "contacted"])
