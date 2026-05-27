@@ -178,6 +178,7 @@ export function mapJob(row: JobRow): MyJob {
 
   return {
     id: row.reference || row.id,
+    uuid: row.id,
     source: (row.quote_id ? "quote" : "job") as JobSource,
     title: row.title || "Untitled job",
     desc: row.scope || row.additional_notes || "",

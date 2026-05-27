@@ -26,8 +26,16 @@ import { MapBackground } from "@/components/ui/map-background";
 import { SourceTag } from "./jobs";
 import { formatGBP, formatGBPdec } from "@/lib/format";
 import { useMyJobs } from "@/components/jobs-context";
-import { CHECKLISTS } from "@/lib/mock-data";
-import type { ChecklistItem as ChecklistItemType, MyJob } from "@/types";
+import { useToast } from "@/components/ui/toast";
+import { createClient } from "@/lib/supabase/client";
+import {
+  fetchChecklist,
+  setChecklistItemDone,
+  addChecklistItem,
+  deleteChecklistItem,
+  type ChecklistItem,
+} from "@/lib/queries/job-checklist";
+import type { MyJob } from "@/types";
 import type { ToastInput } from "@/components/ui/toast";
 
 type ShowToast = (t: ToastInput) => void;
@@ -487,16 +495,74 @@ function DrawerSection({
 // CHECKLIST TAB
 // ============================================================
 function ChecklistTab({ job }: { job: MyJob }) {
-  const initial = CHECKLISTS[job.id] || [];
-  const [items, setItems] = useState<ChecklistItemType[]>(initial);
+  const toast = useToast();
+  const [items, setItems] = useState<ChecklistItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [newLabel, setNewLabel] = useState("");
+  const [adding, setAdding] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      try {
+        const rows = await fetchChecklist(createClient(), job.uuid);
+        if (!cancelled) setItems(rows);
+      } catch {
+        if (!cancelled) setItems([]);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [job.uuid]);
+
   const done = items.filter((i) => i.done).length;
   const requiredLeft = items.filter((i) => i.required && !i.done).length;
   const pct = items.length ? Math.round((done / items.length) * 100) : 0;
+
+  const toggle = async (item: ChecklistItem) => {
+    const next = !item.done;
+    setItems((prev) => prev.map((p) => (p.id === item.id ? { ...p, done: next } : p)));
+    try {
+      await setChecklistItemDone(createClient(), item.id, next);
+    } catch (e) {
+      setItems((prev) => prev.map((p) => (p.id === item.id ? { ...p, done: item.done } : p))); // revert
+      toast({ text: e instanceof Error ? e.message : "Couldn't update step", icon: "alert-triangle", tone: "coral" });
+    }
+  };
+
+  const add = async () => {
+    const label = newLabel.trim();
+    if (!label) return;
+    setAdding(true);
+    try {
+      const created = await addChecklistItem(createClient(), job.uuid, label, items.length);
+      setItems((prev) => [...prev, created]);
+      setNewLabel("");
+    } catch (e) {
+      toast({ text: e instanceof Error ? e.message : "Couldn't add step", icon: "alert-triangle", tone: "coral" });
+    } finally {
+      setAdding(false);
+    }
+  };
+
+  const remove = async (item: ChecklistItem) => {
+    setItems((prev) => prev.filter((p) => p.id !== item.id));
+    try {
+      await deleteChecklistItem(createClient(), item.id);
+    } catch {
+      setItems((prev) => [...prev, item].sort((a, b) => a.sortOrder - b.sortOrder));
+    }
+  };
+
   return (
     <div style={{ padding: 20, display: "flex", flexDirection: "column", gap: 14 }}>
       <Card style={{ padding: 16, display: "flex", alignItems: "center", gap: 14 }}>
         <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 13, color: T.mute }}>Boiler service · standard template</div>
+          <div style={{ fontSize: 13, color: T.mute }}>Job checklist</div>
           <div style={{ fontSize: 17, fontWeight: 500, color: T.navy, marginTop: 2 }}>
             {done} of {items.length} done
           </div>
@@ -511,9 +577,11 @@ function ChecklistTab({ job }: { job: MyJob }) {
             }}
           >
             <Icon name={requiredLeft > 0 ? "alert-triangle" : "check-circle-2"} size={12} />
-            {requiredLeft > 0
-              ? `${requiredLeft} required step${requiredLeft === 1 ? "" : "s"} remaining to unlock Mark Complete`
-              : "All required steps complete"}
+            {items.length === 0
+              ? "No steps yet — add what this job needs."
+              : requiredLeft > 0
+                ? `${requiredLeft} required step${requiredLeft === 1 ? "" : "s"} remaining`
+                : "All required steps complete"}
           </div>
         </div>
         <div style={{ position: "relative", width: 76, height: 76 }}>
@@ -550,24 +618,35 @@ function ChecklistTab({ job }: { job: MyJob }) {
         </div>
       </Card>
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-        {items.map((it, i) => (
-          <ChecklistItemRow
-            key={it.id}
-            item={it}
-            onToggle={() => setItems((prev) => prev.map((p, j) => (j === i ? { ...p, done: !p.done } : p)))}
-          />
-        ))}
-      </div>
+      {loading ? (
+        <div style={{ padding: 8, color: T.mute, fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}>
+          <Icon name="loader" size={14} color={T.mute} /> Loading checklist…
+        </div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          {items.map((it) => (
+            <ChecklistItemRow key={it.id} item={it} onToggle={() => toggle(it)} onRemove={() => remove(it)} />
+          ))}
+        </div>
+      )}
 
-      <Button variant="secondary" icon="plus" size="sm" style={{ alignSelf: "flex-start" }}>
-        Add custom step
-      </Button>
+      <div style={{ display: "flex", gap: 8 }}>
+        <input
+          value={newLabel}
+          onChange={(e) => setNewLabel(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && add()}
+          placeholder="Add a step…"
+          style={{ flex: 1, height: 34, padding: "0 12px", borderRadius: 8, border: `1px solid ${T.line}`, fontFamily: T.sans, fontSize: 13, color: T.ink, outline: "none" }}
+        />
+        <Button variant="secondary" icon="plus" size="sm" onClick={add} disabled={adding || !newLabel.trim()}>
+          Add
+        </Button>
+      </div>
     </div>
   );
 }
 
-function ChecklistItemRow({ item, onToggle }: { item: ChecklistItemType; onToggle: () => void }) {
+function ChecklistItemRow({ item, onToggle, onRemove }: { item: ChecklistItem; onToggle: () => void; onRemove: () => void }) {
   const [h, setH] = useState(false);
   return (
     <div
@@ -633,6 +712,18 @@ function ChecklistItemRow({ item, onToggle }: { item: ChecklistItemType; onToggl
           </div>
         )}
       </div>
+      {!item.required && h && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onRemove();
+          }}
+          aria-label="Remove step"
+          style={{ border: "none", background: "transparent", cursor: "pointer", color: T.mute, padding: 2, marginTop: 1 }}
+        >
+          <Icon name="x" size={14} />
+        </button>
+      )}
     </div>
   );
 }

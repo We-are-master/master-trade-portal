@@ -1,9 +1,7 @@
-// Browser Supabase client — ready for the data-wiring phase.
+// Browser Supabase client (RLS-scoped to the signed-in partner).
 //
 // This portal reuses the SAME Supabase project/structure as Fixfy OS (master-os).
-// It is intentionally NOT used yet: the current build is UI-first against mock data
-// (see src/lib/mock-data.ts). When wiring real data, import this and swap the mock
-// imports for queries scoped to the authenticated partner (jobs.partner_id, etc.).
+// Screens load real data through this client via the query modules in src/lib/queries/*.
 
 import { createBrowserClient } from "@supabase/ssr";
 

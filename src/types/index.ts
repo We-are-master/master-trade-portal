@@ -111,7 +111,8 @@ export interface QuoteRequest {
 
 // master-os: jobs assigned to this partner (partner_id).
 export interface MyJob {
-  id: string;
+  id: string; // display id (reference, falls back to uuid)
+  uuid: string; // real jobs.id (uuid) — for child queries (checklist, photos)
   source: JobSource;
   title: string;
   desc: string;
