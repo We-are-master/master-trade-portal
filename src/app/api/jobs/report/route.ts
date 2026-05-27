@@ -104,14 +104,14 @@ export async function POST(req: Request) {
   const { error: updErr } = await svc
     .from("jobs")
     .update({
+      // NOTE: prod jobs has no *_report_approved_at columns (the OS submit-report writes them but
+      // they don't exist in this DB) — omitted so the update doesn't 400. Office approves in the OS.
       start_report: startPayload,
       start_report_submitted: true,
       start_report_skipped: false,
-      start_report_approved_at: now,
       final_report: finalPayload,
       final_report_submitted: true,
       final_report_skipped: false,
-      final_report_approved_at: now,
       status: "final_check",
       updated_at: now,
     })
