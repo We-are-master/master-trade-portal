@@ -17,13 +17,13 @@ import {
   Tabs,
 } from "@/components/ui/primitives";
 import { formatGBP, formatGBPdec } from "@/lib/format";
-import { LEADS, MARCUS } from "@/lib/mock-data";
 import { usePartner } from "@/components/partner-context";
 import { useMyJobs } from "@/components/jobs-context";
 import { createClient } from "@/lib/supabase/client";
 import { fetchAvailableQuotes, submitBid } from "@/lib/queries/quotes";
 import { fetchAvailableJobs } from "@/lib/queries/available-jobs";
-import type { AvailableJob, Lead, QuoteRequest, QuoteRequestStatus } from "@/types";
+import { fetchLeads, setLeadStatus, type RealLead } from "@/lib/queries/leads";
+import type { AvailableJob, QuoteRequest, QuoteRequestStatus } from "@/types";
 import type { ToastInput } from "@/components/ui/toast";
 
 type ShowToast = (t: ToastInput) => void;
@@ -32,122 +32,84 @@ type ShowToast = (t: ToastInput) => void;
 // LEADS
 // ============================================================
 export function LeadsView({ onShowToast }: { onShowToast: ShowToast }) {
-  const [trade, setTrade] = useState("All trades");
-  const [sort, setSort] = useState<"distance" | "budget">("distance");
-  const [revealed, setRevealed] = useState<Record<string, boolean>>({});
+  const partner = usePartner();
+  const [leads, setLeads] = useState<RealLead[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
 
-  const tradeChips = ["All trades", "Plumbing", "General Maintenance", "Light Carpentry", "Electrical"];
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      setLeads(await fetchLeads(createClient(), partner.id));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to load leads");
+    } finally {
+      setLoading(false);
+    }
+  }, [partner.id]);
 
-  const filtered = LEADS.filter((l) => trade === "All trades" || l.trade === trade);
-  const sorted = [...filtered].sort((a, b) => {
-    if (sort === "distance") return a.distance - b.distance;
-    if (sort === "budget") return b.budgetMax - a.budgetMax;
-    return 0;
-  });
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const act = async (lead: RealLead, status: "contacted" | "declined") => {
+    setBusyId(lead.offerId);
+    try {
+      await setLeadStatus(createClient(), lead.offerId, status);
+      if (status === "declined") {
+        setLeads((prev) => prev.filter((l) => l.offerId !== lead.offerId));
+        onShowToast({ icon: "x", text: "Lead declined." });
+      } else {
+        setLeads((prev) => prev.map((l) => (l.offerId === lead.offerId ? { ...l, status: "contacted" } : l)));
+        onShowToast({ icon: "phone", text: "Marked as contacted. We've let the office know." });
+      }
+    } catch (e) {
+      onShowToast({ icon: "alert-triangle", tone: "coral", text: e instanceof Error ? e.message : "Couldn't update lead" });
+    } finally {
+      setBusyId(null);
+    }
+  };
 
   return (
     <div style={{ padding: 24, display: "flex", flexDirection: "column", gap: 18, flex: 1, overflow: "auto" }}>
       <SectionHeader
         title="Leads"
-        subtitle="Customer enquiries Fixfy hasn't quoted. Max 5 trades reach each lead — first contact gets first answer."
+        subtitle="Customer enquiries Fixfy has sent your way. Reach out fast — first contact wins the work."
         actions={
-          <div style={{ display: "flex", gap: 8 }}>
-            <Button variant="secondary" icon="sliders-horizontal">Saved filters</Button>
-            <Button variant="secondary" icon="bell">Alerts</Button>
-          </div>
+          <Button variant="secondary" size="sm" icon="refresh-cw" onClick={load}>
+            Refresh
+          </Button>
         }
       />
 
-      {/* Filter row */}
-      <Card style={{ padding: "10px 14px", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-        <div style={{ display: "flex", gap: 4 }}>
-          {tradeChips.map((c) => (
-            <button
-              key={c}
-              onClick={() => setTrade(c)}
-              style={{
-                padding: "6px 11px",
-                borderRadius: 8,
-                border: "none",
-                cursor: "pointer",
-                background: trade === c ? T.navy : "transparent",
-                color: trade === c ? T.white : T.slate,
-                fontFamily: T.sans,
-                fontSize: 12.5,
-                fontWeight: 500,
-                transition: `all 120ms ${T.ease}`,
-              }}
-            >
-              {c}
-            </button>
-          ))}
+      {loading ? (
+        <div style={{ padding: 8, color: T.mute, fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}>
+          <Icon name="loader" size={14} color={T.mute} /> Loading leads…
         </div>
-        <div style={{ width: 1, height: 22, background: T.line }} />
-        <FilterPill icon="map-pin" label="Within 5 mi" />
-        <FilterPill icon="banknote" label="Any budget" />
-        <FilterPill icon="calendar" label="Any timing" />
-        <span style={{ flex: 1 }} />
-        <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, color: T.mute }}>
-          Sort
-          <button
-            onClick={() => setSort(sort === "distance" ? "budget" : "distance")}
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 4,
-              padding: "4px 8px",
-              borderRadius: 6,
-              background: T.paper2,
-              border: "none",
-              cursor: "pointer",
-              fontFamily: T.sans,
-              fontSize: 12.5,
-              fontWeight: 500,
-              color: T.ink,
-            }}
-          >
-            {sort === "distance" ? "Closest first" : "Highest budget"}
-            <Icon name="chevrons-up-down" size={12} />
-          </button>
+      ) : error ? (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10, alignItems: "flex-start" }}>
+          <div style={{ fontSize: 13, color: T.coral }}>{error}</div>
+          <Button variant="secondary" size="sm" icon="refresh-cw" onClick={load}>
+            Retry
+          </Button>
         </div>
-      </Card>
-
-      {/* Count strip */}
-      <div style={{ display: "flex", alignItems: "center", gap: 12, fontSize: 12.5, color: T.mute }}>
-        <span>
-          <b style={{ color: T.ink, fontWeight: 500 }}>{sorted.length}</b> leads matching
-        </span>
-        <span>·</span>
-        <span>
-          <b style={{ color: T.coral, fontWeight: 500 }}>
-            {sorted.filter((l) => !l.closed && l.contactedCount < 3).length}
-          </b>{" "}
-          still open to first contacts
-        </span>
-        <span>·</span>
-        <span>
-          Within {MARCUS.radiusMiles} mi of {MARCUS.postcode}
-        </span>
-      </div>
-
-      {/* Grid */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 12 }}>
-        {sorted.map((l) => (
-          <LeadCard
-            key={l.id}
-            lead={l}
-            revealed={!!revealed[l.id]}
-            onContact={() => {
-              if (l.closed) {
-                onShowToast({ icon: "lock", text: "This lead is closed — 5 trades have already made contact." });
-                return;
-              }
-              setRevealed((r) => ({ ...r, [l.id]: true }));
-              onShowToast({ icon: "phone", text: `Contact recorded. You're trade #${l.contactedCount + 1} of 5.` });
-            }}
-          />
-        ))}
-      </div>
+      ) : leads.length === 0 ? (
+        <EmptyState icon="sparkles" title="No leads right now" hint="When Fixfy sends a customer enquiry your way, it'll appear here to act on." />
+      ) : (
+        <>
+          <div style={{ fontSize: 12.5, color: T.mute }}>
+            <b style={{ color: T.ink, fontWeight: 500 }}>{leads.length}</b> {leads.length === 1 ? "lead" : "leads"} ·{" "}
+            <b style={{ color: T.coral, fontWeight: 500 }}>{leads.filter((l) => l.status !== "contacted").length}</b> awaiting your contact
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 12 }}>
+            {leads.map((l) => (
+              <LeadCard key={l.offerId} lead={l} busy={busyId === l.offerId} onContact={() => act(l, "contacted")} onDecline={() => act(l, "declined")} />
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -177,147 +139,66 @@ export function FilterPill({ icon, label }: { icon: string; label: string }) {
   );
 }
 
-function LeadCard({ lead, revealed, onContact }: { lead: Lead; revealed: boolean; onContact: () => void }) {
-  const closed = lead.closed;
-  const slotsLeft = lead.contactedMax - lead.contactedCount;
+function LeadCard({ lead, busy, onContact, onDecline }: { lead: RealLead; busy: boolean; onContact: () => void; onDecline: () => void }) {
+  const contacted = lead.status === "contacted";
   return (
-    <Card hover style={{ padding: 0, opacity: closed ? 0.7 : 1, position: "relative", overflow: "hidden" }}>
-      {lead.hot && !closed && (
-        <div
-          style={{
-            position: "absolute",
-            top: 10,
-            right: 10,
-            background: T.coral,
-            color: T.white,
-            padding: "3px 8px",
-            borderRadius: 9999,
-            fontSize: 10.5,
-            fontWeight: 600,
-            letterSpacing: 0.4,
-            textTransform: "uppercase",
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 4,
-          }}
-        >
-          <span
-            style={{
-              width: 5,
-              height: 5,
-              borderRadius: 9999,
-              background: T.white,
-              animation: "fx-pulse 1.6s ease-in-out infinite",
-            }}
-          />
-          New
-        </div>
-      )}
+    <Card hover style={{ padding: 0, position: "relative", overflow: "hidden" }}>
       <div style={{ padding: 16, paddingBottom: 14 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-          <span className="fx-mono" style={{ fontSize: 11, color: T.mute }}>
-            {lead.id}
-          </span>
-          <span style={{ width: 3, height: 3, borderRadius: 9999, background: T.line }} />
-          <Badge tone="soft" size="sm">{lead.trade}</Badge>
-          {closed && (
-            <Badge tone="neutral" size="sm" icon="lock">
-              Closed
-            </Badge>
+          <Badge tone={lead.emergency ? "coral" : "soft"} size="sm">{lead.timing}</Badge>
+          <span style={{ fontSize: 11.5, color: T.mute }}>Sent {lead.posted}</span>
+          {contacted && (
+            <Badge tone="success" size="sm" icon="check">Contacted</Badge>
           )}
         </div>
 
         <div style={{ fontSize: 15, fontWeight: 500, color: T.ink, lineHeight: 1.4 }}>{lead.title}</div>
-        <div
-          style={{
-            fontSize: 13,
-            color: T.slate,
-            marginTop: 6,
-            lineHeight: 1.5,
-            display: "-webkit-box",
-            WebkitLineClamp: 2,
-            WebkitBoxOrient: "vertical",
-            overflow: "hidden",
-          }}
-        >
-          {lead.desc}
-        </div>
+        {lead.desc && (
+          <div
+            style={{
+              fontSize: 13,
+              color: T.slate,
+              marginTop: 6,
+              lineHeight: 1.5,
+              display: "-webkit-box",
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: "vertical",
+              overflow: "hidden",
+            }}
+          >
+            {lead.desc}
+          </div>
+        )}
 
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(3, 1fr)",
+            gridTemplateColumns: "repeat(2, 1fr)",
             gap: 12,
             marginTop: 14,
             paddingTop: 12,
             borderTop: `1px solid ${T.line}`,
           }}
         >
-          <MetaItem icon="map-pin" label="Location" value={lead.postcode} sub={`${lead.distance} mi away`} />
-          <MetaItem icon="banknote" label="Budget" value={`£${lead.budgetMin}–£${lead.budgetMax}`} sub={lead.timing} />
-          <MetaItem icon="user" label="Customer" value={lead.customer} sub={`Posted ${lead.posted}`} />
-        </div>
-      </div>
-
-      {/* Competition strip */}
-      <div
-        style={{
-          padding: "10px 16px",
-          background: T.paper,
-          borderTop: `1px solid ${T.line}`,
-          display: "flex",
-          alignItems: "center",
-          gap: 12,
-        }}
-      >
-        <div style={{ display: "flex", gap: 3, flex: 1 }}>
-          {Array.from({ length: lead.contactedMax }).map((_, i) => (
-            <div
-              key={i}
-              style={{
-                flex: 1,
-                height: 4,
-                borderRadius: 9999,
-                background: i < lead.contactedCount ? T.coral : T.line,
-              }}
-            />
-          ))}
-        </div>
-        <div style={{ fontSize: 11.5, color: T.mute, fontFamily: T.mono, whiteSpace: "nowrap" }}>
-          {lead.contactedCount}/{lead.contactedMax} contacted
+          <MetaItem icon="map-pin" label="Location" value={lead.postcode || "—"} />
+          <MetaItem icon="banknote" label="Budget" value={lead.budget != null ? formatGBP(lead.budget) : "Not stated"} />
         </div>
       </div>
 
       {/* Action row */}
       <div style={{ padding: "12px 16px", display: "flex", alignItems: "center", gap: 10, borderTop: `1px solid ${T.line}` }}>
-        {revealed ? (
-          <>
-            <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 12 }}>
-              <span style={{ fontSize: 12.5, color: T.slate, display: "inline-flex", alignItems: "center", gap: 5 }}>
-                <Icon name="phone" size={12} color={T.coral} />
-                <span className="fx-mono" style={{ color: T.ink, fontWeight: 500 }}>
-                  +44 7700 900{lead.id.slice(-3)}
-                </span>
-              </span>
-              <span style={{ fontSize: 12.5, color: T.slate, display: "inline-flex", alignItems: "center", gap: 5 }}>
-                <Icon name="mail" size={12} color={T.coral} />
-                <span className="fx-mono" style={{ color: T.ink, fontWeight: 500 }}>
-                  {lead.customer.toLowerCase().split(" ")[0]}@…
-                </span>
-              </span>
-            </div>
-            <Badge tone="success" icon="check">Contact recorded</Badge>
-          </>
+        {contacted ? (
+          <div style={{ flex: 1, fontSize: 12, color: T.slate, display: "inline-flex", alignItems: "center", gap: 6 }}>
+            <Icon name="phone" size={12} color={T.green} /> You marked this contacted.
+          </div>
         ) : (
           <>
-            <div style={{ flex: 1, fontSize: 12, color: T.mute }}>
-              {closed
-                ? "Closed — 5 trades already reached out."
-                : `${slotsLeft} contact slot${slotsLeft === 1 ? "" : "s"} left · first-come basis.`}
-            </div>
-            <Button variant="ghost" size="sm">Skip</Button>
-            <Button variant="primary" size="sm" icon="phone" onClick={onContact} disabled={closed}>
-              Contact customer
+            <Button variant="ghost" size="sm" onClick={onDecline} disabled={busy}>
+              Decline
+            </Button>
+            <span style={{ flex: 1 }} />
+            <Button variant="primary" size="sm" icon="phone" onClick={onContact} disabled={busy}>
+              {busy ? "…" : "Mark contacted"}
             </Button>
           </>
         )}
