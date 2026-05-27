@@ -89,10 +89,7 @@ export function JobDrawer({
 
   const tabs = [
     { id: "overview", label: "Overview", icon: "layout-grid" },
-    { id: "checklist", label: "Checklist", icon: "check-square", count: `${job.checklistDone}/${job.checklistTotal}` },
-    { id: "photos", label: "Photos", icon: "image", count: (job.beforePhotos || 0) + (job.afterPhotos || 0) },
-    { id: "notes", label: "Notes", icon: "pencil" },
-    { id: "signoff", label: "Sign-off", icon: "pen-line" },
+    { id: "signoff", label: "Report", icon: "file-text" },
   ];
 
   return (
