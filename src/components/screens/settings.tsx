@@ -17,7 +17,8 @@ import { formatGBPdec } from "@/lib/format";
 import { fetchSelfBills, type SelfBill } from "@/lib/queries/self-bills";
 import { fetchPartnerDocuments, REQUIRED_PARTNER_DOCS, missingRequiredDocs, type PartnerDoc } from "@/lib/queries/partner-documents";
 import { fetchContracts, type PartnerContract } from "@/lib/queries/contracts";
-import { fetchRateCard, saveRateCard, catalogIdsForTrades, type ServicePrice } from "@/lib/queries/rate-card";
+import { fetchRateCard, saveRateCard, type ServicePrice } from "@/lib/queries/rate-card";
+import { useRegisterOnboardingSave } from "@/components/onboarding-save";
 import {
   fetchPartnerSettings,
   savePartnerSettings,
@@ -332,20 +333,18 @@ export function TradesPage() {
     setPrimary(t);
   };
 
-  const save = async () => {
+  const save = async (): Promise<boolean> => {
     if (enabled.length === 0) {
       toast({ text: "Enable at least one trade.", icon: "alert-triangle", tone: "coral" });
-      return;
+      return false;
     }
     setSaving(true);
     try {
       const trades = enabled.includes(primary) ? enabled : [primary, ...enabled];
       const supabase = createClient();
-      // Keep catalog_service_ids in sync (OS uses it for partner↔job matching + drives the rate card).
-      const catalogServiceIds = await catalogIdsForTrades(supabase, trades);
       const { data, error } = await supabase
         .from("partners")
-        .update({ trades, trade: primary, catalog_service_ids: catalogServiceIds })
+        .update({ trades, trade: primary })
         .eq("id", partner.id)
         .select("id");
       if (error) throw error;
@@ -355,12 +354,15 @@ export function TradesPage() {
       }
       toast({ text: "Trades saved", icon: "check" });
       router.refresh(); // re-fetch the partner context so the saved trades persist across navigation
+      return true;
     } catch (e) {
       toast({ text: e instanceof Error ? e.message : "Couldn't save trades", icon: "alert-triangle", tone: "coral" });
+      return false;
     } finally {
       setSaving(false);
     }
   };
+  useRegisterOnboardingSave(save); // onboarding "Continue" saves trades automatically
 
   return (
     <>
@@ -474,6 +476,8 @@ export function RatesPage() {
       setSaving(false);
     }
   };
+
+  useRegisterOnboardingSave(save); // Continue saves the rate card automatically
 
   return (
     <>
@@ -619,6 +623,8 @@ export function AvailabilityPage() {
     );
   }
 
+  useRegisterOnboardingSave(save); // Continue saves availability automatically
+
   return (
     <>
       <SettingsHeader title="Availability" subtitle="When you're working. We only dispatch within these windows." />
@@ -710,6 +716,8 @@ export function ServiceAreaPage() {
       setSaving(false);
     }
   };
+
+  useRegisterOnboardingSave(save); // Continue saves the service area automatically
 
   return (
     <>

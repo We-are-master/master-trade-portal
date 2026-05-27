@@ -19,6 +19,7 @@ export interface PartnerRow {
   jobs_completed: number | null;
   location: string | null;
   partner_address: string | null;
+  avatar_url?: string | null;
   // present once their migrations land (read best-effort by partner-auth):
   trial_ends_at?: string | null;
   subscription_status?: string | null;
@@ -55,6 +56,7 @@ export function mapPartner(row: PartnerRow): Partner {
     phone: row.phone || "",
     initials: initialsFrom(contact),
     avatarBg: "#020040",
+    avatarUrl: row.avatar_url ?? null,
     trades: enabled,
     primaryTrade: primary,
     postcode: (row.location || row.partner_address || "").trim(),

@@ -3,8 +3,10 @@
 // Onboarding — 11-step modal flow. Ported from onboarding.jsx.
 // Steps reuse several Settings pages (Trades, Area, Availability, Rates, Docs).
 
-import { useState, type ReactNode } from "react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
+import { useRouter } from "next/navigation";
 import { T } from "@/lib/tokens";
+import { OnboardingSaveProvider, useRegisterOnboardingSave, type OnboardingSaveFn } from "@/components/onboarding-save";
 import { Avatar, Badge, Button, Card, Field, Icon, Input, Modal } from "@/components/ui/primitives";
 import { Wordmark } from "@/components/shell/sidebar";
 import { usePartner } from "@/components/partner-context";
@@ -49,9 +51,29 @@ export function Onboarding({
   onDocsChanged?: () => void;
 }) {
   const [step, setStep] = useState(0);
+  const [advancing, setAdvancing] = useState(false);
   const toast = useToast();
   const total = ONBOARDING_STEPS.length;
-  const next = () => setStep((s) => Math.min(total - 1, s + 1));
+
+  // The current step registers its save here; Continue runs it before advancing (so there's no
+  // need to click each step's own Save button).
+  const saveRef = useRef<OnboardingSaveFn | null>(null);
+  const saveCtx = useMemo(() => ({ set: (fn: OnboardingSaveFn | null) => { saveRef.current = fn; } }), []);
+
+  const next = async () => {
+    if (saveRef.current) {
+      setAdvancing(true);
+      try {
+        const ok = await saveRef.current();
+        if (ok === false) return; // validation failed — stay (step shows its own message)
+      } catch {
+        return; // save errored — the step surfaces its own toast; stay put
+      } finally {
+        setAdvancing(false);
+      }
+    }
+    setStep((s) => Math.min(total - 1, s + 1));
+  };
   const prev = () => setStep((s) => Math.max(0, s - 1));
 
   const handleClose = () => {
@@ -125,7 +147,9 @@ export function Onboarding({
         {/* Step content */}
         <div style={{ display: "flex", flexDirection: "column" }}>
           <div style={{ flex: 1, padding: 32, overflow: "auto" }}>
-            <OnboardingStep step={step} setStep={setStep} onDocsChanged={onDocsChanged} />
+            <OnboardingSaveProvider value={saveCtx}>
+              <OnboardingStep step={step} setStep={setStep} onDocsChanged={onDocsChanged} />
+            </OnboardingSaveProvider>
           </div>
           <div style={{ padding: 16, borderTop: `1px solid ${T.line}`, display: "flex", alignItems: "center", gap: 10 }}>
             <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 10 }}>
@@ -140,8 +164,8 @@ export function Onboarding({
               </Button>
             )}
             {step < total - 1 ? (
-              <Button variant="primary" iconRight="arrow-right" onClick={next}>
-                Continue
+              <Button variant="primary" iconRight="arrow-right" onClick={next} disabled={advancing}>
+                {advancing ? "Saving…" : "Continue"}
               </Button>
             ) : (
               <Button variant="success" icon="check" onClick={handleClose}>
@@ -272,12 +296,33 @@ function WelcomeStep() {
 function DetailsStep() {
   const partner = usePartner();
   const toast = useToast();
+  const router = useRouter();
   const [firstName, setFirstName] = useState(partner.firstName);
   const [lastName, setLastName] = useState(partner.lastName);
   const [phone, setPhone] = useState(partner.phone);
   const [tradingName, setTradingName] = useState(partner.tradingName);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(partner.avatarUrl ?? null);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<string | null>(null);
+
+  const uploadPhoto = async (file: File) => {
+    setUploadingPhoto(true);
+    try {
+      const form = new FormData();
+      form.set("file", file);
+      const res = await fetch("/api/partner/avatar", { method: "POST", body: form });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json.error || "Upload failed");
+      setAvatarUrl(json.url ?? null);
+      toast({ text: "Photo updated", icon: "check" });
+      router.refresh(); // propagate the new photo to the sidebar/dashboard
+    } catch (e) {
+      toast({ text: e instanceof Error ? e.message : "Couldn't upload photo", icon: "alert-triangle", tone: "coral" });
+    } finally {
+      setUploadingPhoto(false);
+    }
+  };
 
   const save = async () => {
     setSaving(true);
@@ -295,12 +340,30 @@ function DetailsStep() {
       setSaving(false);
     }
   };
+  useRegisterOnboardingSave(save); // Continue saves details automatically
 
   return (
     <div>
       <OBTitle kicker="STEP 2" title="Your details" sub="What customers see on every job report. This is your real account — edit and save." />
       <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 18 }}>
-        <Avatar initials={partner.initials} size={68} bg={T.navy} />
+        <Avatar initials={partner.initials} size={68} bg={T.navy} src={avatarUrl ?? undefined} />
+        <label style={{ cursor: uploadingPhoto ? "default" : "pointer" }}>
+          <input
+            type="file"
+            accept="image/*"
+            style={{ display: "none" }}
+            disabled={uploadingPhoto}
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) uploadPhoto(f);
+              e.target.value = "";
+            }}
+          />
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, fontWeight: 500, color: T.coral }}>
+            <Icon name={uploadingPhoto ? "loader" : "camera"} size={14} color={T.coral} />
+            {uploadingPhoto ? "Uploading…" : avatarUrl ? "Change photo" : "Upload photo"}
+          </span>
+        </label>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 10 }}>
         <Field label="First name"><Input value={firstName} onChange={setFirstName} placeholder="First name" /></Field>

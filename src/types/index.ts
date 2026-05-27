@@ -31,6 +31,7 @@ export interface Partner {
   phone: string;
   initials: string;
   avatarBg: string;
+  avatarUrl?: string | null;
   trades: Trade[];
   primaryTrade: Trade;
   postcode: string;
