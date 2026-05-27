@@ -8,7 +8,7 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { T } from "@/lib/tokens";
 import { Avatar, Badge, Button, Card, Icon, Input, Modal, Toggle } from "@/components/ui/primitives";
-import { MapBackground } from "@/components/ui/map-background";
+import { ServiceAreaMap } from "@/components/ui/service-area-map";
 import { SignaturePad } from "@/components/ui/signature-pad";
 import { useToast } from "@/components/ui/toast";
 import { usePartner } from "@/components/partner-context";
@@ -747,33 +747,10 @@ export function ServiceAreaPage() {
               <Input value={form.excluded} onChange={(v) => setForm((f) => ({ ...f, excluded: v }))} placeholder="e.g. SE1, E14" />
             </Row>
           </div>
-          <div style={{ position: "relative", borderRadius: 12, overflow: "hidden", minHeight: 320, background: "#E8EAF0" }}>
-            <MapBackground />
-            <div style={{ position: "absolute", left: "50%", top: "50%", transform: "translate(-50%, -50%)" }}>
-              <div style={{ width: 16, height: 16, borderRadius: 9999, background: T.navy, border: `3px solid ${T.white}`, boxShadow: "0 4px 8px rgba(2,0,64,0.3)" }} />
-            </div>
-            {[
-              { r: 240, op: 0.04 },
-              { r: 200, op: 0.06 },
-              { r: 160, op: 0.08 },
-            ].map((c, i) => (
-              <div
-                key={i}
-                style={{
-                  position: "absolute",
-                  left: "50%",
-                  top: "50%",
-                  transform: "translate(-50%, -50%)",
-                  width: c.r,
-                  height: c.r,
-                  borderRadius: 9999,
-                  background: `rgba(237,75,0,${c.op})`,
-                  border: `1.5px ${i === 0 ? "dashed" : "solid"} rgba(237,75,0,0.4)`,
-                }}
-              />
-            ))}
+          <div style={{ position: "relative" }}>
+            <ServiceAreaMap postcode={form.postcode} radiusMiles={form.radius} minHeight={320} />
             {form.postcode && (
-              <div style={{ position: "absolute", bottom: 12, left: 12, padding: "8px 12px", background: T.white, border: `1px solid ${T.line}`, borderRadius: 8, fontSize: 11.5, color: T.slate, lineHeight: 1.5 }}>
+              <div style={{ position: "absolute", bottom: 12, left: 12, zIndex: 1, padding: "8px 12px", background: T.white, border: `1px solid ${T.line}`, borderRadius: 8, fontSize: 11.5, color: T.slate, lineHeight: 1.5 }}>
                 <div>
                   <b>{form.postcode}</b> · {form.radius} mi radius
                 </div>
