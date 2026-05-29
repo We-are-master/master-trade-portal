@@ -128,6 +128,16 @@ export interface MyJob {
   scheduledDate?: string; // raw ISO date (YYYY-MM-DD) for filtering/sorting
   scheduledStartAt?: string; // raw ISO timestamp for calendar placement
   scheduledEndAt?: string; // raw ISO timestamp for calendar placement
+  /** Formatted visit start day (from scheduled_date). */
+  scheduleStartLabel?: string;
+  /** Formatted expected finish day (from scheduled_finish_date). */
+  scheduleFinishLabel?: string;
+  /** Arrival window label, e.g. 09:30–11:30. */
+  scheduleArrivalLabel?: string;
+  /** master-os: jobs.job_type — fixed price vs hourly. */
+  pricingMode?: "fixed" | "hourly";
+  inCcz?: boolean;
+  hasFreeParking?: boolean;
   lat?: number; // jobs.latitude (geocoded)
   lng?: number; // jobs.longitude (geocoded)
   completed?: string;

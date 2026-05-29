@@ -27,6 +27,7 @@ export const JOB_SELECT = [
   "scheduled_date",
   "scheduled_start_at",
   "scheduled_end_at",
+  "scheduled_finish_date",
   "completed_date",
   "report_submitted",
   "report_notes",
@@ -67,6 +68,7 @@ export interface JobRow {
   scheduled_date: string | null;
   scheduled_start_at: string | null;
   scheduled_end_at: string | null;
+  scheduled_finish_date: string | null;
   completed_date: string | null;
   report_submitted: boolean | null;
   report_notes: string | null;
@@ -126,14 +128,25 @@ function fmtFullDate(date: string | null): string {
   return new Date(`${date}T00:00:00`).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: LONDON });
 }
 
+function arrivalWindowLabel(row: JobRow): string | undefined {
+  const start = fmtTime(row.scheduled_start_at);
+  const end = fmtTime(row.scheduled_end_at);
+  if (start && end) return `${start}–${end}`;
+  if (start) return start;
+  return undefined;
+}
+
 function scheduledLabel(row: JobRow): string | undefined {
   const day = fmtDayMonth(row.scheduled_date);
   if (!day) return undefined;
-  const start = fmtTime(row.scheduled_start_at);
-  const end = fmtTime(row.scheduled_end_at);
-  if (start && end) return `${day}, ${start}–${end}`;
-  if (start) return `${day}, ${start}`;
+  const window = arrivalWindowLabel(row);
+  if (window) return `${day}, ${window}`;
   return day;
+}
+
+function pricingModeFromRow(row: JobRow): "fixed" | "hourly" {
+  if (row.job_type === "hourly" || row.job_type === "fixed") return row.job_type;
+  return "fixed";
 }
 
 function durationEstimate(row: JobRow): string {
@@ -187,8 +200,8 @@ export function mapJob(row: JobRow): MyJob {
     uuid: row.id,
     source: (row.quote_id ? "quote" : "job") as JobSource,
     title: row.title || "Untitled job",
-    desc: row.scope || row.additional_notes || "",
-    trade: (row.job_type || "General Maintenance") as Trade,
+    desc: row.scope || "",
+    trade: (row.title?.trim() || "General Maintenance") as Trade,
     customer,
     postcode: customer.postcode,
     distance: 0, // no partner-relative distance in the schema yet
@@ -197,6 +210,12 @@ export function mapJob(row: JobRow): MyJob {
     scheduledDate: row.scheduled_date || undefined,
     scheduledStartAt: row.scheduled_start_at || undefined,
     scheduledEndAt: row.scheduled_end_at || undefined,
+    scheduleStartLabel: fmtFullDate(row.scheduled_date) || undefined,
+    scheduleFinishLabel: fmtFullDate(row.scheduled_finish_date) || undefined,
+    scheduleArrivalLabel: arrivalWindowLabel(row),
+    pricingMode: pricingModeFromRow(row),
+    inCcz: row.in_ccz === true,
+    hasFreeParking: row.has_free_parking === true,
     lat: typeof row.latitude === "number" ? row.latitude : undefined,
     lng: typeof row.longitude === "number" ? row.longitude : undefined,
     completed: fmtFullDate(row.completed_date) || undefined,

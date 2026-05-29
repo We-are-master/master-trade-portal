@@ -8,21 +8,19 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { T } from "@/lib/tokens";
 import { Badge, Button, Card, Icon, IconButton, StatCard, StatusDot } from "@/components/ui/primitives";
 import { formatGBP } from "@/lib/format";
+import { jobMatchesDateFilter, londonYmd } from "@/lib/date-range-filter";
+import { useDateRangeFilter } from "@/hooks/use-date-range-filter";
+import { DateRangeFilter } from "@/components/ui/date-range-filter";
 import { usePartner } from "@/components/partner-context";
 import { useMyJobs } from "@/components/jobs-context";
 import { createClient } from "@/lib/supabase/client";
 import { fetchPartnerDocuments, type PartnerDoc } from "@/lib/queries/partner-documents";
 import type { ActivityTone, MyJob } from "@/types";
 
-const LONDON = "Europe/London";
-function londonDate(d: Date): string {
-  // en-CA renders YYYY-MM-DD, matching the DB's date columns for safe string comparison.
-  return d.toLocaleDateString("en-CA", { timeZone: LONDON });
-}
-function daysAgoISO(n: number): string {
+function daysAgoYmd(n: number): string {
   const d = new Date();
   d.setDate(d.getDate() - n);
-  return londonDate(d);
+  return londonYmd(d);
 }
 
 interface DerivedActivity {
@@ -35,7 +33,7 @@ interface DerivedActivity {
 }
 
 function greetingWord(): string {
-  const hour = Number(new Date().toLocaleString("en-GB", { hour: "2-digit", hour12: false, timeZone: LONDON }));
+  const hour = Number(new Date().toLocaleString("en-GB", { hour: "2-digit", hour12: false, timeZone: "Europe/London" }));
   if (hour < 12) return "Morning";
   if (hour < 18) return "Afternoon";
   return "Evening";
@@ -50,6 +48,7 @@ export function Dashboard({
 }) {
   const partner = usePartner();
   const { jobs, loading, error, refresh } = useMyJobs();
+  const { value: dateFilter, setValue: setDateFilter, label: dateFilterLabel } = useDateRangeFilter();
 
   // Real extras the partner context doesn't carry: compliance docs + live trial days.
   // Best-effort (tolerate missing mig-196 columns) so the dashboard never breaks.
@@ -90,13 +89,14 @@ export function Dashboard({
   }, [docs]);
 
   const d = useMemo(() => {
-    const today = londonDate(new Date());
-    const todayJobs = jobs
-      .filter((j) => j.scheduledDate === today)
+    const today = londonYmd();
+    const filteredJobs = jobs.filter((j) => jobMatchesDateFilter(j, dateFilter));
+    const scheduleJobs = filteredJobs
+      .filter((j) => j.status !== "completed" && j.status !== "cancelled")
       .sort((a, b) => (a.scheduled ?? "").localeCompare(b.scheduled ?? ""));
 
-    // This week's earnings = rolling 7-day window of completed jobs; trend is the daily breakdown.
-    const trendDays = Array.from({ length: 7 }, (_, i) => daysAgoISO(6 - i));
+    // Rolling 7-day earnings (independent of date chip — headline KPI).
+    const trendDays = Array.from({ length: 7 }, (_, i) => daysAgoYmd(6 - i));
     const trend = trendDays.map((day) =>
       jobs.filter((j) => j.status === "completed" && j.completedDate === day).reduce((s, j) => s + j.total, 0),
     );
@@ -104,18 +104,31 @@ export function Dashboard({
 
     const active = jobs.filter((j) => j.status === "scheduled" || j.status === "in_progress");
     const awaiting = jobs.filter((j) => j.status === "final_check");
-    const since30 = daysAgoISO(30);
+    const since30 = daysAgoYmd(30);
     const completed30 = jobs.filter((j) => j.status === "completed" && (j.completedDate ?? "") >= since30);
     const pendingPayout = awaiting.reduce((s, j) => s + j.total, 0);
-    const todayTotal = todayJobs.reduce((s, j) => s + j.total, 0);
+    const scheduleTotal = scheduleJobs.reduce((s, j) => s + j.total, 0);
     const inProgress = jobs.find((j) => j.status === "in_progress");
 
-    return { today, todayJobs, trend, weekEarnings, active, awaiting, completed30, pendingPayout, todayTotal, inProgress };
-  }, [jobs]);
+    return {
+      today,
+      scheduleJobs,
+      trend,
+      weekEarnings,
+      active,
+      awaiting,
+      completed30,
+      pendingPayout,
+      scheduleTotal,
+      inProgress,
+      filteredCount: filteredJobs.length,
+    };
+  }, [jobs, dateFilter]);
 
   const activity = useMemo<DerivedActivity[]>(() => {
     const items: (DerivedActivity & { sortKey: string })[] = [];
     for (const j of jobs) {
+      if (!jobMatchesDateFilter(j, dateFilter)) continue;
       if (j.status === "completed" && j.completedDate) {
         items.push({
           id: `c-${j.id}`,
@@ -136,7 +149,7 @@ export function Dashboard({
           when: j.scheduled ?? "",
           sortKey: j.scheduledDate ?? "9999",
         });
-      } else if (j.status === "scheduled" && j.scheduledDate && j.scheduledDate >= d.today) {
+      } else if (j.status === "scheduled" && j.scheduledDate) {
         items.push({
           id: `s-${j.id}`,
           icon: "calendar",
@@ -152,7 +165,7 @@ export function Dashboard({
       .sort((a, b) => b.sortKey.localeCompare(a.sortKey))
       .slice(0, 6)
       .map(({ sortKey: _sortKey, ...rest }) => rest);
-  }, [jobs, d.today]);
+  }, [jobs, dateFilter]);
 
   if (loading) {
     return (
@@ -178,22 +191,29 @@ export function Dashboard({
     day: "numeric",
     month: "long",
     year: "numeric",
-    timeZone: LONDON,
+    timeZone: "Europe/London",
   });
+
+  const scheduleTitle =
+    dateFilter.mode === "today"
+      ? "Today's schedule"
+      : dateFilter.mode === "tomorrow"
+        ? "Tomorrow's schedule"
+        : `Schedule · ${dateFilterLabel.toLowerCase()}`;
 
   return (
     <div style={{ padding: 24, display: "flex", flexDirection: "column", gap: 18, flex: 1, overflow: "auto" }}>
-      {/* Greeting */}
-      <div style={{ display: "flex", alignItems: "flex-start", gap: 16 }}>
-        <div style={{ flex: 1 }}>
+      {/* Greeting + date filter */}
+      <div style={{ display: "flex", alignItems: "flex-start", gap: 16, flexWrap: "wrap" }}>
+        <div style={{ flex: 1, minWidth: 220 }}>
           <div style={{ fontSize: 26, fontWeight: 600, letterSpacing: -0.4, color: T.navy }}>
             {greetingWord()}, {partner.firstName}.
           </div>
           <div style={{ fontSize: 14, color: T.slate, marginTop: 4 }}>
             <span style={{ color: T.coral, fontWeight: 500 }}>
-              {d.todayJobs.length} {d.todayJobs.length === 1 ? "job" : "jobs"} today
+              {d.scheduleJobs.length} {d.scheduleJobs.length === 1 ? "job" : "jobs"}
             </span>{" "}
-            · {d.active.length} active
+            · {dateFilterLabel.toLowerCase()} · {d.active.length} active
             {trialDays > 0 && (
               <>
                 {" "}·{" "}
@@ -206,6 +226,7 @@ export function Dashboard({
             .
           </div>
         </div>
+        <DateRangeFilter value={dateFilter} onChange={setDateFilter} />
         {d.inProgress && (
           <Button variant="dark" icon="play" onClick={() => onOpenJob(d.inProgress!.id)}>
             Resume current job
@@ -297,23 +318,27 @@ export function Dashboard({
         <Card>
           <div style={{ padding: "14px 16px", display: "flex", alignItems: "center", borderBottom: `1px solid ${T.line}` }}>
             <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 15, fontWeight: 500, color: T.navy }}>Today&apos;s schedule</div>
-              <div style={{ fontSize: 12, color: T.mute, marginTop: 2 }}>{todayLabel}</div>
+              <div style={{ fontSize: 15, fontWeight: 500, color: T.navy }}>{scheduleTitle}</div>
+              <div style={{ fontSize: 12, color: T.mute, marginTop: 2 }}>
+                {dateFilter.mode === "today" ? todayLabel : dateFilterLabel}
+              </div>
             </div>
             <Button variant="ghost" size="sm" iconRight="arrow-right" onClick={() => onNav("schedule")}>
               Open calendar
             </Button>
           </div>
           <div>
-            {d.todayJobs.map((j, i) => (
-              <ScheduleRow key={j.id} job={j} onClick={() => onOpenJob(j.id)} divider={i < d.todayJobs.length - 1} />
+            {d.scheduleJobs.map((j, i) => (
+              <ScheduleRow key={j.id} job={j} onClick={() => onOpenJob(j.id)} divider={i < d.scheduleJobs.length - 1} />
             ))}
-            {d.todayJobs.length === 0 && (
+            {d.scheduleJobs.length === 0 && (
               <div style={{ padding: 24, color: T.mute, fontSize: 13, textAlign: "center" }}>
-                Free day. Maybe a coffee on Northcote Road.
+                {dateFilter.mode === "today"
+                  ? "Free day. Maybe a coffee on Northcote Road."
+                  : `No jobs scheduled for ${dateFilterLabel.toLowerCase()}.`}
               </div>
             )}
-            {d.todayJobs.length > 0 && (
+            {d.scheduleJobs.length > 0 && (
               <div
                 style={{
                   padding: "12px 16px",
@@ -327,12 +352,12 @@ export function Dashboard({
                 <Icon name="briefcase" size={14} color={T.mute} />
                 <span style={{ fontSize: 12, color: T.mute }}>
                   <b style={{ color: T.ink, fontWeight: 500 }}>
-                    {d.todayJobs.length} {d.todayJobs.length === 1 ? "job" : "jobs"}
+                    {d.scheduleJobs.length} {d.scheduleJobs.length === 1 ? "job" : "jobs"}
                   </b>{" "}
-                  scheduled today
+                  in this period
                 </span>
                 <span style={{ flex: 1 }} />
-                <span style={{ fontSize: 12, color: T.mute, fontFamily: T.mono }}>{formatGBP(d.todayTotal)} value</span>
+                <span style={{ fontSize: 12, color: T.mute, fontFamily: T.mono }}>{formatGBP(d.scheduleTotal)} value</span>
               </div>
             )}
           </div>

@@ -12,7 +12,6 @@ import {
 } from "react";
 import { T } from "@/lib/tokens";
 import {
-  Avatar,
   Badge,
   Button,
   Card,
@@ -23,6 +22,7 @@ import {
   Toggle,
 } from "@/components/ui/primitives";
 import { MapBackground } from "@/components/ui/map-background";
+import { JobsMap } from "@/components/ui/jobs-map";
 import { SourceTag } from "./jobs";
 import { formatGBP, formatGBPdec } from "@/lib/format";
 import { useMyJobs } from "@/components/jobs-context";
@@ -290,149 +290,201 @@ export function JobDrawer({
 }
 
 // ============================================================
-// OVERVIEW TAB
+// OVERVIEW TAB — mirrors Fixfy OS job card (map, client, schedule, scope, pay).
 // ============================================================
 function OverviewTab({ job }: { job: MyJob }) {
+  const mapsQuery = encodeURIComponent(job.customer.address || job.customer.postcode || job.postcode);
+  const googleMapsHref = mapsQuery ? `https://www.google.com/maps/search/?api=1&query=${mapsQuery}` : undefined;
+  const wazeHref = mapsQuery ? `https://waze.com/ul?q=${mapsQuery}` : undefined;
+
   return (
     <div style={{ padding: 20, display: "flex", flexDirection: "column", gap: 14 }}>
-      <Card style={{ padding: 16, display: "flex", alignItems: "center", gap: 14 }}>
-        <Avatar initials={job.customer.initials} size={44} bg={T.navy} />
-        <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 14, fontWeight: 500, color: T.ink }}>{job.customer.name}</div>
-          <div style={{ fontSize: 12, color: T.mute, marginTop: 2 }}>
-            {job.customer.priorJobs > 0
-              ? `Returning customer · ${job.customer.priorJobs} prior job${job.customer.priorJobs === 1 ? "" : "s"} with you`
-              : "New customer · first job"}
-          </div>
-        </div>
-        <Button variant="secondary" size="sm" icon="phone">Call</Button>
-        <Button variant="secondary" size="sm" icon="message-square">Message</Button>
-      </Card>
-
-      <DrawerSection title="Location & access" icon="map-pin">
-        <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr", gap: 14 }}>
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            <div>
-              <div style={{ fontSize: 14, color: T.ink, fontWeight: 500 }}>{job.customer.address}</div>
-              <div className="fx-mono" style={{ fontSize: 12.5, color: T.slate, marginTop: 2 }}>
-                {job.customer.postcode}
+      <Card style={{ padding: 0, overflow: "hidden" }}>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)",
+            minHeight: 220,
+            borderBottom: `1px solid ${T.line}`,
+          }}
+        >
+          <div style={{ position: "relative", minHeight: 220, borderRight: `1px solid ${T.line}` }}>
+            {typeof job.lat === "number" && typeof job.lng === "number" ? (
+              <JobsMap jobs={[job]} onOpenJob={() => {}} minHeight={220} />
+            ) : (
+              <div style={{ position: "relative", height: "100%", minHeight: 220 }}>
+                <MapBackground />
+                <div
+                  style={{
+                    position: "absolute",
+                    inset: 0,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    padding: 16,
+                    textAlign: "center",
+                    fontSize: 12,
+                    color: T.mute,
+                    background: "rgba(255,255,255,0.72)",
+                  }}
+                >
+                  Location not mapped yet — use the address below for directions.
+                </div>
               </div>
-              <div style={{ fontSize: 12, color: T.mute, marginTop: 2 }}>{job.distance} mi · ETA 9 min</div>
-            </div>
-            <div>
-              <div style={{ fontSize: 11, color: T.mute, letterSpacing: 0.3, marginBottom: 4 }}>ACCESS NOTES</div>
-              <div style={{ fontSize: 13, color: T.slate, lineHeight: 1.5 }}>{job.accessNotes}</div>
-            </div>
-            <div>
-              <div style={{ fontSize: 11, color: T.mute, letterSpacing: 0.3, marginBottom: 4 }}>PARKING</div>
-              <div style={{ fontSize: 13, color: T.slate, lineHeight: 1.5 }}>{job.parkingNotes}</div>
-            </div>
-            <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
-              <Button variant="secondary" size="sm" icon="navigation">Google Maps</Button>
-              <Button variant="secondary" size="sm" icon="navigation">Waze</Button>
-            </div>
+            )}
           </div>
-          <div style={{ borderRadius: 10, overflow: "hidden", border: `1px solid ${T.line}`, minHeight: 200, position: "relative", background: "#E8EAF0" }}>
-            <MapBackground />
-            <div style={{ position: "absolute", left: "50%", top: "50%", transform: "translate(-50%, -100%)" }}>
+
+          <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 12, minWidth: 0 }}>
+            <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
+              <span className="fx-mono" style={{ fontSize: 11, color: T.mute }}>
+                {job.id}
+              </span>
+              <SourceTag source={job.source} />
+            </div>
+
+            {job.title ? (
               <div
                 style={{
-                  width: 30,
-                  height: 30,
-                  borderRadius: "50% 50% 50% 0",
-                  transform: "rotate(-45deg)",
-                  background: T.coral,
-                  border: `3px solid ${T.white}`,
-                  boxShadow: "0 4px 8px rgba(2,0,64,0.3)",
+                  display: "inline-flex",
+                  alignSelf: "flex-start",
+                  alignItems: "center",
+                  gap: 6,
+                  padding: "4px 10px",
+                  borderRadius: 6,
+                  background: T.paper2,
+                  border: `1px solid ${T.line}`,
+                  fontSize: 12,
+                  fontWeight: 600,
+                  color: T.navy,
+                  maxWidth: "100%",
                 }}
-              />
+              >
+                <Icon name="wrench" size={12} color={T.blue} />
+                <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{job.title}</span>
+              </div>
+            ) : null}
+
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 600, color: T.ink }}>{job.customer.name}</div>
+              <div style={{ fontSize: 12.5, color: T.slate, marginTop: 4, lineHeight: 1.45 }}>{job.customer.address || "—"}</div>
+              {job.customer.postcode ? (
+                <div className="fx-mono" style={{ fontSize: 11.5, color: T.mute, marginTop: 2 }}>
+                  {job.customer.postcode}
+                </div>
+              ) : null}
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 12.5, color: T.slate }}>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                <Icon name="calendar" size={13} color={T.mute} />
+                {job.scheduleStartLabel || job.scheduled?.split(",")[0] || "Visit date not set"}
+              </span>
+              {job.scheduleArrivalLabel ? (
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                  <Icon name="clock" size={13} color={T.mute} />
+                  Arrival {job.scheduleArrivalLabel}
+                </span>
+              ) : null}
+            </div>
+
+            <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
+              <Badge tone={job.pricingMode === "hourly" ? "in_progress" : "scheduled"} size="sm">
+                {job.pricingMode === "hourly" ? "Hourly" : "Fixed price"}
+              </Badge>
+              <span style={{ fontFamily: T.mono, fontSize: 13, fontWeight: 600, color: T.navy }}>{formatGBPdec(job.total)}</span>
+            </div>
+
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: "auto" }}>
+              {googleMapsHref ? (
+                <Button variant="secondary" size="sm" icon="navigation" onClick={() => window.open(googleMapsHref, "_blank", "noopener,noreferrer")}>
+                  Google Maps
+                </Button>
+              ) : null}
+              {wazeHref ? (
+                <Button variant="secondary" size="sm" icon="navigation" onClick={() => window.open(wazeHref, "_blank", "noopener,noreferrer")}>
+                  Waze
+                </Button>
+              ) : null}
             </div>
           </div>
         </div>
-      </DrawerSection>
 
-      <DrawerSection title="Job description" icon="file-text">
-        <div style={{ fontSize: 13.5, color: T.slate, lineHeight: 1.55 }}>{job.desc}</div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 12 }}>
-          <ScopeList
-            title="In scope"
-            tone={T.green}
-            items={["Annual service per manufacturer schedule", "Combustion analysis recording", "Issue Gas Safe service record"]}
-          />
-          <ScopeList title="Out of scope" tone={T.mute} items={["Parts replacement (quote separately)", "System power-flush"]} />
-        </div>
-      </DrawerSection>
-
-      <DrawerSection title="Schedule" icon="calendar">
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10 }}>
-          <MiniStat label="Date" value="Fri 23 May" />
-          <MiniStat label="Window" value="09:30 – 11:30" />
-          <MiniStat label="Estimated" value={job.durationEst} />
-        </div>
-        {job.elapsed && (
-          <div
-            style={{
-              marginTop: 10,
-              padding: "10px 12px",
-              background: T.coralTint,
-              borderRadius: 8,
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              fontSize: 12.5,
-              color: T.coral,
-            }}
-          >
-            <span style={{ width: 6, height: 6, borderRadius: 9999, background: T.coral, animation: "fx-pulse 1.6s ease-in-out infinite" }} />
-            Started 09:42 · <span className="fx-mono" style={{ fontWeight: 600 }}>{job.elapsed}</span> elapsed
+        <div style={{ padding: "16px 18px", background: T.paper2, display: "flex", flexDirection: "column", gap: 12 }}>
+          <div style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: 0.6, color: T.navy, textTransform: "uppercase" }}>Schedule</div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 10 }}>
+            <OsMiniTile label="Start date" value={job.scheduleStartLabel || "—"} />
+            <OsMiniTile label="Expected finish" value={job.scheduleFinishLabel || "—"} />
+            <OsMiniTile label="Arrival window" value={job.scheduleArrivalLabel || "—"} />
+            <OsMiniTile label="Estimated duration" value={job.durationEst || "—"} />
           </div>
+
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+            <AccessFlag label="CCZ" active={!!job.inCcz} activeHint="Congestion Charge Zone — plan for charges." inactiveHint="Not in CCZ." />
+            <AccessFlag label="Parking" active={!!job.hasFreeParking} activeHint="Free parking on site." inactiveHint="No free parking flagged." />
+          </div>
+
+          {job.elapsed ? (
+            <div
+              style={{
+                padding: "10px 12px",
+                background: T.coralTint,
+                borderRadius: 8,
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                fontSize: 12.5,
+                color: T.coral,
+              }}
+            >
+              <span style={{ width: 6, height: 6, borderRadius: 9999, background: T.coral, animation: "fx-pulse 1.6s ease-in-out infinite" }} />
+              On the clock · <span className="fx-mono" style={{ fontWeight: 600 }}>{job.elapsed}</span> elapsed
+            </div>
+          ) : null}
+        </div>
+      </Card>
+
+      <DrawerSection title="Scope" icon="file-text">
+        {job.desc?.trim() ? (
+          <div style={{ fontSize: 13.5, color: T.slate, lineHeight: 1.55, whiteSpace: "pre-wrap" }}>{job.desc}</div>
+        ) : (
+          <p style={{ fontSize: 13, color: T.mute, fontStyle: "italic", margin: 0 }}>No scope on this job yet.</p>
         )}
       </DrawerSection>
 
-      <DrawerSection
-        title="Materials supplied"
-        icon="package"
-        action={<Button variant="ghost" size="sm" icon="plus">Add unplanned</Button>}
-      >
-        <div style={{ borderTop: `1px solid ${T.line}` }}>
-          {[
-            { item: "Boiler service kit (filter, gasket, condensate)", qty: 1, cost: 18.5 },
-            { item: "Inhibitor (1L)", qty: 1, cost: 12.0 },
-            { item: "Magnetic filter clean cartridge", qty: 1, cost: 4.5 },
-          ].map((m, i) => (
-            <div
-              key={i}
-              style={{
-                display: "grid",
-                gridTemplateColumns: "1fr 60px 80px",
-                gap: 12,
-                alignItems: "center",
-                padding: "10px 0",
-                borderBottom: `1px solid ${T.line}`,
-                fontSize: 13,
-              }}
-            >
-              <div style={{ color: T.ink }}>{m.item}</div>
-              <div style={{ color: T.mute, textAlign: "right", fontFamily: T.mono }}>×{m.qty}</div>
-              <div style={{ fontFamily: T.mono, textAlign: "right", color: T.ink }}>{formatGBPdec(m.cost)}</div>
-            </div>
-          ))}
-          <div style={{ display: "flex", alignItems: "center", padding: "12px 0" }}>
-            <span style={{ flex: 1, fontSize: 12.5, color: T.mute }}>3 items</span>
-            <span style={{ fontFamily: T.mono, fontSize: 13, fontWeight: 500 }}>£35.00</span>
-          </div>
-        </div>
-      </DrawerSection>
+      {job.accessNotes?.trim() ? (
+        <DrawerSection title="Access notes" icon="key">
+          <div style={{ fontSize: 13.5, color: T.slate, lineHeight: 1.55, whiteSpace: "pre-wrap" }}>{job.accessNotes}</div>
+        </DrawerSection>
+      ) : null}
 
-      <DrawerSection title="Payment" icon="banknote">
-        <div style={{ display: "flex", alignItems: "flex-end", gap: 16 }}>
-          <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 6 }}>
+      {job.referencePhotos && job.referencePhotos.length > 0 ? (
+        <DrawerSection title="Site reference photos" icon="image">
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(88px, 1fr))", gap: 8 }}>
+            {job.referencePhotos.map((url) => (
+              <a
+                key={url}
+                href={url}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ display: "block", borderRadius: 8, overflow: "hidden", border: `1px solid ${T.line}`, aspectRatio: "1" }}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+              </a>
+            ))}
+          </div>
+        </DrawerSection>
+      ) : null}
+
+      <DrawerSection title="Your pay" icon="banknote">
+        <div style={{ display: "flex", alignItems: "flex-end", gap: 16, flexWrap: "wrap" }}>
+          <div style={{ flex: 1, minWidth: 200, display: "flex", flexDirection: "column", gap: 6 }}>
             <PaymentLine label="Labour" value={formatGBPdec(job.labour)} />
-            <PaymentLine label="Materials" value={formatGBPdec(job.materials)} />
-            <PaymentLine label="VAT (included)" value="" sub />
+            {job.materials > 0 ? <PaymentLine label="Materials" value={formatGBPdec(job.materials)} /> : null}
+            {job.vat ? <PaymentLine label="VAT (included)" value="" sub /> : null}
             <div style={{ height: 1, background: T.line, marginTop: 4 }} />
             <div style={{ display: "flex", alignItems: "baseline", marginTop: 4 }}>
-              <span style={{ flex: 1, fontSize: 13, color: T.ink, fontWeight: 500 }}>Total</span>
+              <span style={{ flex: 1, fontSize: 13, color: T.ink, fontWeight: 500 }}>Total payout</span>
               <span style={{ fontFamily: T.mono, fontSize: 22, fontWeight: 500, color: T.navy }}>{formatGBPdec(job.total)}</span>
             </div>
           </div>
@@ -445,12 +497,9 @@ function OverviewTab({ job }: { job: MyJob }) {
               color: T.slate,
               lineHeight: 1.5,
               maxWidth: 220,
-              textAlign: "right",
             }}
           >
-            Paid via self-bill <b style={{ color: T.ink }}>Net-7</b> from sign-off.
-            <br />
-            Next batch <span className="fx-mono">Fri 29 May</span>.
+            Partner payout via self-bill <b style={{ color: T.ink }}>Net-7</b> after job sign-off.
           </div>
         </div>
       </DrawerSection>
@@ -458,19 +507,45 @@ function OverviewTab({ job }: { job: MyJob }) {
   );
 }
 
-function ScopeList({ title, tone, items }: { title: string; tone: string; items: string[] }) {
+function OsMiniTile({ label, value }: { label: string; value: ReactNode }) {
   return (
-    <div style={{ padding: 12, background: T.white, borderRadius: 8, border: `1px solid ${T.line}` }}>
-      <div style={{ fontSize: 11, color: tone, letterSpacing: 0.4, fontWeight: 500, marginBottom: 8, textTransform: "uppercase" }}>
-        {title}
-      </div>
-      {items.map((it, i) => (
-        <div key={i} style={{ display: "flex", gap: 8, fontSize: 12.5, color: T.slate, marginTop: i === 0 ? 0 : 4, lineHeight: 1.4 }}>
-          <Icon name={tone === T.green ? "check" : "x"} size={13} color={tone} style={{ marginTop: 2 }} />
-          <span>{it}</span>
-        </div>
-      ))}
+    <div style={{ padding: "10px 12px", background: T.white, borderRadius: 10, border: `1px solid ${T.line}` }}>
+      <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: 0.5, color: T.navy, textTransform: "uppercase", marginBottom: 4 }}>{label}</div>
+      <div style={{ fontSize: 13.5, fontWeight: 500, color: T.ink }}>{value}</div>
     </div>
+  );
+}
+
+function AccessFlag({
+  label,
+  active,
+  activeHint,
+  inactiveHint,
+}: {
+  label: string;
+  active: boolean;
+  activeHint: string;
+  inactiveHint: string;
+}) {
+  return (
+    <span
+      title={active ? activeHint : inactiveHint}
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 6,
+        padding: "5px 10px",
+        borderRadius: 9999,
+        fontSize: 11,
+        fontWeight: 600,
+        border: `1px solid ${active ? T.green : T.line}`,
+        background: active ? "rgba(15,110,86,0.08)" : T.white,
+        color: active ? T.green : T.mute,
+      }}
+    >
+      <Icon name={active ? "check" : "x"} size={12} />
+      {label}
+    </span>
   );
 }
 
@@ -479,15 +554,6 @@ function PaymentLine({ label, value, sub }: { label: string; value: string; sub?
     <div style={{ display: "flex", alignItems: "center" }}>
       <span style={{ flex: 1, fontSize: 13, color: sub ? T.mute : T.slate }}>{label}</span>
       {value && <span style={{ fontFamily: T.mono, fontSize: 13, color: T.ink }}>{value}</span>}
-    </div>
-  );
-}
-
-function MiniStat({ label, value }: { label: string; value: ReactNode }) {
-  return (
-    <div style={{ padding: 10, background: T.white, borderRadius: 8, border: `1px solid ${T.line}` }}>
-      <div style={{ fontSize: 10.5, color: T.mute, letterSpacing: 0.3, marginBottom: 4 }}>{label.toUpperCase()}</div>
-      <div style={{ fontSize: 13.5, fontWeight: 500, color: T.ink }}>{value}</div>
     </div>
   );
 }

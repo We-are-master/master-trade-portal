@@ -2,7 +2,7 @@
 
 // My jobs — Board / List / Map. Ported from jobs.jsx.
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { T } from "@/lib/tokens";
 import {
   Avatar,
@@ -17,7 +17,10 @@ import {
   Tabs,
 } from "@/components/ui/primitives";
 import { JobsMap as JobsMapView } from "@/components/ui/jobs-map";
+import { DateRangeFilter } from "@/components/ui/date-range-filter";
 import { formatGBP } from "@/lib/format";
+import { jobMatchesDateFilter } from "@/lib/date-range-filter";
+import { useDateRangeFilter } from "@/hooks/use-date-range-filter";
 import { usePartner } from "@/components/partner-context";
 import { useMyJobs } from "@/components/jobs-context";
 import type { JobSource, JobStatus, MyJob } from "@/types";
@@ -27,6 +30,12 @@ type OpenJob = (id: string) => void;
 export function MyJobsView({ onOpenJob, defaultView = "board" }: { onOpenJob: OpenJob; defaultView?: string }) {
   const [view, setView] = useState(defaultView);
   const { jobs, loading, error } = useMyJobs();
+  const { value: dateFilter, setValue: setDateFilter, label: dateFilterLabel } = useDateRangeFilter();
+
+  const filteredJobs = useMemo(
+    () => jobs.filter((j) => jobMatchesDateFilter(j, dateFilter)),
+    [jobs, dateFilter],
+  );
 
   const tabs = [
     { id: "board", label: "Board", icon: "columns-3" },
@@ -34,15 +43,20 @@ export function MyJobsView({ onOpenJob, defaultView = "board" }: { onOpenJob: Op
     { id: "map", label: "Map", icon: "map" },
   ];
 
-  const activeCount = jobs.filter((j) => j.status !== "completed").length;
+  const activeCount = filteredJobs.filter((j) => j.status !== "completed" && j.status !== "cancelled").length;
 
   return (
     <div style={{ padding: 24, display: "flex", flexDirection: "column", gap: 16, flex: 1, overflow: "hidden" }}>
       <SectionHeader
         title="My jobs"
-        subtitle={loading ? "Loading…" : `${jobs.length} jobs · ${activeCount} active`}
+        subtitle={
+          loading
+            ? "Loading…"
+            : `${filteredJobs.length} of ${jobs.length} jobs · ${activeCount} active · ${dateFilterLabel.toLowerCase()}`
+        }
         actions={
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
+            <DateRangeFilter value={dateFilter} onChange={setDateFilter} />
             <Tabs tabs={tabs} active={view} onChange={setView} variant="pills" />
             <Button variant="secondary" icon="download">Export</Button>
           </div>
@@ -55,11 +69,17 @@ export function MyJobsView({ onOpenJob, defaultView = "board" }: { onOpenJob: Op
         <EmptyState icon="loader" title="Loading your jobs…" />
       ) : jobs.length === 0 ? (
         <EmptyState icon="briefcase" title="No jobs yet" hint="Accepted jobs and assignments will appear here." />
+      ) : filteredJobs.length === 0 ? (
+        <EmptyState
+          icon="calendar"
+          title="No jobs in this period"
+          hint={`Try a different date range — currently showing ${dateFilterLabel.toLowerCase()}.`}
+        />
       ) : (
         <>
-          {view === "board" && <JobsBoard onOpenJob={onOpenJob} jobs={jobs} />}
-          {view === "list" && <JobsList onOpenJob={onOpenJob} jobs={jobs} />}
-          {view === "map" && <JobsMap onOpenJob={onOpenJob} jobs={jobs} />}
+          {view === "board" && <JobsBoard onOpenJob={onOpenJob} jobs={filteredJobs} />}
+          {view === "list" && <JobsList onOpenJob={onOpenJob} jobs={filteredJobs} />}
+          {view === "map" && <JobsMap onOpenJob={onOpenJob} jobs={filteredJobs} />}
         </>
       )}
     </div>
