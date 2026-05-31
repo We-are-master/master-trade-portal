@@ -1,13 +1,20 @@
-// Maps real Fixfy OS `quotes` (the partner is invited to bid on) → the portal's
-// QuoteRequest UI type, and submits partner bids into `quote_bids`.
+// Maps real Fixfy OS `quotes` (the partner is invited to bid on, OR that broadcast on the
+// partner's trade) → the portal's QuoteRequest UI type, and submits partner bids into
+// `quote_bids`.
 //
-// Invitations live in `quote_partner_invitations` (one row per invited partner). The
-// `quotes` table is thin (title/total_value/status); description + postcode are joined
-// from the originating `service_requests` row. There is no per-quote "trade" or distance
-// in the schema, so those stay empty/0.
+// Two visibility paths surface a bidding quote in the portal:
+//   1. Explicit invite — a row in `quote_partner_invitations` (the legacy path the OS
+//      Requests-to-quote flow still uses).
+//   2. Broadcast — a bidding-status quote whose `catalog_service_id` matches the partner's
+//      `catalog_service_ids` array (or, as a fuzzy fallback, the partner's `trades` array).
+//      This is the path the new New Bidding modal uses (no manual partner picker).
+//
+// The `quotes` table is thin (title/total_value/status). There is no postcode or per-quote
+// distance in the schema, so those stay empty/0.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { QuoteRequest, QuoteRequestStatus } from "@/types";
+import { tradeMatchesService } from "@/lib/trade-match";
 
 interface InvitationRow {
   quote_id: string;
@@ -20,6 +27,9 @@ interface QuoteRow {
   total_value: number | null;
   expires_at: string | null;
   request_id: string | null;
+  catalog_service_id: string | null;
+  /** PostgREST embed of the linked service_catalog row (name only). */
+  catalog_service: { name: string | null } | null;
 }
 interface BidRow {
   quote_id: string;
@@ -27,6 +37,10 @@ interface BidRow {
   bid_amount: number | null;
   status: string | null;
 }
+
+// Bidding-status quotes that haven't been awarded/closed yet — these are the candidates
+// for the broadcast feed. Mirrors the "closed lead" list in the leads route.
+const BROADCAST_OPEN_STATUSES = ["bidding", "in_survey"];
 
 const LONDON = "Europe/London";
 function fmtDeadline(iso: string | null): string {
@@ -48,12 +62,51 @@ function deriveStatus(quoteStatus: string, myBidStatus: string | null): QuoteReq
 }
 
 export async function fetchAvailableQuotes(supabase: SupabaseClient, partnerId: string): Promise<QuoteRequest[]> {
+  // 1) Explicit invites — every row binds a quote to this partner.
   const { data: invites, error: invErr } = await supabase
     .from("quote_partner_invitations")
     .select("quote_id")
     .eq("partner_id", partnerId);
   if (invErr) throw invErr;
-  const quoteIds = (invites as InvitationRow[]).map((r) => r.quote_id);
+  const invitedIds = new Set((invites as InvitationRow[]).map((r) => r.quote_id));
+
+  // 2) Broadcast — pull this partner's catalog_service_ids + trades so we can match
+  //    bidding quotes whose catalog_service_id covers a trade we serve.
+  const { data: prow } = await supabase
+    .from("partners")
+    .select("catalog_service_ids, trades")
+    .eq("id", partnerId)
+    .maybeSingle();
+  const partnerCatalogIds = new Set(
+    ((prow as { catalog_service_ids: string[] | null } | null)?.catalog_service_ids ?? []).filter(Boolean),
+  );
+  const partnerTrades = (
+    ((prow as { trades: string[] | null } | null)?.trades ?? []) as string[]
+  ).filter(Boolean);
+
+  const { data: broadcastRows } = await supabase
+    .from("quotes")
+    .select(
+      "id,reference,title,status,total_value,expires_at,request_id,catalog_service_id," +
+        "catalog_service:service_catalog!quotes_catalog_service_id_fkey(name)",
+    )
+    .in("status", BROADCAST_OPEN_STATUSES)
+    .not("catalog_service_id", "is", null)
+    .is("deleted_at", null);
+  const broadcastIds = new Set<string>();
+  for (const q of (broadcastRows as unknown as QuoteRow[] | null) ?? []) {
+    if (!q.catalog_service_id) continue;
+    if (partnerCatalogIds.has(q.catalog_service_id)) {
+      broadcastIds.add(q.id);
+      continue;
+    }
+    const catName = q.catalog_service?.name?.trim() ?? "";
+    if (catName && partnerTrades.some((t) => tradeMatchesService(t, catName))) {
+      broadcastIds.add(q.id);
+    }
+  }
+
+  const quoteIds = Array.from(new Set([...invitedIds, ...broadcastIds]));
   if (quoteIds.length === 0) return [];
 
   // No service_requests embed: RLS scopes service_requests to staff/portal-clients only
@@ -61,7 +114,10 @@ export async function fetchAvailableQuotes(supabase: SupabaseClient, partnerId: 
   // read the originating request. Postcode/description are therefore omitted from the card.
   const { data: quotes, error: qErr } = await supabase
     .from("quotes")
-    .select("id,reference,title,status,total_value,expires_at,request_id")
+    .select(
+      "id,reference,title,status,total_value,expires_at,request_id,catalog_service_id," +
+        "catalog_service:service_catalog!quotes_catalog_service_id_fkey(name)",
+    )
     .in("id", quoteIds)
     .is("deleted_at", null);
   if (qErr) throw qErr;
