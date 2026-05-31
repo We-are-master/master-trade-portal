@@ -5,11 +5,14 @@
 // an ATOMIC conditional update: it only succeeds while the row is still status='auto_assigning'
 // with partner_id IS NULL and this partner is in auto_assign_invited_partner_ids. Postgres row
 // locking serialises concurrent accepts, so a second partner matches 0 rows → { accepted:false }.
+//
+// After a successful claim, notifies Master OS to finalise invites + send Job booked Zendesk email.
 
 import { NextResponse } from "next/server";
 import { getPartnerSession } from "@/lib/partner-auth";
 import { createServiceClient } from "@/lib/supabase/service";
 import { partnerMissingRequiredDocs } from "@/lib/partner-docs-gate";
+import { notifyMasterOsPartnerPortalAccept } from "@/lib/master-os-internal";
 
 export async function POST(req: Request) {
   const session = await getPartnerSession();
@@ -29,7 +32,6 @@ export async function POST(req: Request) {
 
   const svc = createServiceClient();
 
-  // Gate: can't accept work until required documents are on file.
   const missing = await partnerMissingRequiredDocs(svc, session.partnerId);
   if (missing.length) {
     return NextResponse.json(
@@ -37,9 +39,22 @@ export async function POST(req: Request) {
       { status: 403 },
     );
   }
+
+  const partnerName =
+    session.partner.tradingName?.trim() ||
+    `${session.partner.firstName} ${session.partner.lastName}`.trim() ||
+    null;
+  const now = new Date().toISOString();
+
   const { data, error } = await svc
     .from("jobs")
-    .update({ partner_id: session.partnerId, status: "scheduled", auto_assign_expires_at: null })
+    .update({
+      partner_id: session.partnerId,
+      partner_name: partnerName,
+      status: "scheduled",
+      partner_confirmed_at: now,
+      auto_assign_expires_at: null,
+    })
     .eq("id", jobId)
     .eq("status", "auto_assigning")
     .is("partner_id", null)
@@ -50,8 +65,12 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
   if (!data || data.length === 0) {
-    // Lost the race, offer expired, or not invited.
     return NextResponse.json({ accepted: false });
   }
+
+  void notifyMasterOsPartnerPortalAccept(data[0].id, session.partnerId).catch((err) =>
+    console.error("[portal-accept] OS notify failed:", err),
+  );
+
   return NextResponse.json({ accepted: true, jobId: data[0].id, reference: data[0].reference });
 }
