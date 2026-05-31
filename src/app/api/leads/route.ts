@@ -10,6 +10,7 @@
 import { NextResponse } from "next/server";
 import { getPartnerSession } from "@/lib/partner-auth";
 import { createServiceClient } from "@/lib/supabase/service";
+import { serviceMatchesAnyTrade } from "@/lib/trade-match";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -39,6 +40,11 @@ interface LeadRow {
   phone: string | null;
   published_at: string | null;
   created_at: string | null;
+  /** mig 204 — links to service_catalog.id (nullable; legacy leads broadcast to everyone). */
+  catalog_service_id: string | null;
+  /** PostgREST embed of the linked catalog row (name only). Used for the
+   *  trade-name fallback match when the partner has no `catalog_service_ids`. */
+  catalog_service: { name: string | null } | null;
 }
 
 export async function GET() {
@@ -49,7 +55,10 @@ export async function GET() {
 
   const { data: rows, error } = await svc
     .from("leads")
-    .select("id,reference,name,scope,urgency,status,postcode,city,address,email,phone,published_at,created_at")
+    .select(
+      "id,reference,name,scope,urgency,status,postcode,city,address,email,phone,published_at,created_at,catalog_service_id," +
+        "catalog_service:service_catalog!leads_catalog_service_id_fkey(name)",
+    )
     .is("deleted_at", null)
     .not("published_at", "is", null)
     .not("status", "in", CLOSED_STATUSES)
@@ -57,12 +66,37 @@ export async function GET() {
     .limit(300);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
+  // Pull this partner's catalog_service_ids array — it's the primary key for
+  // the lead trade match. Best-effort: if the column hasn't been backfilled or
+  // the partner is on legacy data, we fall back to fuzzy-matching the catalog
+  // name against partner.trades.
+  const { data: prow } = await svc
+    .from("partners")
+    .select("catalog_service_ids")
+    .eq("id", partner.id)
+    .maybeSingle();
+  const partnerCatalogIds = new Set(
+    ((prow as { catalog_service_ids: string[] | null } | null)?.catalog_service_ids ?? []).filter(Boolean),
+  );
+
   const excluded = (partner.excludedPostcodes ?? [])
     .map((e) => String(e).toUpperCase().replace(/\s+/g, ""))
     .filter(Boolean);
-  const matched = (rows as LeadRow[]).filter((l) => {
+  const matched = (rows as unknown as LeadRow[]).filter((l) => {
+    // Postcode exclusion (unchanged).
     const ow = outward(l.postcode);
-    return !(ow && excluded.some((e) => ow.startsWith(e)));
+    if (ow && excluded.some((e) => ow.startsWith(e))) return false;
+
+    // Trade match — only enforced when the lead carries a catalog service.
+    // Legacy leads (NULL) keep broadcasting to every partner so in-flight work
+    // from before mig 204 isn't suddenly invisible.
+    if (l.catalog_service_id) {
+      if (partnerCatalogIds.has(l.catalog_service_id)) return true;
+      const catalogName = l.catalog_service?.name?.trim();
+      if (catalogName && serviceMatchesAnyTrade(catalogName, partner.trades as string[])) return true;
+      return false;
+    }
+    return true;
   });
   if (matched.length === 0) return NextResponse.json({ leads: [] });
 
