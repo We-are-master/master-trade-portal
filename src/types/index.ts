@@ -107,6 +107,8 @@ export interface QuoteRequest {
   deadline: string;
   status: QuoteRequestStatus;
   yourBid?: number;
+  /** Raw `quote_bids.notes` for this partner — used to pre-fill update bid modal. */
+  myBidNotes?: string;
   leadingBid?: number;
   awardedAmount?: number;
 }

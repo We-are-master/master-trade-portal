@@ -21,6 +21,12 @@ import { usePartner } from "@/components/partner-context";
 import { useMyJobs } from "@/components/jobs-context";
 import { createClient } from "@/lib/supabase/client";
 import { fetchAvailableQuotes, submitBid } from "@/lib/queries/quotes";
+import {
+  bidFormValuesFromNotes,
+  buildBidProposalFromForm,
+  validateBidSubmitForm,
+  type BidSubmitFormValues,
+} from "@/lib/quote-bid-payload";
 import { fetchAvailableJobs } from "@/lib/queries/available-jobs";
 interface PortalLead {
   offerId: string; // lead id (public.leads)
@@ -676,7 +682,7 @@ function QuoteRow({ q, status, onSubmit }: { q: QuoteRequest; status: QuoteReque
             {status === "submitted" && (
               <>
                 <Button variant="secondary" size="sm">Withdraw</Button>
-                <Button variant="dark" size="sm" icon="pencil">Update bid</Button>
+                <Button variant="dark" size="sm" icon="pencil" onClick={onSubmit}>Update bid</Button>
               </>
             )}
             {status === "won" && <Button variant="primary" size="sm" icon="arrow-right">Open job</Button>}
@@ -702,20 +708,59 @@ function SubmitQuoteModal({
   onSubmitted: () => void;
   onError: (msg: string) => void;
 }) {
-  const [labour, setLabour] = useState("");
-  const [materials, setMaterials] = useState("");
-  const [notes, setNotes] = useState("");
+  const isUpdate = quote.status === "submitted";
+  const initial = bidFormValuesFromNotes(quote.myBidNotes);
+  const [labour, setLabour] = useState(initial.labourCost ?? "");
+  const [materials, setMaterials] = useState(initial.materialsCost ?? "");
+  const [labourNotes, setLabourNotes] = useState(initial.labourDescription ?? "");
+  const [materialsNotes, setMaterialsNotes] = useState(initial.materialsDescription ?? "");
+  const [scope, setScope] = useState(initial.scope ?? "");
+  const [startDate1, setStartDate1] = useState(initial.startDate1 ?? "");
+  const [startDate2, setStartDate2] = useState(initial.startDate2 ?? "");
+  const [coverNote, setCoverNote] = useState(initial.coverNote ?? "");
   const [submitting, setSubmitting] = useState(false);
   const total = (parseFloat(labour) || 0) + (parseFloat(materials) || 0);
 
+  const textareaStyle = {
+    width: "100%",
+    minHeight: 70,
+    padding: 10,
+    borderRadius: 8,
+    border: `1px solid ${T.line}`,
+    fontFamily: T.sans,
+    fontSize: 13,
+    color: T.ink,
+    outline: "none",
+    resize: "vertical" as const,
+    boxSizing: "border-box" as const,
+  };
+
   const send = async () => {
-    if (total <= 0) {
-      onError("Enter a labour or materials amount before sending.");
+    const form: BidSubmitFormValues = {
+      labourCost: labour,
+      materialsCost: materials,
+      labourDescription: labourNotes,
+      materialsDescription: materialsNotes,
+      scope,
+      startDate1,
+      startDate2,
+      coverNote,
+    };
+    const err = validateBidSubmitForm(form);
+    if (err) {
+      onError(err);
       return;
     }
     setSubmitting(true);
     try {
-      await submitBid(createClient(), { quoteId: quote.id, partnerId, partnerName, amount: total, notes });
+      const payload = buildBidProposalFromForm(form);
+      await submitBid(createClient(), {
+        quoteId: quote.id,
+        partnerId,
+        partnerName,
+        amount: total,
+        payload,
+      });
       onSubmitted();
     } catch (e) {
       onError(e instanceof Error ? e.message : "Couldn't submit quote");
@@ -725,22 +770,48 @@ function SubmitQuoteModal({
   };
 
   return (
-    <Modal title={`Submit quote — ${quote.reference ?? quote.id.slice(0, 8)}`} onClose={onClose}>
+    <Modal title={`${isUpdate ? "Update bid" : "Submit quote"} — ${quote.reference ?? quote.id.slice(0, 8)}`} onClose={onClose}>
       <div style={{ padding: 20, display: "flex", flexDirection: "column", gap: 16 }}>
         <div style={{ fontSize: 13, color: T.slate, lineHeight: 1.5 }}>
           <b style={{ color: T.ink, fontWeight: 500 }}>{quote.title}</b>
-          <br />
-          {quote.desc}
+          {quote.desc ? (
+            <>
+              <br />
+              {quote.desc}
+            </>
+          ) : null}
+        </div>
+
+        <div style={{ fontSize: 12, color: T.mute, lineHeight: 1.45 }}>
+          Required fields match Fixfy OS — labour and materials notes, scope, and two start dates so the office can send the customer proposal after approval.
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-          <Field label="Labour (£ inc VAT)">
+          <Field label="Labour (£ inc VAT) *">
             <Input value={labour} onChange={setLabour} prefix="£" />
           </Field>
-          <Field label="Materials (£ inc VAT)">
+          <Field label="Materials (£ inc VAT) *">
             <Input value={materials} onChange={setMaterials} prefix="£" />
           </Field>
         </div>
+
+        <Field label="Labour line notes *">
+          <textarea
+            value={labourNotes}
+            onChange={(e) => setLabourNotes(e.target.value)}
+            placeholder="What labour includes — hours, trades on site, prep, clean-down…"
+            style={textareaStyle}
+          />
+        </Field>
+
+        <Field label="Materials line notes *">
+          <textarea
+            value={materialsNotes}
+            onChange={(e) => setMaterialsNotes(e.target.value)}
+            placeholder="Materials included, allowances, or state if customer supplies materials…"
+            style={textareaStyle}
+          />
+        </Field>
 
         <div
           style={{
@@ -763,53 +834,59 @@ function SubmitQuoteModal({
           </div>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-          <Field label="Estimated duration">
-            <Input value="1.5 days" suffix="hrs/days" />
-          </Field>
-          <Field label="Earliest start">
-            <Input value="Tue 26 May" icon="calendar" />
-          </Field>
-        </div>
-
-        <Field label="Cover note (optional)">
+        <Field label="Scope of work (for customer email / PDF) *">
           <textarea
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            placeholder="Anything the customer should know — site visit recommended, materials assumptions, exclusions…"
-            style={{
-              width: "100%",
-              minHeight: 70,
-              padding: 10,
-              borderRadius: 8,
-              border: `1px solid ${T.line}`,
-              fontFamily: T.sans,
-              fontSize: 13,
-              color: T.ink,
-              outline: "none",
-              resize: "vertical",
-              boxSizing: "border-box",
-            }}
+            value={scope}
+            onChange={(e) => setScope(e.target.value)}
+            placeholder="Describe the work you will carry out, assumptions, and exclusions…"
+            style={{ ...textareaStyle, minHeight: 90 }}
           />
         </Field>
 
-        <Field label="Attach PDF quote (optional)">
-          <div
-            style={{
-              padding: 14,
-              border: `1.5px dashed ${T.line}`,
-              borderRadius: 8,
-              textAlign: "center",
-              color: T.mute,
-              fontSize: 12.5,
-              cursor: "pointer",
-            }}
-          >
-            <Icon name="upload" size={16} color={T.mute} />
-            <span style={{ marginLeft: 8 }}>
-              Drag a PDF, or <span style={{ color: T.coral, fontWeight: 500 }}>browse</span>
-            </span>
-          </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <Field label="Start date option 1 *">
+            <input
+              type="date"
+              value={startDate1}
+              onChange={(e) => setStartDate1(e.target.value)}
+              style={{
+                width: "100%",
+                padding: "9px 10px",
+                borderRadius: 8,
+                border: `1px solid ${T.line}`,
+                fontFamily: T.sans,
+                fontSize: 13,
+                color: T.ink,
+                boxSizing: "border-box",
+              }}
+            />
+          </Field>
+          <Field label="Start date option 2 *">
+            <input
+              type="date"
+              value={startDate2}
+              onChange={(e) => setStartDate2(e.target.value)}
+              style={{
+                width: "100%",
+                padding: "9px 10px",
+                borderRadius: 8,
+                border: `1px solid ${T.line}`,
+                fontFamily: T.sans,
+                fontSize: 13,
+                color: T.ink,
+                boxSizing: "border-box",
+              }}
+            />
+          </Field>
+        </div>
+
+        <Field label="Additional note (optional)">
+          <textarea
+            value={coverNote}
+            onChange={(e) => setCoverNote(e.target.value)}
+            placeholder="Anything else the customer should know — site visit recommended, access notes…"
+            style={textareaStyle}
+          />
         </Field>
       </div>
 
@@ -823,10 +900,12 @@ function SubmitQuoteModal({
           gap: 10,
         }}
       >
-        <div style={{ flex: 1, fontSize: 12, color: T.mute }}>Editable until the customer decides.</div>
+        <div style={{ flex: 1, fontSize: 12, color: T.mute }}>
+          {isUpdate ? "Updates your pending bid until the customer decides." : "Editable until the customer decides."}
+        </div>
         <Button variant="secondary" onClick={onClose} disabled={submitting}>Cancel</Button>
         <Button variant="primary" icon="send" onClick={send} disabled={submitting || total <= 0}>
-          {submitting ? "Sending…" : "Send quote"}
+          {submitting ? "Sending…" : isUpdate ? "Update bid" : "Send quote"}
         </Button>
       </div>
     </Modal>
