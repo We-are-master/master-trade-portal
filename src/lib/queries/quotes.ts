@@ -127,18 +127,18 @@ export async function fetchAvailableQuotes(supabase: SupabaseClient, partnerId: 
     .is("deleted_at", null);
   if (qErr) throw qErr;
 
+  // Only the partner's OWN bids — competitors' bids are never exposed to a partner
+  // (also enforced server-side by the quote_bids RLS scoping to staff-or-owner).
   const { data: bids, error: bErr } = await supabase
     .from("quote_bids")
     .select("quote_id,partner_id,bid_amount,status,notes")
-    .in("quote_id", quoteIds);
+    .in("quote_id", quoteIds)
+    .eq("partner_id", partnerId);
   if (bErr) throw bErr;
   const bidRows = bids as BidRow[];
 
   return (quotes as unknown as QuoteRow[]).map((q) => {
-    const quoteBids = bidRows.filter((b) => b.quote_id === q.id);
-    const myBid = quoteBids.find((b) => b.partner_id === partnerId);
-    const competing = quoteBids.filter((b) => b.partner_id !== partnerId && b.bid_amount != null).map((b) => b.bid_amount as number);
-    const leadingBid = competing.length ? Math.min(...competing) : undefined;
+    const myBid = bidRows.find((b) => b.quote_id === q.id && b.partner_id === partnerId);
     const status = deriveStatus(q.status ?? "", myBid?.status ?? null);
 
     return {
@@ -153,7 +153,6 @@ export async function fetchAvailableQuotes(supabase: SupabaseClient, partnerId: 
       status,
       yourBid: myBid?.bid_amount ?? undefined,
       myBidNotes: myBid?.notes ?? undefined,
-      leadingBid,
       awardedAmount: status === "won" ? myBid?.bid_amount ?? q.total_value ?? undefined : undefined,
     } satisfies QuoteRequest;
   });

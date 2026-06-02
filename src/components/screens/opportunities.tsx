@@ -653,15 +653,11 @@ function QuoteRow({ q, status, onSubmit }: { q: QuoteRequest; status: QuoteReque
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8, minWidth: 200 }}>
-          {status === "submitted" && q.yourBid != null && q.leadingBid != null && (
+          {status === "submitted" && q.yourBid != null && (
             <div style={{ textAlign: "right" }}>
               <div style={{ fontSize: 11, color: T.mute, marginBottom: 2 }}>YOUR BID</div>
               <div style={{ fontFamily: T.mono, fontSize: 22, fontWeight: 500, color: T.navy }}>{formatGBP(q.yourBid)}</div>
-              <div style={{ fontSize: 11, color: q.yourBid > q.leadingBid ? T.amber : T.green, marginTop: 2 }}>
-                {q.yourBid > q.leadingBid
-                  ? `Leading bid £${q.leadingBid} — £${q.yourBid - q.leadingBid} ahead of you`
-                  : "You're leading"}
-              </div>
+              <div style={{ fontSize: 11, color: T.mute, marginTop: 2 }}>Submitted — awaiting decision</div>
             </div>
           )}
           {status === "won" && q.awardedAmount != null && (
