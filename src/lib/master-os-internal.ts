@@ -35,20 +35,34 @@ export async function callMasterOsPartnerPortalAccept(
     return {
       ok: false,
       accepted: false,
-      status: 500,
+      status: 503,
       error: "accept_not_configured",
-      message: "Job accept is temporarily unavailable. Try again shortly or use the email link.",
+      code: "accept_not_configured",
+      message:
+        "Job accept is not configured on the portal (INTERNAL_SYNC_SECRET). Use the email Accept link or contact support.",
     };
   }
 
-  const res = await fetch(`${base}/api/internal/jobs/partner-portal-accept`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-internal-secret": secret,
-    },
-    body: JSON.stringify({ jobId, partnerId }),
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${base}/api/internal/jobs/partner-portal-accept`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-internal-secret": secret,
+      },
+      body: JSON.stringify({ jobId, partnerId }),
+    });
+  } catch (err) {
+    console.error("[portal-accept] OS fetch failed:", err);
+    return {
+      ok: false,
+      accepted: false,
+      status: 502,
+      error: "os_unreachable",
+      message: `Could not reach Master OS at ${base}. Try again or use the email Accept link.`,
+    };
+  }
 
   const payload = (await res.json().catch(() => ({}))) as {
     ok?: boolean;
@@ -68,13 +82,20 @@ export async function callMasterOsPartnerPortalAccept(
       payload.error ?? res.statusText,
       payload.message,
     );
+    const unauthorized = res.status === 401;
     return {
       ok: false,
       accepted: false,
       status: res.status,
       error: payload.error ?? "accept_failed",
-      message: payload.message,
-      code: payload.code,
+      message:
+        payload.message ??
+        (unauthorized
+          ? "Portal could not authenticate with Master OS (check INTERNAL_SYNC_SECRET matches on both apps)."
+          : res.status === 500 && payload.error === "Endpoint not configured."
+            ? "Master OS accept endpoint is not configured (INTERNAL_SYNC_SECRET on OS)."
+            : undefined),
+      code: payload.code ?? (unauthorized ? "os_unauthorized" : undefined),
     };
   }
 

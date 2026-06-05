@@ -11,56 +11,81 @@ import { partnerMissingRequiredDocs } from "@/lib/partner-docs-gate";
 import { callMasterOsPartnerPortalAccept } from "@/lib/master-os-internal";
 
 export async function POST(req: Request) {
-  const session = await getPartnerSession();
-  if (!session) {
-    return NextResponse.json({ error: "Not signed in" }, { status: 401 });
-  }
-
-  let jobId: string | undefined;
   try {
-    ({ jobId } = await req.json());
-  } catch {
-    return NextResponse.json({ error: "Invalid body" }, { status: 400 });
-  }
-  if (!jobId || typeof jobId !== "string") {
-    return NextResponse.json({ error: "jobId required" }, { status: 400 });
-  }
-
-  const svc = createServiceClient();
-
-  const missing = await partnerMissingRequiredDocs(svc, session.partnerId);
-  if (missing.length) {
-    return NextResponse.json(
-      { error: `Upload your required documents first: ${missing.join(", ")}.`, code: "docs_required" },
-      { status: 403 },
-    );
-  }
-
-  const result = await callMasterOsPartnerPortalAccept(jobId, session.partnerId);
-
-  if (!result.ok) {
-    if (result.status === 409 && result.error === "job_taken") {
-      return NextResponse.json({ accepted: false, error: result.error, message: result.message });
+    const session = await getPartnerSession();
+    if (!session) {
+      return NextResponse.json({ error: "Not signed in" }, { status: 401 });
     }
-    if (result.status === 410) {
-      return NextResponse.json({ accepted: false, error: result.error, message: result.message });
+
+    let jobId: string | undefined;
+    try {
+      ({ jobId } = await req.json());
+    } catch {
+      return NextResponse.json({ error: "Invalid body" }, { status: 400 });
     }
-    if (result.code === "docs_required" || result.status === 403) {
+    if (!jobId || typeof jobId !== "string") {
+      return NextResponse.json({ error: "jobId required" }, { status: 400 });
+    }
+
+    let svc;
+    try {
+      svc = createServiceClient();
+    } catch (err) {
+      console.error("[portal-accept] service client missing:", err);
       return NextResponse.json(
-        { error: result.message ?? result.error, code: "docs_required" },
+        {
+          error: "Server configuration error",
+          code: "server_misconfigured",
+          message: "SERVICE_ROLE_KEY is not set on the trade portal.",
+        },
+        { status: 503 },
+      );
+    }
+
+    const missing = await partnerMissingRequiredDocs(svc, session.partnerId);
+    if (missing.length) {
+      return NextResponse.json(
+        { error: `Upload your required documents first: ${missing.join(", ")}.`, code: "docs_required" },
         { status: 403 },
       );
     }
+
+    const result = await callMasterOsPartnerPortalAccept(jobId, session.partnerId);
+
+    if (!result.ok) {
+      if (result.status === 409 && result.error === "job_taken") {
+        return NextResponse.json({ accepted: false, error: result.error, message: result.message });
+      }
+      if (result.status === 410) {
+        return NextResponse.json({ accepted: false, error: result.error, message: result.message });
+      }
+      if (result.code === "docs_required" || result.status === 403) {
+        return NextResponse.json(
+          { error: result.message ?? result.error, code: "docs_required" },
+          { status: 403 },
+        );
+      }
+      return NextResponse.json(
+        {
+          error: result.error,
+          message: result.message ?? result.error ?? "Couldn't accept job",
+          code: result.code,
+        },
+        { status: result.status >= 400 ? result.status : 500 },
+      );
+    }
+
+    return NextResponse.json({
+      accepted: true,
+      jobId,
+      reference: result.jobReference,
+      alreadyConfirmed: result.alreadyConfirmed ?? false,
+    });
+  } catch (err) {
+    console.error("[portal-accept] unexpected error:", err);
     return NextResponse.json(
-      { error: result.message ?? result.error ?? "Couldn't accept job" },
-      { status: result.status >= 400 ? result.status : 500 },
+      { error: "accept_failed", message: "Unexpected error accepting job. Try again." },
+      { status: 500 },
     );
   }
-
-  return NextResponse.json({
-    accepted: true,
-    jobId,
-    reference: result.jobReference,
-    alreadyConfirmed: result.alreadyConfirmed ?? false,
-  });
 }

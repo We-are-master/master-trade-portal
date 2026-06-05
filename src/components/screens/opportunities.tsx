@@ -366,7 +366,11 @@ export function AvailableJobsView({ onShowToast }: { onShowToast: ShowToast }) {
         onShowToast({ icon: "lock", text: "Too late — another trade took this one." });
         setJobs((prev) => prev.filter((j) => j.id !== job.id));
       } else {
-        onShowToast({ icon: "alert-triangle", tone: "coral", text: json.error || "Couldn't accept job" });
+        onShowToast({
+          icon: "alert-triangle",
+          tone: "coral",
+          text: json.message || json.error || "Couldn't accept job",
+        });
       }
     } catch (e) {
       onShowToast({ icon: "alert-triangle", tone: "coral", text: e instanceof Error ? e.message : "Couldn't accept job" });
@@ -502,7 +506,9 @@ function AvailableJobCard({ job, accepting, onAccept }: { job: AvailableJob; acc
             <div style={{ fontFamily: T.mono, fontSize: 22, fontWeight: 500, color: T.navy, lineHeight: 1 }}>
               {formatGBP(job.total)}
             </div>
-            <div style={{ fontSize: 10.5, color: T.mute, marginTop: 4, letterSpacing: 0.3 }}>INC VAT</div>
+            <div style={{ fontSize: 10.5, color: T.coral, marginTop: 4, letterSpacing: 0.3, fontWeight: 600 }}>
+              inc VAT
+            </div>
           </div>
         </div>
 

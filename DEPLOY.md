@@ -29,6 +29,8 @@ Deploy to Railway or Vercel. Build `next build`, start `next start`, Node 20+.
 | `RESEND_API_KEY` | partner OTP emails |
 | `RESEND_FROM_EMAIL` | must be on a **verified** Resend domain |
 | `NEXT_PUBLIC_MAPBOX_TOKEN` | job-location map (My jobs → Map); same token as master-os |
+| `MASTER_OS_BASE_URL` | **secret/server** — production OS URL (e.g. `https://app.getfixfy.com`) |
+| `INTERNAL_SYNC_SECRET` | **secret** — must match the same value on master-os; required for **Accept job** (delegates to OS) |
 
 ## 4. Stripe
 - Switch to **live** mode.
