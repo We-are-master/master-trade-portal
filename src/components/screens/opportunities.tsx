@@ -325,6 +325,22 @@ function MetaItem({ icon, label, value, sub }: { icon: string; label: string; va
 // ============================================================
 // AVAILABLE JOBS
 // ============================================================
+function acceptJobErrorMessage(json: { code?: string; message?: string; error?: string }): string {
+  if (json.code === "accept_not_configured" || json.error === "accept_not_configured") {
+    return "Accept is temporarily unavailable — contact Fixfy support or use the Accept link in your email.";
+  }
+  if (json.code === "os_unauthorized" || json.error === "Unauthorized") {
+    return "Could not connect to Fixfy OS — try again later or use the email Accept link.";
+  }
+  if (json.code === "os_unreachable" || json.error === "os_unreachable") {
+    return "Fixfy OS is unreachable — try again or use the email Accept link.";
+  }
+  if (json.code === "server_misconfigured") {
+    return "Portal is misconfigured — contact Fixfy support.";
+  }
+  return json.message || json.error || "Couldn't accept job";
+}
+
 export function AvailableJobsView({ onShowToast }: { onShowToast: ShowToast }) {
   const partner = usePartner();
   const myJobs = useMyJobs();
@@ -369,7 +385,7 @@ export function AvailableJobsView({ onShowToast }: { onShowToast: ShowToast }) {
         onShowToast({
           icon: "alert-triangle",
           tone: "coral",
-          text: json.message || json.error || "Couldn't accept job",
+          text: acceptJobErrorMessage(json),
         });
       }
     } catch (e) {
@@ -421,16 +437,6 @@ export function AvailableJobsView({ onShowToast }: { onShowToast: ShowToast }) {
 }
 
 function AvailableJobCard({ job, accepting, onAccept }: { job: AvailableJob; accepting: boolean; onAccept: () => void }) {
-  const expiring = job.expiresMin != null;
-  const [timer, setTimer] = useState((job.expiresMin ?? 0) * 60);
-  useEffect(() => {
-    if (!expiring) return;
-    const id = setInterval(() => setTimer((t) => Math.max(0, t - 1)), 1000);
-    return () => clearInterval(id);
-  }, [expiring]);
-  const mm = String(Math.floor(timer / 60)).padStart(2, "0");
-  const ss = String(timer % 60).padStart(2, "0");
-
   return (
     <Card
       hover
@@ -438,43 +444,26 @@ function AvailableJobCard({ job, accepting, onAccept }: { job: AvailableJob; acc
         padding: 0,
         position: "relative",
         overflow: "hidden",
-        borderColor: expiring ? T.coral : T.line,
-        borderWidth: expiring ? 1.5 : 1,
+        borderColor: T.line,
+        borderWidth: 1,
       }}
     >
-      {expiring && (
-        <div
-          style={{
-            padding: "6px 14px",
-            background: T.coral,
-            color: T.white,
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            fontSize: 11.5,
-            fontWeight: 500,
-            letterSpacing: 0.2,
-          }}
-        >
-          <Icon name="zap" size={13} />
-          <span>
-            OFFER · expires in{" "}
-            <span className="fx-mono" style={{ fontWeight: 600 }}>
-              {mm}:{ss}
-            </span>
-          </span>
-          <span style={{ flex: 1 }} />
-          <span
-            style={{
-              width: 6,
-              height: 6,
-              borderRadius: 9999,
-              background: T.white,
-              animation: "fx-pulse 1s ease-in-out infinite",
-            }}
-          />
-        </div>
-      )}
+      <div
+        style={{
+          padding: "6px 14px",
+          background: T.navy,
+          color: T.white,
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          fontSize: 11.5,
+          fontWeight: 500,
+          letterSpacing: 0.2,
+        }}
+      >
+        <Icon name="zap" size={13} />
+        <span>First to accept wins</span>
+      </div>
       <div style={{ padding: 16 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
           <span className="fx-mono" style={{ fontSize: 11, color: T.mute }}>

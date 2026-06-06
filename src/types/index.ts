@@ -85,7 +85,6 @@ export interface AvailableJob {
   desc: string;
   trade: Trade;
   emergency: boolean;
-  expiresMin?: number;
   postcode: string;
   distance: number;
   duration: string;

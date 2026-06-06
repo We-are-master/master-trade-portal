@@ -4,7 +4,7 @@
 // them in auto_assign_invited_partner_ids (migration 080). RLS (migration 081) lets an invited
 // partner SELECT those rows while partner_id IS NULL. First partner to accept wins (see
 // /api/jobs/accept). There's no per-job "emergency" flag in the schema, so emergency stays false;
-// the offer-expiry countdown comes from auto_assign_expires_at.
+// Jobs use first-to-accept-wins (no per-offer expiry UI in the portal).
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { AvailableJob, Trade } from "@/types";
@@ -23,7 +23,7 @@ export const AVAILABLE_JOB_SELECT = [
   "scheduled_date",
   "scheduled_start_at",
   "scheduled_end_at",
-  "auto_assign_expires_at",
+  "created_at",
 ].join(",");
 
 interface AvailableJobRow {
@@ -40,7 +40,7 @@ interface AvailableJobRow {
   scheduled_date: string | null;
   scheduled_start_at: string | null;
   scheduled_end_at: string | null;
-  auto_assign_expires_at: string | null;
+  created_at: string | null;
 }
 
 const LONDON = "Europe/London";
@@ -59,12 +59,6 @@ function timingLabel(date: string | null): string {
   if (!date) return "ASAP";
   return new Date(`${date}T00:00:00`).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", timeZone: LONDON });
 }
-function minutesUntil(iso: string | null): number | undefined {
-  if (!iso) return undefined;
-  const mins = Math.ceil((new Date(iso).getTime() - Date.now()) / 60_000);
-  return mins > 0 ? mins : undefined;
-}
-
 export function mapAvailableJob(row: AvailableJobRow): AvailableJob {
   return {
     id: row.id,
@@ -73,7 +67,6 @@ export function mapAvailableJob(row: AvailableJobRow): AvailableJob {
     desc: row.scope || row.additional_notes || "",
     trade: (row.job_type || "General Maintenance") as Trade,
     emergency: false, // no emergency flag in the schema
-    expiresMin: minutesUntil(row.auto_assign_expires_at),
     postcode: extractPostcode(row.property_address),
     distance: 0, // no partner-relative geo distance
     duration: durationLabel(row),
@@ -91,7 +84,15 @@ export async function fetchAvailableJobs(supabase: SupabaseClient, partnerId: st
     .contains("auto_assign_invited_partner_ids", [partnerId])
     .is("deleted_at", null);
   if (error) throw error;
-  const rows = (data as unknown as AvailableJobRow[]).map(mapAvailableJob);
-  // Soonest-expiring first, then unscheduled-expiry last.
-  return rows.sort((a, b) => (a.expiresMin ?? 1e9) - (b.expiresMin ?? 1e9));
+  const raw = (data ?? []) as unknown as AvailableJobRow[];
+  return raw
+    .sort((a, b) => {
+      const aKey = a.scheduled_date ?? a.created_at ?? "";
+      const bKey = b.scheduled_date ?? b.created_at ?? "";
+      if (!aKey && !bKey) return 0;
+      if (!aKey) return 1;
+      if (!bKey) return -1;
+      return aKey.localeCompare(bKey);
+    })
+    .map(mapAvailableJob);
 }

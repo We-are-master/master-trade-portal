@@ -17,6 +17,12 @@ Apply the master-os migrations **in order**: `196, 197, 198, 199, 200, 201, 202,
 Deploy to Railway or Vercel. Build `next build`, start `next start`, Node 20+.
 
 ## 3. Environment variables (set in the host — never commit)
+
+**Vercel (portal):** Project → Settings → Environment Variables. Enable for **Production** and **Preview** (preview URLs like `*.vercel.app` need the same vars). After adding or changing vars, **Redeploy** the latest deployment.
+
+**Smoke check:** `GET https://<portal-domain>/api/health/accept-config` should return `{ "ok": true, "acceptConfigured": true }`. If `503`, one of `INTERNAL_SYNC_SECRET`, `MASTER_OS_BASE_URL`, or `SERVICE_ROLE_KEY` is missing on that deployment.
+
+**OS pairing:** `INTERNAL_SYNC_SECRET` must be **identical** on master-os production (`MASTER_OS_BASE_URL`, e.g. `https://app.getfixfy.com`). Generate once (e.g. `openssl rand -hex 32`) and paste the same value on both apps.
 | Var | Notes |
 | --- | --- |
 | `NEXT_PUBLIC_SUPABASE_URL` | same Supabase project as master-os |
