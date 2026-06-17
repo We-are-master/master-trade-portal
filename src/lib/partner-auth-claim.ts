@@ -85,7 +85,7 @@ async function resolvePartnerIdForClaim(
   return { partnerId, contactName: displayName, companyName: companyName || displayName };
 }
 
-async function provisionPartnerAuthUser(
+export async function provisionPartnerAuthUser(
   admin: AdminClient,
   partnerId: string,
   email: string,

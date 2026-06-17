@@ -602,15 +602,21 @@ export function AuthBrandToggle({
   initialMode = "signin",
   initialEmail = "",
   initialInviteCode = "",
+  initialInviteError = false,
 }: {
   initialMode?: "signin" | "register";
   initialEmail?: string;
   initialInviteCode?: string;
+  initialInviteError?: boolean;
 }) {
   const router = useRouter();
   const [mode, setMode] = useState<"signin" | "register">(initialInviteCode ? "register" : initialMode);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(
+    initialInviteError
+      ? "This invite link has expired or couldn't sign you in automatically. Request a new invite from Fixfy, or continue below with your email."
+      : null,
+  );
   const [devNote, setDevNote] = useState<string | null>(null);
   const [inviteCode] = useState(initialInviteCode);
   const [invitePrefill, setInvitePrefill] = useState({

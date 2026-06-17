@@ -8,7 +8,8 @@ function LoginForm() {
   const searchParams = useSearchParams();
   const email = searchParams.get("email")?.trim() ?? "";
   const invite = searchParams.get("invite")?.trim() ?? "";
-  return <AuthBrandToggle initialEmail={email} initialInviteCode={invite} />;
+  const inviteError = searchParams.get("invite_error") === "1";
+  return <AuthBrandToggle initialEmail={email} initialInviteCode={invite} initialInviteError={inviteError} />;
 }
 
 export default function LoginPage() {
