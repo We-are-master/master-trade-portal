@@ -28,6 +28,7 @@ import {
 import { SERVICE_CATEGORY_ORDER, serviceCategory } from "@/lib/service-category";
 import { fetchSelfBills, type SelfBill } from "@/lib/queries/self-bills";
 import { fetchPartnerDocuments, type PartnerDoc } from "@/lib/queries/partner-documents";
+import { missingFromChecklist, pickRequiredDocMatch, type RequiredDocDef } from "@/lib/partner-required-docs";
 import { hydrateContractHtml } from "@/lib/contract-branding";
 import { fetchContracts, type PartnerContract } from "@/lib/queries/contracts";
 import { fetchRateCard, saveRateCard, type ServicePrice } from "@/lib/queries/rate-card";
@@ -1834,12 +1835,7 @@ export function SelfBillPage() {
 }
 
 // ---------- DOCS ----------
-interface RequiredDoc {
-  docType: string;
-  name: string;
-  description: string;
-  group?: string;
-}
+type RequiredDoc = RequiredDocDef;
 
 export function DocsPage({ onChanged }: { onChanged?: () => void } = {}) {
   const partner = usePartner();
@@ -1895,9 +1891,15 @@ export function DocsPage({ onChanged }: { onChanged?: () => void } = {}) {
     }
   };
 
-  const SATISFY: ReadonlySet<string> = new Set(["verified", "pending"]);
-  const missing = required.filter((req) => !docs.some((d) => d.docType === req.docType && SATISFY.has(d.status)));
-  const extraDocs = docs.filter((d) => !required.some((r) => r.docType === d.docType));
+  const docRows = docs.map((d) => ({
+    id: d.id,
+    name: d.name,
+    doc_type: d.docType,
+    status: d.status,
+    created_at: new Date(0).toISOString(),
+  }));
+  const missing = missingFromChecklist(docRows, required);
+  const extraDocs = docs.filter((d) => !required.some((r) => pickRequiredDocMatch(docRows, r)));
 
   return (
     <>
@@ -1931,12 +1933,13 @@ export function DocsPage({ onChanged }: { onChanged?: () => void } = {}) {
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
             {required.map((req) => {
-              const doc = docs.find((d) => d.docType === req.docType && d.status !== "rejected");
+              const doc = pickRequiredDocMatch(docRows, req);
+              const mapped = doc ? docs.find((d) => d.id === doc.id) : undefined;
               return (
                 <RequiredDocCard
-                  key={req.docType}
+                  key={req.id}
                   req={req}
-                  doc={doc}
+                  doc={mapped}
                   busy={busyType === req.docType}
                   onUpload={(file) => upload(req.docType, req.name, file)}
                 />
