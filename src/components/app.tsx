@@ -9,7 +9,8 @@ import { T } from "@/lib/tokens";
 import { useToast } from "@/components/ui/toast";
 import { usePartner } from "@/components/partner-context";
 import { createClient } from "@/lib/supabase/client";
-import { fetchPartnerDocuments, missingRequiredDocs } from "@/lib/queries/partner-documents";
+import { fetchPartnerDocuments } from "@/lib/queries/partner-documents";
+import { missingFromChecklist } from "@/lib/partner-required-docs";
 import { Sidebar } from "@/components/shell/sidebar";
 import { TopBar } from "@/components/shell/topbar";
 import { Dashboard } from "@/components/screens/dashboard";
@@ -43,8 +44,19 @@ export function TradePortalApp() {
   // after each document change inside onboarding to release the lock the moment they're complete.
   const checkDocs = useCallback(async () => {
     try {
-      const docs = await fetchPartnerDocuments(createClient(), partner.id);
-      const missing = missingRequiredDocs(docs);
+      const [docs, reqJson] = await Promise.all([
+        fetchPartnerDocuments(createClient(), partner.id),
+        fetch("/api/partner/required-docs").then((r) => r.json()).catch(() => ({ required: [] })),
+      ]);
+      const required = Array.isArray(reqJson?.required) ? reqJson.required : [];
+      const docRows = docs.map((d) => ({
+        id: d.id,
+        name: d.name,
+        doc_type: d.docType,
+        status: d.status,
+        created_at: new Date(0).toISOString(),
+      }));
+      const missing = missingFromChecklist(docRows, required);
       setDocsLocked(missing.length > 0);
       if (missing.length > 0) setShowOnboarding(true);
     } catch {

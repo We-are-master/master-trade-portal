@@ -1,29 +1,32 @@
 // Partner compliance documents.
-//   POST   (multipart)  → upload { docType, name?, file } to the private partner-documents bucket
-//                         + insert a partner_documents row (status 'pending' for staff review)
-//   GET    ?id=...       → short-lived signed URL to view an uploaded doc
-//   DELETE ?id=...       → remove a doc (storage object + row)
-//
-// The partner is resolved from the session and must own the row (partner_documents.partner_id).
-// Service role does the storage I/O (bucket is private). doc_type values match master-os
-// REQUIRED_PARTNER_DOCS so the OS compliance recognises them.
 
 import { NextResponse } from "next/server";
 import { getPartnerSession } from "@/lib/partner-auth";
+import {
+  ALLOWED_PARTNER_DOC_TYPES,
+  REQUIRED_PARTNER_DOCS,
+  resolvePartnerDocExpiresAt,
+} from "@/lib/partner-required-docs";
 import { createServiceClient } from "@/lib/supabase/service";
-import { REQUIRED_PARTNER_DOCS } from "@/lib/queries/partner-documents";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 const BUCKET = "partner-documents";
-const SIGNED_TTL = 60 * 60; // 1h
+const SIGNED_TTL = 60 * 60;
 
 type Svc = ReturnType<typeof createServiceClient>;
 
 function extFromName(name: string): string {
   const m = name.toLowerCase().match(/\.([a-z0-9]+)$/);
   return m ? m[1] : "bin";
+}
+
+function insertErrorMessage(code: string | undefined, message: string): string {
+  if (code === "23514") {
+    return "This document type is not accepted. Contact support if this keeps happening.";
+  }
+  return message || "Couldn't record the document. Try again.";
 }
 
 export async function POST(req: Request) {
@@ -40,6 +43,9 @@ export async function POST(req: Request) {
   const name = String(form.get("name") ?? "").trim();
   const file = form.get("file");
   if (!docType) return NextResponse.json({ error: "docType is required" }, { status: 400 });
+  if (!ALLOWED_PARTNER_DOC_TYPES.has(docType)) {
+    return NextResponse.json({ error: "Invalid document type" }, { status: 400 });
+  }
   if (!(file instanceof File) || file.size === 0) return NextResponse.json({ error: "A file is required" }, { status: 400 });
   if (file.size > 10 * 1024 * 1024) return NextResponse.json({ error: "Max file size is 10 MB" }, { status: 400 });
 
@@ -56,22 +62,27 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Couldn't upload the file. Try again." }, { status: 500 });
   }
 
+  const defaultName = REQUIRED_PARTNER_DOCS.find((d) => d.docType === docType)?.name || "Document";
   const { data: row, error: insErr } = await svc
     .from("partner_documents")
     .insert({
       partner_id: session.partnerId,
       doc_type: docType,
-      name: name || REQUIRED_PARTNER_DOCS.find((d) => d.docType === docType)?.name || "Document",
+      name: name || defaultName,
       file_name: file.name,
       file_path: path,
       status: "pending",
+      expires_at: resolvePartnerDocExpiresAt(docType),
     })
     .select("id")
     .single();
   if (insErr) {
     await svc.storage.from(BUCKET).remove([path]);
     console.error("[partner/documents] insert failed:", insErr);
-    return NextResponse.json({ error: "Couldn't record the document. Try again." }, { status: 500 });
+    return NextResponse.json(
+      { error: insertErrorMessage(insErr.code, insErr.message) },
+      { status: 500 },
+    );
   }
 
   return NextResponse.json({ ok: true, id: row.id });
