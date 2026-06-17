@@ -23,6 +23,28 @@ function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
 }
 
+/** Resolve auth user id when `auth.users` exists but `public.users` row may be missing. */
+export async function findAuthUserIdByEmail(admin: AdminClient, email: string): Promise<string | null> {
+  const normalized = normalizeEmail(email);
+  if (!normalized) return null;
+
+  const { data: existingUsers } = await admin.from("users").select("id").ilike("email", normalized).limit(1);
+  const publicId = (existingUsers?.[0] as { id?: string } | undefined)?.id;
+  if (publicId) return publicId;
+
+  let page = 1;
+  const perPage = 1000;
+  for (;;) {
+    const { data, error } = await admin.auth.admin.listUsers({ page, perPage });
+    if (error || !data?.users?.length) return null;
+    const match = data.users.find((u) => u.email?.trim().toLowerCase() === normalized);
+    if (match?.id) return match.id;
+    if (data.users.length < perPage) break;
+    page++;
+  }
+  return null;
+}
+
 async function resolvePartnerIdForClaim(
   admin: AdminClient,
   email: string,
@@ -108,12 +130,18 @@ export async function provisionPartnerAuthUser(
     if (createErr || !created?.user) {
       const msg = (createErr?.message ?? "").toLowerCase();
       if (msg.includes("already")) {
-        throw Object.assign(new Error("That email is already registered. Sign in instead."), { status: 409 });
+        const existingAuthId = await findAuthUserIdByEmail(admin, email);
+        if (!existingAuthId) {
+          throw Object.assign(new Error("That email is already registered. Sign in instead."), { status: 409 });
+        }
+        userId = existingAuthId;
+      } else {
+        throw Object.assign(new Error("Couldn't create your account. Try again."), { status: 500 });
       }
-      throw Object.assign(new Error("Couldn't create your account. Try again."), { status: 500 });
+    } else {
+      userId = created.user.id;
+      createdAuth = true;
     }
-    userId = created.user.id;
-    createdAuth = true;
   }
 
   const { error: usersErr } = await admin.from("users").upsert(

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { findAuthUserIdByEmail } from "@/lib/partner-auth-claim";
 import { resolvePartnerJoinInvite } from "@/lib/partner-join-invite";
 import { createServiceClient } from "@/lib/supabase/service";
 
@@ -16,13 +17,15 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: "This invite link has expired or is invalid." }, { status: 401 });
     }
 
+    const authUserId = invite.authUserId || (await findAuthUserIdByEmail(supabase, invite.email));
+
     return NextResponse.json({
       ok: true,
       email: invite.email,
       contactName: invite.contactName,
       companyName: invite.companyName,
       expiresAt: invite.expiresAt,
-      hasAuth: Boolean(invite.authUserId),
+      hasAuth: Boolean(authUserId),
     });
   } catch (e) {
     console.error("[auth/invite]", e);
