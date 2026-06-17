@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { enterPartnerInvite } from "@/lib/partner-invite-enter";
-import { createClient } from "@/lib/supabase/server";
+import { createClientForRoute } from "@/lib/supabase/route-handler";
 import { createServiceClient } from "@/lib/supabase/service";
 
 export const dynamic = "force-dynamic";
@@ -23,16 +23,18 @@ export async function GET(req: NextRequest) {
 
   try {
     const admin = createServiceClient();
-    const supabase = await createClient();
+    const redirectUrl = new URL("/", req.url);
+    redirectUrl.searchParams.set("welcome", "1");
+    let response = NextResponse.redirect(redirectUrl);
+
+    const supabase = await createClientForRoute(response);
     const result = await enterPartnerInvite(admin, supabase, inviteCode);
 
     if (!result.ok) {
       return NextResponse.redirect(loginFallbackUrl(req, result.email, result.inviteCode));
     }
 
-    const redirectUrl = new URL("/", req.url);
-    redirectUrl.searchParams.set("welcome", "1");
-    return NextResponse.redirect(redirectUrl);
+    return response;
   } catch (e) {
     console.error("[auth/invite/enter]", e);
     return NextResponse.redirect(loginFallbackUrl(req));
