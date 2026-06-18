@@ -11,6 +11,7 @@ import { getPartnerSession } from "@/lib/partner-auth";
 import { createServiceClient } from "@/lib/supabase/service";
 import { partnerMissingRequiredDocs } from "@/lib/partner-docs-gate";
 import { partnerWorkAccessBlocked } from "@/lib/partner-access-gate";
+import { partnerFeatureBlocked, incrementPlanUsage } from "@/lib/plan-access-gate";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -47,6 +48,11 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: workBlocked, code: "account_not_active" }, { status: 403 });
   }
 
+  const planBlocked = await partnerFeatureBlocked(session.partnerId, "leads");
+  if (planBlocked) {
+    return NextResponse.json({ error: planBlocked, code: "plan_limit" }, { status: 403 });
+  }
+
   // Idempotent on the (lead_id, partner_id) unique constraint
   // concurrent "Contact" clicks can't 500 on a race. offered_by is FK → public.profiles(id)
   // (staff); a partner self-contacting isn't a profile, so leave it null.
@@ -75,6 +81,8 @@ export async function POST(req: Request) {
   const contact = lead
     ? { email: lead.email ?? null, phone: lead.phone ?? null, address: [lead.address, lead.city].filter(Boolean).join(", ") || null }
     : { email: null, phone: null, address: null };
+
+  await incrementPlanUsage(session.partnerId, "leads");
 
   return NextResponse.json({ ok: true, contact });
 }

@@ -40,6 +40,9 @@ export interface Partner {
   ratingsCount: number;
   /** OS partners.status — onboarding = account in review until staff activates. */
   status: string;
+  plan: string;
+  billingReady: boolean;
+  subscriptionStatus: string | null;
 }
 
 // master-os: clients / contacts on a job.

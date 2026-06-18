@@ -2,6 +2,7 @@
 // SERVER ONLY — never import into a client component.
 
 import Stripe from "stripe";
+import { type PlanId, priceIdForPlan, planIdForPriceId } from "@/lib/plan-catalog";
 
 let instance: Stripe | null = null;
 
@@ -21,5 +22,8 @@ export function requireStripe(): Stripe {
   return client;
 }
 
-/** Recurring price for the £99/mo Fixfy Pro plan (create it in Stripe, then set the env). */
-export const FIXFY_PRO_PRICE_ID = process.env.STRIPE_PRICE_FIXFY_PRO;
+/** @deprecated Use priceIdForPlan('pro') — kept for legacy env. */
+export const FIXFY_PRO_PRICE_ID = process.env.STRIPE_PRICE_FIXFY_PRO ?? process.env.STRIPE_PRICE_PRO_MONTHLY;
+
+export { priceIdForPlan, planIdForPriceId };
+export type { PlanId };

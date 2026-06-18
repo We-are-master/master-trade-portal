@@ -29,7 +29,15 @@ import type { JobSource, JobStatus, MyJob } from "@/types";
 
 type OpenJob = (id: string) => void;
 
-export function MyJobsView({ onOpenJob, defaultView = "board" }: { onOpenJob: OpenJob; defaultView?: string }) {
+export function MyJobsView({
+  onOpenJob,
+  defaultView = "board",
+  previewMode = false,
+}: {
+  onOpenJob: OpenJob;
+  defaultView?: string;
+  previewMode?: boolean;
+}) {
   const [view, setView] = useState(defaultView);
   const { jobs, loading, error } = useMyJobs();
   const { value: dateFilter, setValue: setDateFilter, label: dateFilterLabel } = useDateRangeFilter();

@@ -46,6 +46,9 @@ import {
   type NotificationPrefs,
 } from "@/lib/queries/partner-settings";
 import { openBillingPortal, startCheckout } from "@/lib/billing";
+import { getPlan, type PlanId } from "@/lib/plan-catalog";
+import { PlanPickerGrid, PlanSummaryCard } from "@/components/billing/plan-summary-card";
+import { OnboardingPaymentStep } from "@/components/billing/onboarding-payment-step";
 
 export interface SettingsPage {
   id: string;
@@ -1230,14 +1233,7 @@ function daysLeft(iso: string | null): number {
   return ms <= 0 ? 0 : Math.ceil(ms / 86_400_000);
 }
 
-const PRO_FEATURES = [
-  "0% commission on every job",
-  "Unlimited leads and jobs",
-  "Card-to-bank payouts",
-  "Self-bill PDFs auto-generated",
-  "Customer report templates",
-  "24/7 emergency dispatch",
-];
+const PRO_FEATURES = getPlan("pro").features;
 
 function isEmploymentContract(c: { type: string; title: string }): boolean {
   return /employment/i.test(c.type) || /employment/i.test(c.title);
@@ -1277,14 +1273,18 @@ export function BillingPage() {
   const isActive = status === "active";
   const isTrialing = status === "trialing" || (!status && daysLeft(sub?.trial_ends_at ?? null) > 0);
   const trialDays = daysLeft(sub?.trial_ends_at ?? null);
+  const currentPlan = getPlan(sub?.plan ?? partner.plan);
+  const selectedPlan = (sub?.plan ?? partner.plan) as PlanId;
 
   const statusBadge = isActive
-    ? "FIXFY PRO · ACTIVE"
+    ? `${currentPlan.name.toUpperCase()} · ACTIVE`
     : isTrialing
       ? `FREE TRIAL · ${trialDays} DAY${trialDays === 1 ? "" : "S"} LEFT`
       : status
         ? `PLAN · ${status.toUpperCase()}`
-        : "NO ACTIVE PLAN";
+        : partner.billingReady
+          ? "CARD SAVED · AWAITING ACTIVATION"
+          : "ADD PAYMENT METHOD";
 
   const subline = isActive
     ? sub?.current_period_end
@@ -1294,70 +1294,40 @@ export function BillingPage() {
       ? sub?.trial_ends_at
         ? `Trial ends ${fmtDate(sub.trial_ends_at)}.`
         : "Trial in progress."
-      : "Start your Fixfy Pro plan to keep receiving work.";
+      : partner.billingReady
+        ? "Your card is saved. Billing starts when your account is approved."
+        : "Secure your plan with a card — no charge until Fixfy approves you.";
 
   if (inOnboarding) {
-    return (
-      <Card style={{ padding: 0, background: T.navy, color: T.white, borderColor: T.navy }}>
-        <div style={{ padding: "22px 24px" }}>
-          <Badge tone="coral" size="sm">FREE TRIAL · 30 DAYS</Badge>
-          <div style={{ fontSize: 26, fontWeight: 600, marginTop: 10, letterSpacing: -0.4 }}>
-            Fixfy Pro <span style={{ color: T.coral }}>· £99</span>/month after trial
-          </div>
-          <div style={{ fontSize: 14, color: "rgba(255,255,255,0.82)", marginTop: 10, lineHeight: 1.55, maxWidth: 520 }}>
-            Your first 30 days are completely free — no charge today, no card required. Bill as much as you want during your trial.
-            After 30 days it&apos;s £99/month. Your risk is zero.
-          </div>
-          <ul style={{ margin: "18px 0 0", padding: 0, listStyle: "none", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-            {PRO_FEATURES.map((f) => (
-              <li key={f} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, color: "rgba(255,255,255,0.85)" }}>
-                <Icon name="check" size={13} color={T.coral} />
-                {f}
-              </li>
-            ))}
-          </ul>
-        </div>
-      </Card>
-    );
+    return <OnboardingPaymentStep />;
   }
 
   return (
     <>
       <SettingsHeader title="Billing & plan" />
+      <PlanSummaryCard planId={selectedPlan} />
+      <div style={{ height: 14 }} />
+      <PlanPickerGrid
+        selected={selectedPlan}
+        onSelect={(id) => void startCheckout(id)}
+      />
+      <div style={{ height: 14 }} />
       <Card style={{ marginBottom: 14, padding: 0, background: T.navy, color: T.white, borderColor: T.navy }}>
         <div style={{ padding: "18px 20px", display: "flex", alignItems: "flex-start", gap: 20 }}>
           <div style={{ flex: 1 }}>
             <Badge tone="coral" size="sm">{statusBadge}</Badge>
             <div style={{ fontSize: 26, fontWeight: 600, marginTop: 8, letterSpacing: -0.4 }}>
-              Fixfy Pro <span style={{ color: T.coral }}>· £99</span>/month
+              {currentPlan.name} <span style={{ color: T.coral }}>· {currentPlan.priceLabel}</span>
             </div>
             <div style={{ fontSize: 13, color: "rgba(255,255,255,0.7)", marginTop: 4 }}>{subline}</div>
-            <ul style={{ margin: "16px 0 0", padding: 0, listStyle: "none", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-              {PRO_FEATURES.map((f) => (
-                <li key={f} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, color: "rgba(255,255,255,0.85)" }}>
-                  <Icon name="check" size={13} color={T.coral} />
-                  {f}
-                </li>
-              ))}
-            </ul>
           </div>
-          <div style={{ width: 1, alignSelf: "stretch", background: "rgba(255,255,255,0.12)" }} />
           <div style={{ width: 220, display: "flex", flexDirection: "column", gap: 10, justifyContent: "center" }}>
-            {isTrialing && (
-              <>
-                <div style={{ fontSize: 11, color: "rgba(255,255,255,0.6)", letterSpacing: 0.4 }}>TRIAL ENDS IN</div>
-                <div style={{ fontFamily: T.mono, fontSize: 44, fontWeight: 500, lineHeight: 1, letterSpacing: -1 }}>
-                  {trialDays}
-                  <span style={{ fontSize: 16, opacity: 0.6, fontWeight: 400 }}> day{trialDays === 1 ? "" : "s"}</span>
-                </div>
-              </>
-            )}
             {isActive ? (
               <Button variant="ghost_dark" size="sm" full onClick={openBillingPortal}>Manage subscription</Button>
             ) : (
               <>
-                <Button variant="primary" size="md" icon="arrow-right" full onClick={startCheckout}>
-                  {isTrialing ? "Switch to Pro now" : "Start Fixfy Pro"}
+                <Button variant="primary" size="md" icon="arrow-right" full onClick={() => void startCheckout(selectedPlan)}>
+                  {partner.billingReady ? "Activate plan" : "Choose plan & pay"}
                 </Button>
                 <Button variant="ghost_dark" size="sm" full onClick={openBillingPortal}>Manage billing</Button>
               </>
