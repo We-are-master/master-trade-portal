@@ -24,6 +24,8 @@ export interface PartnerRow {
   // present once their migrations land (read best-effort by partner-auth):
   trial_ends_at?: string | null;
   subscription_status?: string | null;
+  plan?: string | null;
+  billing_ready?: boolean | null;
   status?: string | null;
   bio?: string | null;
   years_experience?: number | null;
@@ -72,5 +74,8 @@ export function mapPartner(row: PartnerRow): Partner {
     rating: displayPartnerRating(row.rating),
     ratingsCount: row.jobs_completed ?? 0,
     status: row.status?.trim() || "onboarding",
+    plan: row.plan?.trim() || "pro",
+    billingReady: Boolean(row.billing_ready),
+    subscriptionStatus: row.subscription_status?.trim() || null,
   };
 }

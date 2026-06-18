@@ -9,6 +9,7 @@ import { getPartnerSession } from "@/lib/partner-auth";
 import { createServiceClient } from "@/lib/supabase/service";
 import { partnerMissingRequiredDocs } from "@/lib/partner-docs-gate";
 import { partnerWorkAccessBlocked } from "@/lib/partner-access-gate";
+import { partnerFeatureBlocked, incrementPlanUsage } from "@/lib/plan-access-gate";
 import { callMasterOsPartnerPortalAccept } from "@/lib/master-os-internal";
 
 export async function POST(req: Request) {
@@ -56,6 +57,11 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: workBlocked, code: "account_not_active" }, { status: 403 });
     }
 
+    const planBlocked = await partnerFeatureBlocked(session.partnerId, "jobs");
+    if (planBlocked) {
+      return NextResponse.json({ error: planBlocked, code: "plan_limit" }, { status: 403 });
+    }
+
     const result = await callMasterOsPartnerPortalAccept(jobId, session.partnerId);
 
     if (!result.ok) {
@@ -80,6 +86,8 @@ export async function POST(req: Request) {
         { status: result.status >= 400 ? result.status : 500 },
       );
     }
+
+    await incrementPlanUsage(session.partnerId, "jobs");
 
     return NextResponse.json({
       accepted: true,

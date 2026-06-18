@@ -60,7 +60,7 @@ function mondayOf(date: Date): Date {
 }
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
-export function ScheduleView({ onOpenJob }: { onOpenJob: OpenJob }) {
+export function ScheduleView({ onOpenJob, previewMode = false }: { onOpenJob: OpenJob; previewMode?: boolean }) {
   const { jobs, loading, error, refresh } = useMyJobs();
   const [view, setView] = useState("month");
   const [cursor, setCursor] = useState<Date>(() => {

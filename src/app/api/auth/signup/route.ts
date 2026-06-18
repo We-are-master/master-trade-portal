@@ -7,6 +7,7 @@
 
 import { NextResponse, type NextRequest } from "next/server";
 import { claimPartnerInvite } from "@/lib/partner-auth-claim";
+import { DEFAULT_PLAN_ID, parsePlanId, PARTNERS_LP_URL } from "@/lib/plan-catalog";
 import { createServiceClient } from "@/lib/supabase/service";
 import { sendOtpEmail } from "@/lib/email";
 
@@ -15,7 +16,7 @@ export const dynamic = "force-dynamic";
 const TRIAL_DAYS = 30;
 
 export async function POST(req: NextRequest) {
-  let body: { email?: unknown; fullName?: unknown; company?: unknown; inviteCode?: unknown };
+  let body: { email?: unknown; fullName?: unknown; company?: unknown; inviteCode?: unknown; plan?: unknown };
   try {
     body = (await req.json()) as typeof body;
   } catch {
@@ -26,6 +27,8 @@ export async function POST(req: NextRequest) {
   const fullName = typeof body.fullName === "string" ? body.fullName.trim() : "";
   const company = typeof body.company === "string" ? body.company.trim() : "";
   const inviteCode = typeof body.inviteCode === "string" ? body.inviteCode.trim() : "";
+  const planParam = typeof body.plan === "string" ? body.plan.trim() : "";
+  const plan = parsePlanId(planParam) ?? DEFAULT_PLAN_ID;
 
   if (!email || !email.includes("@")) return NextResponse.json({ error: "Enter a valid email." }, { status: 400 });
   if (!fullName) return NextResponse.json({ error: "Enter your name." }, { status: 400 });
@@ -56,7 +59,7 @@ export async function POST(req: NextRequest) {
       );
     }
     try {
-      const result = await claimPartnerInvite(admin, { email, inviteCode, fullName, company });
+      const result = await claimPartnerInvite(admin, { email, inviteCode, fullName, company, plan });
       const dev = process.env.NODE_ENV !== "production";
       return NextResponse.json({
         ok: true,
@@ -68,6 +71,14 @@ export async function POST(req: NextRequest) {
       const err = e as Error & { status?: number };
       return NextResponse.json({ error: err.message || "Couldn't claim invite." }, { status: err.status ?? 500 });
     }
+  }
+
+  // Self-signup requires a plan from the partners LP.
+  if (!inviteCode && !parsePlanId(planParam)) {
+    return NextResponse.json(
+      { error: "Choose a plan at getfixfy.com/partners first.", redirect: PARTNERS_LP_URL },
+      { status: 422 },
+    );
   }
 
   const { data: existingUser } = await admin.from("users").select("id").ilike("email", email).limit(1);
@@ -112,7 +123,7 @@ export async function POST(req: NextRequest) {
     trades: [],
     location: "",
     subscription_status: "trialing",
-    plan: "pro",
+    plan,
     trial_ends_at: trialEnds,
   });
   if (partnerErr) {

@@ -8,6 +8,7 @@ import { PartnerRatingInline } from "@/components/ui/partner-rating";
 import { Avatar, Icon } from "@/components/ui/primitives";
 import { usePartnerRating } from "@/hooks/use-partner-rating";
 import { usePartner } from "@/components/partner-context";
+import { getPlan } from "@/lib/plan-catalog";
 import { useMyJobs } from "@/components/jobs-context";
 import { createClient } from "@/lib/supabase/client";
 
@@ -62,10 +63,12 @@ export function Sidebar({
   active,
   onNav,
   density = "comfortable",
+  workLocked = false,
 }: {
   active: string;
   onNav: (id: string) => void;
   density?: "comfortable" | "compact";
+  workLocked?: boolean;
 }) {
   const isDense = density === "compact";
   const { jobs } = useMyJobs();
@@ -73,6 +76,7 @@ export function Sidebar({
   // Real, derived badges only (no fabricated counts). Available/quotes/leads would need their
   // own fetch, so they stay unbadged until there's a shared count source.
   const badgeFor = (id: string): number | undefined => (id === "jobs" && activeJobs > 0 ? activeJobs : undefined);
+  const lockedNav = new Set(["leads", "available", "quotes", "jobs", "schedule"]);
 
   function Row({ item }: { item: NavItem }) {
     const sel = item.id === active;
@@ -114,6 +118,23 @@ export function Sidebar({
           <Icon name={item.icon} size={16} color={sel ? T.white : item.hot ? T.coral : "rgba(255,255,255,0.5)"} />
           {item.label}
         </span>
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+          {workLocked && lockedNav.has(item.id) && (
+            <span
+              style={{
+                fontSize: 9,
+                fontWeight: 700,
+                letterSpacing: 0.6,
+                textTransform: "uppercase",
+                padding: "2px 6px",
+                borderRadius: 4,
+                background: "rgba(255,255,255,0.12)",
+                color: "rgba(255,255,255,0.55)",
+              }}
+            >
+              Locked
+            </span>
+          )}
         {item.badge != null && (
           <span
             style={{
@@ -129,6 +150,7 @@ export function Sidebar({
             {item.badge}
           </span>
         )}
+        </span>
       </div>
     );
   }
@@ -185,8 +207,9 @@ export function Sidebar({
 
 function TrialCard({ onUpgrade }: { onUpgrade: () => void }) {
   const partner = usePartner();
+  const plan = getPlan(partner.plan);
   const daysLeft = partner.trialDaysLeft;
-  const onTrial = daysLeft > 0;
+  const onTrial = daysLeft > 0 && partner.subscriptionStatus !== "active";
   return (
     <div
       style={{
@@ -202,8 +225,8 @@ function TrialCard({ onUpgrade }: { onUpgrade: () => void }) {
       }}
     >
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <Icon name="clock" size={14} color={T.coral} />
-        <span style={{ fontSize: 12, fontWeight: 500 }}>{onTrial ? "Free trial" : "Fixfy Pro"}</span>
+        <Icon name="credit-card" size={14} color={T.coral} />
+        <span style={{ fontSize: 12, fontWeight: 500 }}>{plan.name}</span>
         {onTrial && (
           <span
             style={{
@@ -221,13 +244,7 @@ function TrialCard({ onUpgrade }: { onUpgrade: () => void }) {
         )}
       </div>
       <div style={{ fontSize: 11.5, color: "rgba(255,255,255,0.7)", lineHeight: 1.4 }}>
-        {onTrial ? (
-          <>
-            £99/mo from <span className="fx-mono">{partner.trialEndsOn}</span>. No commission. Cancel anytime.
-          </>
-        ) : (
-          <>£99/mo · 0% commission on every job. Cancel anytime.</>
-        )}
+        {plan.priceLabel} · {partner.billingReady ? "Card on file" : "Add card in onboarding"}
       </div>
       <button
         onClick={onUpgrade}

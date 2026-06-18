@@ -46,7 +46,7 @@ export async function getPartnerSession(): Promise<PartnerSession | null> {
   let extra: Partial<PartnerRow> = {};
   const { data: ext } = await supabase
     .from("partners")
-    .select("trial_ends_at, subscription_status, bio, years_experience, service_radius_miles, excluded_postcodes")
+    .select("trial_ends_at, subscription_status, plan, billing_ready, bio, years_experience, service_radius_miles, excluded_postcodes")
     .eq("id", data.id)
     .maybeSingle();
   if (ext) extra = ext as Partial<PartnerRow>;

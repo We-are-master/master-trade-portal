@@ -1,18 +1,20 @@
 "use client";
 
-// Self-registration for trades — collect the essentials, create the account + 30-day free trial,
-// then OTP sign-in (same code path as /login). On success we land in the app with ?welcome=1 so
-// the onboarding flow opens automatically. The rest of the profile is captured in onboarding.
-
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { T } from "@/lib/tokens";
+import { getPlan, parsePlanId, PARTNERS_LP_URL } from "@/lib/plan-catalog";
 import { Button, Icon, Input } from "@/components/ui/primitives";
+import { PlanSummaryCard } from "@/components/billing/plan-summary-card";
 import { Wordmark } from "@/components/shell/sidebar";
 
-export default function SignupPage() {
+function SignupForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const planId = parsePlanId(searchParams.get("plan")) ?? null;
+  const plan = planId ? getPlan(planId) : null;
+
   const [step, setStep] = useState<"details" | "code">("details");
   const [fullName, setFullName] = useState("");
   const [company, setCompany] = useState("");
@@ -22,7 +24,20 @@ export default function SignupPage() {
   const [busy, setBusy] = useState(false);
   const [devNote, setDevNote] = useState<string | null>(null);
 
-  const detailsValid = fullName.trim() && company.trim() && email.includes("@");
+  const detailsValid = fullName.trim() && company.trim() && email.includes("@") && Boolean(planId);
+
+  if (!planId) {
+    return (
+      <div style={{ minHeight: "100vh", display: "grid", placeItems: "center", padding: 24, background: T.paper }}>
+        <div style={{ maxWidth: 400, textAlign: "center" }}>
+          <p style={{ fontSize: 16, color: T.ink, marginBottom: 16 }}>Choose your plan first, then create your account.</p>
+          <Button variant="primary" onClick={() => { window.location.href = PARTNERS_LP_URL; }}>
+            View plans
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   const createAccount = async () => {
     setError(null);
@@ -32,7 +47,12 @@ export default function SignupPage() {
       const res = await fetch("/api/auth/signup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: email.trim(), fullName: fullName.trim(), company: company.trim() }),
+        body: JSON.stringify({
+          email: email.trim(),
+          fullName: fullName.trim(),
+          company: company.trim(),
+          plan: planId,
+        }),
       });
       const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string; devCode?: string; emailError?: string };
       if (!res.ok || !data.ok) throw new Error(data.error || "Couldn't create your account.");
@@ -88,11 +108,11 @@ export default function SignupPage() {
         <div style={{ padding: 24, display: "flex", flexDirection: "column", gap: 14 }}>
           <div>
             <div style={{ fontSize: 20, fontWeight: 600, color: T.navy, letterSpacing: -0.3 }}>
-              {step === "details" ? "Start your 30-day free trial" : "Enter your code"}
+              {step === "details" ? `Join Fixfy · ${plan?.name}` : "Enter your code"}
             </div>
             <div style={{ fontSize: 13, color: T.mute, marginTop: 4, lineHeight: 1.5 }}>
               {step === "details" ? (
-                "Create your Fixfy trade account — no card needed. We'll set you up in onboarding next."
+                <>You selected <strong>{plan?.priceLabel}</strong>. We&apos;ll set up your profile next — card required before approval, no charge until you&apos;re live.</>
               ) : (
                 <>Sent to <b style={{ color: T.ink }}>{email}</b>. Check your inbox.</>
               )}
@@ -147,5 +167,13 @@ export default function SignupPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function SignupPage() {
+  return (
+    <Suspense fallback={<div style={{ minHeight: "100vh", background: T.paper }} />}>
+      <SignupForm />
+    </Suspense>
   );
 }

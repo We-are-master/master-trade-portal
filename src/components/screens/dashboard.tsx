@@ -87,9 +87,11 @@ function greetingWord(): string {
 export function Dashboard({
   onOpenJob,
   onNav,
+  previewMode = false,
 }: {
   onOpenJob: (id: string) => void;
   onNav: (route: string) => void;
+  previewMode?: boolean;
 }) {
   const partner = usePartner();
   const { rating, complaintCount, pointsLost, topComplaints, loaded: ratingLoaded } = usePartnerRating(partner.rating);
@@ -151,9 +153,10 @@ export function Dashboard({
 
   useEffect(() => {
     void loadOpportunities();
+    if (previewMode) return;
     const id = window.setInterval(() => void loadOpportunities(), OPPORTUNITY_POLL_MS);
     return () => window.clearInterval(id);
-  }, [loadOpportunities]);
+  }, [loadOpportunities, previewMode]);
 
   const docSummary = useMemo(() => {
     if (!docs) return null;

@@ -18,6 +18,8 @@ import { JobDrawer } from "@/components/screens/job-drawer";
 import { ScheduleView } from "@/components/screens/schedule";
 import { SettingsView, settingsPageLabel } from "@/components/screens/settings";
 import { Onboarding } from "@/components/screens/onboarding";
+import { AddPaymentMethodModal } from "@/components/billing/add-payment-method-modal";
+import { ReviewLockOverlay } from "@/components/ui/review-lock-overlay";
 import { Icon } from "@/components/ui/icon";
 
 const TITLES: Record<string, string> = {
@@ -60,14 +62,17 @@ function AccountReviewBanner() {
   );
 }
 
-function AccountReviewPlaceholder({ page }: { page: string }) {
+function withReviewLock(
+  locked: boolean,
+  pageLabel: string,
+  onOpenSettings: () => void,
+  view: ReactNode,
+): ReactNode {
+  if (!locked) return view;
   return (
-    <div style={{ padding: 24, maxWidth: 520 }}>
-      <div style={{ fontSize: 18, fontWeight: 600, color: T.navy, marginBottom: 8 }}>Account in review</div>
-      <p style={{ fontSize: 14, color: T.mute, lineHeight: 1.55, margin: 0 }}>
-        {TITLES[page] ?? "This section"} will unlock once Fixfy approves your account. You can still update your profile and documents in Settings.
-      </p>
-    </div>
+    <ReviewLockOverlay pageLabel={pageLabel} onOpenSettings={onOpenSettings}>
+      {view}
+    </ReviewLockOverlay>
   );
 }
 
@@ -76,6 +81,7 @@ export function TradePortalApp() {
   const [drawerJobId, setDrawerJobId] = useState<string | null>(null);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [docsLocked, setDocsLocked] = useState(false);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
   const partner = usePartner();
   const toast = useToast();
 
@@ -116,6 +122,21 @@ export function TradePortalApp() {
     void checkDocs();
   }, [checkDocs, partner.status]);
 
+  const needsPaymentMethod =
+    partner.status === "active" &&
+    !partner.billingReady &&
+    partner.subscriptionStatus !== "active";
+
+  useEffect(() => {
+    if (needsPaymentMethod) setShowPaymentModal(true);
+  }, [needsPaymentMethod]);
+
+  useEffect(() => {
+    if (partner.status === "active" && partner.billingReady && partner.subscriptionStatus !== "active") {
+      void fetch("/api/billing/activate-subscription", { method: "POST" });
+    }
+  }, [partner.status, partner.billingReady, partner.subscriptionStatus]);
+
   const accountInReview = partner.status === "onboarding" && !docsLocked;
   const workLocked = accountInReview;
 
@@ -126,15 +147,14 @@ export function TradePortalApp() {
     setRoute(id);
   };
   const handleOpenJob = (id: string) => setDrawerJobId(id);
+  const openSettings = () => setRoute("settings");
 
-  const renderWorkPage = (id: string, view: ReactNode) => {
-    if (workLocked && WORK_PAGES.has(id)) return <AccountReviewPlaceholder page={id} />;
-    return view;
-  };
+  const renderWorkPage = (id: string, view: ReactNode) =>
+    withReviewLock(workLocked && WORK_PAGES.has(id), TITLES[id] ?? "This section", openSettings, view);
 
   return (
     <div id="app-root" style={{ display: "flex", background: T.paper }}>
-      <Sidebar active={page} onNav={onNav} />
+      <Sidebar active={page} onNav={onNav} workLocked={workLocked} />
 
       <main style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0, overflow: "hidden" }}>
         <TopBar
@@ -144,18 +164,18 @@ export function TradePortalApp() {
 
         {accountInReview && <AccountReviewBanner />}
 
-        {page === "dashboard" && (
-          workLocked ? (
-            <AccountReviewPlaceholder page="dashboard" />
-          ) : (
-            <Dashboard onOpenJob={handleOpenJob} onNav={onNav} />
-          )
-        )}
-        {page === "leads" && renderWorkPage("leads", <LeadsView onShowToast={toast} />)}
-        {page === "available" && renderWorkPage("available", <AvailableJobsView onShowToast={toast} />)}
-        {page === "quotes" && renderWorkPage("quotes", <AvailableQuotesView onShowToast={toast} />)}
-        {page === "jobs" && renderWorkPage("jobs", <MyJobsView onOpenJob={handleOpenJob} />)}
-        {page === "schedule" && renderWorkPage("schedule", <ScheduleView onOpenJob={handleOpenJob} />)}
+        {page === "dashboard" &&
+          withReviewLock(
+            workLocked,
+            "Dashboard",
+            openSettings,
+            <Dashboard previewMode={workLocked} onOpenJob={handleOpenJob} onNav={onNav} />,
+          )}
+        {page === "leads" && renderWorkPage("leads", <LeadsView previewMode={workLocked} onShowToast={toast} />)}
+        {page === "available" && renderWorkPage("available", <AvailableJobsView previewMode={workLocked} onShowToast={toast} />)}
+        {page === "quotes" && renderWorkPage("quotes", <AvailableQuotesView previewMode={workLocked} onShowToast={toast} />)}
+        {page === "jobs" && renderWorkPage("jobs", <MyJobsView previewMode={workLocked} onOpenJob={handleOpenJob} />)}
+        {page === "schedule" && renderWorkPage("schedule", <ScheduleView previewMode={workLocked} onOpenJob={handleOpenJob} />)}
         {page === "settings" && <SettingsView initial={subpage || "profile"} />}
       </main>
 
@@ -171,6 +191,16 @@ export function TradePortalApp() {
           }}
         />
       )}
+
+      <AddPaymentMethodModal
+        open={showPaymentModal}
+        blocking={needsPaymentMethod}
+        onClose={() => setShowPaymentModal(false)}
+        onSaved={() => {
+          setShowPaymentModal(false);
+          window.location.reload();
+        }}
+      />
     </div>
   );
 }

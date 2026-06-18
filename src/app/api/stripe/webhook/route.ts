@@ -1,13 +1,6 @@
-// POST /api/stripe/webhook
-// Stripe → updates the partner's subscription state. Public (no auth gate); verified by
-// signature. Writes via the service-role client. Requires migration 196 columns.
-//
-// Configure in Stripe (test): a webhook to {APP_URL}/api/stripe/webhook subscribing to
-// checkout.session.completed + customer.subscription.{created,updated,deleted}, and put
-// the signing secret in STRIPE_WEBHOOK_SECRET.
-
 import { NextResponse, type NextRequest } from "next/server";
 import type Stripe from "stripe";
+import { planIdForPriceId } from "@/lib/plan-catalog";
 import { requireStripe } from "@/lib/stripe";
 import { createServiceClient } from "@/lib/supabase/service";
 
@@ -21,11 +14,12 @@ function tsToIso(seconds: number | null | undefined): string | null {
 
 async function applySubscription(admin: Admin, sub: Stripe.Subscription) {
   const customerId = typeof sub.customer === "string" ? sub.customer : sub.customer.id;
-  // Stripe SDK v20: the billing period lives on the subscription item, not the subscription.
   const periodEnd = sub.items?.data?.[0]?.current_period_end ?? null;
+  const priceId = sub.items?.data?.[0]?.price?.id ?? null;
+  const plan = planIdForPriceId(priceId) ?? (sub.metadata?.plan as string | undefined) ?? "pro";
   const update = {
     subscription_status: sub.status,
-    plan: "pro",
+    plan,
     stripe_customer_id: customerId,
     current_period_end: tsToIso(periodEnd),
     trial_ends_at: tsToIso(sub.trial_end),
@@ -68,6 +62,14 @@ export async function POST(req: NextRequest) {
         }
         break;
       }
+      case "setup_intent.succeeded": {
+        const intent = event.data.object as Stripe.SetupIntent;
+        const partnerId = intent.metadata?.partner_id;
+        if (partnerId) {
+          await admin.from("partners").update({ billing_ready: true }).eq("id", partnerId);
+        }
+        break;
+      }
       case "customer.subscription.created":
       case "customer.subscription.updated":
       case "customer.subscription.deleted": {
@@ -79,7 +81,7 @@ export async function POST(req: NextRequest) {
     }
   } catch (e) {
     console.error("Stripe webhook handler error:", e);
-    return NextResponse.json({ error: "handler_error" }, { status: 500 });
+    return NextResponse.json({ error: "handler_failed" }, { status: 500 });
   }
 
   return NextResponse.json({ received: true });
