@@ -1,19 +1,18 @@
 // POST /api/auth/signup  { email, fullName, company }
 //
 // Self-registration for new trades. Creates the auth user + public.users (external_partner) +
-// public.partners row with a 30-day free trial (no card), then emails a 6-digit OTP via Resend so
+// public.partners row with a 7-day free trial (no card), then emails a 6-digit OTP via Resend so
 // they can sign in. After verifying the code the app opens the onboarding flow. The partner the
 // portal resolves from the session (partner-auth) is this same partners row.
 
 import { NextResponse, type NextRequest } from "next/server";
 import { claimPartnerInvite } from "@/lib/partner-auth-claim";
 import { DEFAULT_PLAN_ID, parsePlanId, PARTNERS_LP_URL } from "@/lib/plan-catalog";
+import { PARTNER_TRIAL_DAYS } from "@/lib/trial-config";
 import { createServiceClient } from "@/lib/supabase/service";
 import { sendOtpEmail } from "@/lib/email";
 
 export const dynamic = "force-dynamic";
-
-const TRIAL_DAYS = 30;
 
 export async function POST(req: NextRequest) {
   let body: { email?: unknown; fullName?: unknown; company?: unknown; inviteCode?: unknown; plan?: unknown };
@@ -111,15 +110,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Couldn't set up your account. Try again." }, { status: 500 });
   }
 
-  // 3) Partner row with a 30-day free trial (no card). Operational data keys off partners.id.
-  const trialEnds = new Date(Date.now() + TRIAL_DAYS * 24 * 60 * 60 * 1000).toISOString();
+  // 3) Partner row with a 7-day free trial (no card). Operational data keys off partners.id.
+  const trialEnds = new Date(Date.now() + PARTNER_TRIAL_DAYS * 24 * 60 * 60 * 1000).toISOString();
   const { error: partnerErr } = await admin.from("partners").insert({
     auth_user_id: userId,
     email,
     company_name: company,
     contact_name: fullName,
     phone: null,
-    trade: null,
+    trade: "",
     trades: [],
     location: "",
     subscription_status: "trialing",
@@ -153,7 +152,7 @@ export async function POST(req: NextRequest) {
   const dev = process.env.NODE_ENV !== "production";
   return NextResponse.json({
     ok: true,
-    trialDays: TRIAL_DAYS,
+    trialDays: PARTNER_TRIAL_DAYS,
     ...(dev && devCode ? { devCode } : {}),
     ...(dev && emailError ? { emailError } : {}),
   });

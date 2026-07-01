@@ -408,7 +408,7 @@ function SignInFlow({
             padding: 0,
           }}
         >
-          Start a 30-day free trial
+          Start a 7-day free trial
         </button>
       </p>
     </div>
@@ -541,7 +541,7 @@ function RegisterFlow({
       <p style={{ fontSize: 14, color: T.mute, margin: "8px 0 22px", lineHeight: 1.5 }}>
         {inviteCode
           ? "Confirm your details — we'll email you a code to sign in and finish onboarding."
-          : "Start a 30-day free trial. No card required."}
+          : "Start a 7-day free trial. No card required."}
       </p>
       {inviteBanner && (
         <div style={{ marginBottom: 14, fontSize: 13, color: T.slate, background: T.coralTint, borderRadius: 8, padding: "10px 12px", lineHeight: 1.45 }}>
@@ -786,7 +786,15 @@ export function AuthBrandToggle({
     }
   };
 
+  const goGetStarted = () => {
+    window.location.href = "/get-started";
+  };
+
   const switchMode = (next: "signin" | "register") => {
+    if (next === "register" && !inviteCode) {
+      goGetStarted();
+      return;
+    }
     setMode(next);
     clearMessages();
   };
@@ -932,7 +940,7 @@ export function AuthBrandToggle({
               initialEmail={invitePrefill.email || initialEmail}
               inviteCode={inviteCode}
               inviteBanner={inviteBanner}
-              onRegister={() => switchMode("register")}
+              onRegister={goGetStarted}
               onSendCode={sendCode}
               onVerify={verifySignIn}
               busy={busy}
