@@ -11,6 +11,7 @@ import {
 } from "react";
 import { useRouter } from "next/navigation";
 import { T } from "@/lib/tokens";
+import { DEFAULT_PLAN_ID } from "@/lib/plan-catalog";
 import { AuthWordmark, BrandPanelBackground } from "@/components/brand/auth-wordmark";
 import { Icon } from "@/components/ui/icon";
 
@@ -742,7 +743,7 @@ export function AuthBrandToggle({
             company: payload.company,
             inviteCode: useInvite,
           }
-        : payload;
+        : { ...payload, plan: DEFAULT_PLAN_ID };
       const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
