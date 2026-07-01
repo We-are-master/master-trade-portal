@@ -6,6 +6,8 @@ import { Badge, Button, Field, Icon, IconButton, Input } from "@/components/ui/p
 import { QuoteAddressMap } from "@/components/ui/quote-address-map";
 import { formatGBP, formatGBPdec } from "@/lib/format";
 import { createClient } from "@/lib/supabase/client";
+import { planAllows } from "@/lib/plan-catalog";
+import { usePartner } from "@/components/partner-context";
 import { submitBid } from "@/lib/queries/quotes";
 import {
   bidFormValuesFromNotes,
@@ -417,6 +419,7 @@ function QuoteBidFormBody({
   onSubmitted: () => void;
   embedded?: boolean;
 }) {
+  const partner = usePartner();
   const isUpdate = listStatus === "submitted";
   const initial = bidFormValuesFromNotes(detail.myBid?.notes ?? quote.myBidNotes);
   const [labour, setLabour] = useState(initial.labourCost ?? "");
@@ -446,6 +449,10 @@ function QuoteBidFormBody({
   };
 
   const send = async () => {
+    if (!planAllows(partner.plan, "quotes")) {
+      onShowToast({ icon: "lock", tone: "coral", text: "Upgrade to Pro or VIP to submit quotes." });
+      return;
+    }
     const form: BidSubmitFormValues = {
       labourCost: labour,
       materialsCost: materials,

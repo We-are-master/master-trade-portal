@@ -14,6 +14,7 @@ import {
   Tabs,
 } from "@/components/ui/primitives";
 import { formatGBP } from "@/lib/format";
+import { PlanUpgradeBanner } from "@/components/billing/plan-upgrade-banner";
 import { usePartner } from "@/components/partner-context";
 import { useMyJobs } from "@/components/jobs-context";
 import { createClient } from "@/lib/supabase/client";
@@ -79,7 +80,7 @@ type ShowToast = (t: ToastInput) => void;
 // ============================================================
 // LEADS
 // ============================================================
-export function LeadsView({ onShowToast }: { onShowToast: ShowToast }) {
+export function LeadsView({ onShowToast, previewMode = false }: { onShowToast: ShowToast; previewMode?: boolean }) {
   const [leads, setLeads] = useState<PortalLead[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -119,6 +120,7 @@ export function LeadsView({ onShowToast }: { onShowToast: ShowToast }) {
   const activeLeads = tab === "new" ? newLeads : interestedLeads;
 
   const act = async (lead: PortalLead, status: "contacted" | "declined") => {
+    if (previewMode) return;
     if (status === "declined") {
       const next = new Set(declinedIds);
       next.add(lead.offerId);
@@ -886,7 +888,7 @@ function acceptJobErrorMessage(json: { code?: string; message?: string; error?: 
   return json.message || json.error || "Couldn't accept job";
 }
 
-export function AvailableJobsView({ onShowToast }: { onShowToast: ShowToast }) {
+export function AvailableJobsView({ onShowToast, previewMode = false }: { onShowToast: ShowToast; previewMode?: boolean }) {
   const partner = usePartner();
   const myJobs = useMyJobs();
   const [jobs, setJobs] = useState<AvailableJob[]>([]);
@@ -911,6 +913,7 @@ export function AvailableJobsView({ onShowToast }: { onShowToast: ShowToast }) {
   }, [load]);
 
   const accept = async (job: AvailableJob) => {
+    if (previewMode) return;
     setAcceptingId(job.id);
     try {
       const res = await fetch("/api/jobs/accept", {
@@ -949,6 +952,7 @@ export function AvailableJobsView({ onShowToast }: { onShowToast: ShowToast }) {
 
   return (
     <div style={{ padding: 24, display: "flex", flexDirection: "column", gap: 18, flex: 1, overflow: "auto" }}>
+      {!previewMode && <PlanUpgradeBanner feature="jobs" />}
       <SectionHeader
         title="Available jobs"
         subtitle="Fixfy-quoted work, customer's already signed off. First to accept wins."
@@ -1082,7 +1086,7 @@ function AvailableJobCard({ job, accepting, onAccept }: { job: AvailableJob; acc
 // ============================================================
 // AVAILABLE QUOTES
 // ============================================================
-export function AvailableQuotesView({ onShowToast }: { onShowToast: ShowToast }) {
+export function AvailableQuotesView({ onShowToast, previewMode = false }: { onShowToast: ShowToast; previewMode?: boolean }) {
   const partner = usePartner();
   const [tab, setTab] = useState<QuoteRequestStatus>("to-quote");
   const [drawerQuote, setDrawerQuote] = useState<QuoteRequest | null>(null);
@@ -1122,6 +1126,7 @@ export function AvailableQuotesView({ onShowToast }: { onShowToast: ShowToast })
 
   return (
     <div style={{ padding: 24, display: "flex", flexDirection: "column", gap: 18, flex: 1, overflow: "auto" }}>
+      {!previewMode && <PlanUpgradeBanner feature="quotes" />}
       <SectionHeader
         title="Available quotes"
         subtitle="Fixfy clients needing a custom estimate. Submit a number, win the work."
@@ -1153,7 +1158,7 @@ export function AvailableQuotesView({ onShowToast }: { onShowToast: ShowToast })
           />
         ) : (
           segments[tab].map((q) => (
-            <QuoteRow key={q.id} q={q} status={tab} onOpen={() => setDrawerQuote(q)} />
+            <QuoteRow key={q.id} q={q} status={tab} onOpen={() => !previewMode && setDrawerQuote(q)} />
           ))
         )}
       </div>

@@ -12,8 +12,8 @@ import { useToast } from "@/components/ui/toast";
 import { createClient } from "@/lib/supabase/client";
 import { fetchContracts } from "@/lib/queries/contracts";
 import { fetchPartnerDocuments, type PartnerDoc } from "@/lib/queries/partner-documents";
+import { OnboardingPaymentStep } from "@/components/billing/onboarding-payment-step";
 import {
-  BillingPage,
   DocsPage,
   PayoutsCardEmbedded,
   PoliciesPage,
@@ -240,8 +240,8 @@ function OnboardingStep({ step, setStep, onDocsChanged }: { step: number; setSte
       );
     case 8:
       return (
-        <StepWrap kicker="STEP 9" title="Your Plan" sub="30 days free — bill as much as you want. After that, £99/month. No charge today.">
-          <BillingPage />
+        <StepWrap kicker="STEP 9" title="Secure your plan" sub="Add your card — no charge until Fixfy approves your account.">
+          <OnboardingPaymentStep />
         </StepWrap>
       );
     case 9:
