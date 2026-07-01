@@ -32,6 +32,7 @@ export async function middleware(request: NextRequest) {
   const isAuthRoute =
     path.startsWith("/login") ||
     path.startsWith("/signup") ||
+    path.startsWith("/get-started") ||
     path.startsWith("/invite") ||
     path.startsWith("/auth");
   // API routes do their own auth (return JSON 401) and the Stripe webhook is public —
