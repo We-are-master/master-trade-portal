@@ -13,7 +13,9 @@ import { tryCreateServiceClient } from "@/lib/supabase/service";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-export type RequiredDocResponse = Pick<RequiredDocDef, "id" | "docType" | "name" | "description" | "group" | "aliases">;
+export type RequiredDocResponse = Pick<RequiredDocDef, "id" | "docType" | "name" | "description" | "group" | "aliases"> & {
+  mandatory: boolean;
+};
 
 export async function GET() {
   const session = await getPartnerSession();
@@ -57,14 +59,18 @@ export async function GET() {
   }
 
   const checklist = buildPortalRequiredDocumentChecklist(p, trades, rules);
-  const required: RequiredDocResponse[] = checklist.map(({ id, docType, name, description, group, aliases }) => ({
-    id,
-    docType,
-    name,
-    description,
-    group,
-    aliases,
-  }));
+  const required: RequiredDocResponse[] = checklist.map(({ id, docType, name, description, group, aliases }) => {
+    const row = rules.find((r) => r.id === id);
+    return {
+      id,
+      docType,
+      name,
+      description,
+      group,
+      aliases,
+      mandatory: row ? row.mandatory && row.enabled : true,
+    };
+  });
 
   return NextResponse.json({ required });
 }

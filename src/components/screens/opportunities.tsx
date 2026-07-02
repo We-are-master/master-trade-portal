@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/primitives";
 import { formatGBP } from "@/lib/format";
 import { PlanUpgradeBanner } from "@/components/billing/plan-upgrade-banner";
+import { redactLead, redactAvailableJob, redactQuote } from "@/lib/preview-redact";
 import { usePartner } from "@/components/partner-context";
 import { useMyJobs } from "@/components/jobs-context";
 import { createClient } from "@/lib/supabase/client";
@@ -54,6 +55,25 @@ type LeadTab = "new" | "interested";
 type NewLeadView = "list" | "card";
 type InterestedLeadView = "kanban" | "list";
 const DECLINED_STORAGE_KEY = "fixfy-leads-declined";
+const INTERESTED_VIEW_STORAGE_KEY = "fixfy-leads-interested-view";
+
+function loadInterestedView(): InterestedLeadView {
+  if (typeof window === "undefined") return "kanban";
+  try {
+    const raw = localStorage.getItem(INTERESTED_VIEW_STORAGE_KEY);
+    return raw === "list" || raw === "kanban" ? raw : "kanban";
+  } catch {
+    return "kanban";
+  }
+}
+
+function saveInterestedView(view: InterestedLeadView) {
+  try {
+    localStorage.setItem(INTERESTED_VIEW_STORAGE_KEY, view);
+  } catch {
+    /* ignore */
+  }
+}
 
 function loadDeclinedIds(): Set<string> {
   if (typeof window === "undefined") return new Set();
@@ -80,7 +100,15 @@ type ShowToast = (t: ToastInput) => void;
 // ============================================================
 // LEADS
 // ============================================================
-export function LeadsView({ onShowToast, previewMode = false }: { onShowToast: ShowToast; previewMode?: boolean }) {
+export function LeadsView({
+  onShowToast,
+  previewMode = false,
+  redactSensitive = false,
+}: {
+  onShowToast: ShowToast;
+  previewMode?: boolean;
+  redactSensitive?: boolean;
+}) {
   const [leads, setLeads] = useState<PortalLead[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -89,7 +117,7 @@ export function LeadsView({ onShowToast, previewMode = false }: { onShowToast: S
   const [notesSavingId, setNotesSavingId] = useState<string | null>(null);
   const [tab, setTab] = useState<LeadTab>("new");
   const [newView, setNewView] = useState<NewLeadView>("list");
-  const [interestedView, setInterestedView] = useState<InterestedLeadView>("kanban");
+  const [interestedView, setInterestedView] = useState<InterestedLeadView>(loadInterestedView);
   const [declinedIds, setDeclinedIds] = useState<Set<string>>(() => loadDeclinedIds());
 
   const load = useCallback(async () => {
@@ -121,14 +149,6 @@ export function LeadsView({ onShowToast, previewMode = false }: { onShowToast: S
 
   const act = async (lead: PortalLead, status: "contacted" | "declined") => {
     if (previewMode) return;
-    if (status === "declined") {
-      const next = new Set(declinedIds);
-      next.add(lead.offerId);
-      setDeclinedIds(next);
-      saveDeclinedIds(next);
-      onShowToast({ icon: "x", text: "Lead declined." });
-      return;
-    }
     setBusyId(lead.offerId);
     try {
       const res = await fetch("/api/leads/respond", {
@@ -138,6 +158,16 @@ export function LeadsView({ onShowToast, previewMode = false }: { onShowToast: S
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Couldn't update lead");
+
+      if (status === "declined") {
+        const next = new Set(declinedIds);
+        next.add(lead.offerId);
+        setDeclinedIds(next);
+        saveDeclinedIds(next);
+        onShowToast({ icon: "x", text: "Lead declined — removed from New." });
+        return;
+      }
+
       const contact = json.contact ?? {};
       setLeads((prev) =>
         prev.map((l) =>
@@ -155,8 +185,7 @@ export function LeadsView({ onShowToast, previewMode = false }: { onShowToast: S
             : l,
         ),
       );
-      setTab("interested");
-      onShowToast({ icon: "phone", text: "Customer details unlocked — reach out now." });
+      onShowToast({ icon: "user-check", text: "Marked as interested — find it in Interested." });
     } catch (e) {
       onShowToast({ icon: "alert-triangle", tone: "coral", text: e instanceof Error ? e.message : "Couldn't update lead" });
     } finally {
@@ -207,26 +236,25 @@ export function LeadsView({ onShowToast, previewMode = false }: { onShowToast: S
     }
   };
 
-  const viewTabs =
-    tab === "interested"
-      ? [
-          { id: "kanban", label: "Board", icon: "columns-3" },
-          { id: "list", label: "List", icon: "list" },
-        ]
-      : [
-          { id: "list", label: "List", icon: "list" },
-          { id: "card", label: "Cards", icon: "layout-grid" },
-        ];
-  const activeView = tab === "interested" ? interestedView : newView;
-  const setActiveView = (id: string) => {
-    if (tab === "interested") setInterestedView(id as InterestedLeadView);
-    else setNewView(id as NewLeadView);
+  const newViewTabs = [
+    { id: "list", label: "List", icon: "list" },
+    { id: "card", label: "Cards", icon: "layout-grid" },
+  ];
+  const interestedViewTabs = [
+    { id: "kanban", label: "Stages", icon: "columns-3" },
+    { id: "list", label: "List", icon: "list" },
+  ];
+  const setInterestedViewPersisted = (view: InterestedLeadView) => {
+    setInterestedView(view);
+    saveInterestedView(view);
   };
 
   const leadTabs = [
     { id: "new", label: "New", icon: "user-plus", count: newLeads.length || undefined },
     { id: "interested", label: "Interested", icon: "phone", count: interestedLeads.length || undefined },
   ];
+
+  const displayLead = (lead: PortalLead) => (redactSensitive ? redactLead(lead) : lead);
 
   return (
     <div style={{ padding: 24, display: "flex", flexDirection: "column", gap: 16, flex: 1, overflow: "auto" }}>
@@ -235,7 +263,9 @@ export function LeadsView({ onShowToast, previewMode = false }: { onShowToast: S
         subtitle="Customer enquiries Fixfy has sent your way. Reach out fast — first contact wins the work."
         actions={
           <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-            <Tabs tabs={viewTabs} active={activeView} onChange={setActiveView} variant="pills" />
+            {tab === "new" && (
+              <Tabs tabs={newViewTabs} active={newView} onChange={(id) => setNewView(id as NewLeadView)} variant="pills" />
+            )}
             <Button variant="secondary" size="sm" icon="refresh-cw" onClick={load}>
               Refresh
             </Button>
@@ -272,55 +302,84 @@ export function LeadsView({ onShowToast, previewMode = false }: { onShowToast: S
         />
       ) : (
         <>
-          <div style={{ fontSize: 12.5, color: T.mute }}>
-            <b style={{ color: T.ink, fontWeight: 500 }}>{activeLeads.length}</b>{" "}
-            {tab === "new" ? (activeLeads.length === 1 ? "new lead" : "new leads") : activeLeads.length === 1 ? "interested lead" : "interested leads"}
-            {tab === "new" && interestedLeads.length > 0 && (
-              <>
-                {" "}
-                · <b style={{ color: T.navy, fontWeight: 500 }}>{interestedLeads.length}</b> in Interested
-              </>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 12,
+              flexWrap: "wrap",
+            }}
+          >
+            <div style={{ fontSize: 12.5, color: T.mute }}>
+              <b style={{ color: T.ink, fontWeight: 500 }}>{activeLeads.length}</b>{" "}
+              {tab === "new" ? (activeLeads.length === 1 ? "new lead" : "new leads") : activeLeads.length === 1 ? "interested lead" : "interested leads"}
+              {tab === "new" && interestedLeads.length > 0 && (
+                <>
+                  {" "}
+                  · <b style={{ color: T.navy, fontWeight: 500 }}>{interestedLeads.length}</b> in Interested
+                </>
+              )}
+            </div>
+            {tab === "interested" && (
+              <Tabs
+                tabs={interestedViewTabs}
+                active={interestedView}
+                onChange={(id) => setInterestedViewPersisted(id as InterestedLeadView)}
+                variant="pills"
+              />
             )}
           </div>
           {tab === "interested" && interestedView === "kanban" ? (
             <LeadKanbanBoard
-              leads={interestedLeads}
+              leads={interestedLeads.map(displayLead)}
               pipelineBusyId={pipelineBusyId}
               notesSavingId={notesSavingId}
               onPipelineChange={updatePipeline}
               onNotesSave={saveNotes}
             />
-          ) : activeView === "list" ? (
+          ) : tab === "new" ? (
+            newView === "list" ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {activeLeads.map((l) => (
+                  <LeadListRow
+                    key={l.offerId}
+                    lead={displayLead(l)}
+                    tab={tab}
+                    busy={busyId === l.offerId}
+                    onContact={() => act(l, "contacted")}
+                    onDecline={() => act(l, "declined")}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 10 }}>
+                {activeLeads.map((l) => (
+                  <LeadCardCompact
+                    key={l.offerId}
+                    lead={displayLead(l)}
+                    tab={tab}
+                    busy={busyId === l.offerId}
+                    pipelineBusy={pipelineBusyId === l.offerId}
+                    notesSaving={notesSavingId === l.offerId}
+                    onContact={() => act(l, "contacted")}
+                    onDecline={() => act(l, "declined")}
+                    onPipelineChange={(s) => updatePipeline(l, s)}
+                    onNotesSave={(notes) => saveNotes(l, notes)}
+                  />
+                ))}
+              </div>
+            )
+          ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               {activeLeads.map((l) => (
                 <LeadListRow
                   key={l.offerId}
-                  lead={l}
+                  lead={displayLead(l)}
                   tab={tab}
                   busy={busyId === l.offerId}
-                  pipelineBusy={pipelineBusyId === l.offerId}
-                  notesSaving={notesSavingId === l.offerId}
                   onContact={() => act(l, "contacted")}
                   onDecline={() => act(l, "declined")}
-                  onPipelineChange={(s) => updatePipeline(l, s)}
-                  onNotesSave={(notes) => saveNotes(l, notes)}
-                />
-              ))}
-            </div>
-          ) : (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 10 }}>
-              {activeLeads.map((l) => (
-                <LeadCardCompact
-                  key={l.offerId}
-                  lead={l}
-                  tab={tab}
-                  busy={busyId === l.offerId}
-                  pipelineBusy={pipelineBusyId === l.offerId}
-                  notesSaving={notesSavingId === l.offerId}
-                  onContact={() => act(l, "contacted")}
-                  onDecline={() => act(l, "declined")}
-                  onPipelineChange={(s) => updatePipeline(l, s)}
-                  onNotesSave={(notes) => saveNotes(l, notes)}
                 />
               ))}
             </div>
@@ -531,16 +590,7 @@ function LeadKanbanBoard({
   };
 
   return (
-    <div
-      style={{
-        display: "grid",
-        gridTemplateColumns: "repeat(4, minmax(200px, 1fr))",
-        gap: 10,
-        flex: 1,
-        minHeight: 360,
-        overflowX: "auto",
-      }}
-    >
+    <div className="fx-leads-stages">
       {LEAD_PIPELINE_STATUSES.map((status) => {
         const items = byStatus(status);
         const highlight = dropColumn === status;
@@ -597,7 +647,6 @@ function LeadKanbanBoard({
                     setDragLeadId(null);
                     setDropColumn(null);
                   }}
-                  onPipelineChange={(s) => onPipelineChange(lead, s)}
                   onNotesSave={(notes) => onNotesSave(lead, notes)}
                 />
               ))}
@@ -630,7 +679,6 @@ function LeadKanbanCard({
   dragging,
   onDragStart,
   onDragEnd,
-  onPipelineChange,
   onNotesSave,
 }: {
   lead: PortalLead;
@@ -639,12 +687,10 @@ function LeadKanbanCard({
   dragging: boolean;
   onDragStart: () => void;
   onDragEnd: () => void;
-  onPipelineChange: (s: LeadPipelineStatus) => void;
   onNotesSave: (notes: string) => Promise<void>;
 }) {
   const [h, setH] = useState(false);
   const timing = leadTiming(lead.priority, lead.requestKind);
-  const pipeline = lead.pipelineStatus ?? "contacted";
 
   return (
     <div
@@ -685,9 +731,6 @@ function LeadKanbanCard({
       </div>
       <LeadContactStrip lead={lead} />
       <LeadNotesField value={lead.notes ?? ""} saving={notesSaving} onSave={onNotesSave} compact />
-      <div style={{ paddingTop: 6, borderTop: `1px solid ${T.line}` }}>
-        <PipelineStatusPicker value={pipeline} busy={busy} onChange={onPipelineChange} compact />
-      </div>
     </div>
   );
 }
@@ -696,22 +739,14 @@ function LeadListRow({
   lead,
   tab,
   busy,
-  pipelineBusy,
-  notesSaving,
   onContact,
   onDecline,
-  onPipelineChange,
-  onNotesSave,
 }: {
   lead: PortalLead;
   tab: LeadTab;
   busy: boolean;
-  pipelineBusy: boolean;
-  notesSaving: boolean;
   onContact: () => void;
   onDecline: () => void;
-  onPipelineChange: (s: LeadPipelineStatus) => void;
-  onNotesSave: (notes: string) => Promise<void>;
 }) {
   const contacted = lead.status === "contacted";
   const timing = leadTiming(lead.priority, lead.requestKind);
@@ -754,9 +789,11 @@ function LeadListRow({
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
           {tab === "new" ? (
             <>
-              <Button variant="ghost" size="sm" onClick={onDecline} disabled={busy}>Decline</Button>
-              <Button variant="primary" size="sm" icon="phone" onClick={onContact} disabled={busy}>
-                {busy ? "…" : "Contact"}
+              <Button variant="ghost" size="sm" onClick={onDecline} disabled={busy}>
+                Decline
+              </Button>
+              <Button variant="primary" size="sm" icon="user-check" onClick={onContact} disabled={busy}>
+                {busy ? "…" : "Interested"}
               </Button>
             </>
           ) : (
@@ -764,18 +801,6 @@ function LeadListRow({
           )}
         </div>
       </div>
-
-      {tab === "interested" && (
-        <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${T.line}`, display: "flex", flexDirection: "column", gap: 10 }}>
-          <LeadNotesField value={lead.notes ?? ""} saving={notesSaving} onSave={onNotesSave} />
-          <div>
-            <div style={{ fontSize: 10.5, color: T.mute, marginBottom: 6, textTransform: "uppercase", letterSpacing: 0.4, fontWeight: 600 }}>
-              Pipeline
-            </div>
-            <PipelineStatusPicker value={pipeline} busy={pipelineBusy} onChange={onPipelineChange} compact />
-          </div>
-        </div>
-      )}
     </Card>
   );
 }
@@ -845,9 +870,11 @@ function LeadCardCompact({
 
       {tab === "new" ? (
         <div style={{ display: "flex", gap: 8, marginTop: 2 }}>
-          <Button variant="ghost" size="sm" onClick={onDecline} disabled={busy} style={{ flex: 1 }}>Decline</Button>
-          <Button variant="primary" size="sm" icon="phone" onClick={onContact} disabled={busy} style={{ flex: 1 }}>
-            {busy ? "…" : "Contact"}
+          <Button variant="ghost" size="sm" onClick={onDecline} disabled={busy} style={{ flex: 1 }}>
+            Decline
+          </Button>
+          <Button variant="primary" size="sm" icon="user-check" onClick={onContact} disabled={busy} style={{ flex: 1 }}>
+            {busy ? "…" : "Interested"}
           </Button>
         </div>
       ) : (
@@ -888,7 +915,15 @@ function acceptJobErrorMessage(json: { code?: string; message?: string; error?: 
   return json.message || json.error || "Couldn't accept job";
 }
 
-export function AvailableJobsView({ onShowToast, previewMode = false }: { onShowToast: ShowToast; previewMode?: boolean }) {
+export function AvailableJobsView({
+  onShowToast,
+  previewMode = false,
+  redactSensitive = false,
+}: {
+  onShowToast: ShowToast;
+  previewMode?: boolean;
+  redactSensitive?: boolean;
+}) {
   const partner = usePartner();
   const myJobs = useMyJobs();
   const [jobs, setJobs] = useState<AvailableJob[]>([]);
@@ -983,7 +1018,13 @@ export function AvailableJobsView({ onShowToast, previewMode = false }: { onShow
           </span>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 12 }}>
             {jobs.map((j) => (
-              <AvailableJobCard key={j.id} job={j} accepting={acceptingId === j.id} onAccept={() => accept(j)} />
+              <AvailableJobCard
+                key={j.id}
+                job={redactSensitive ? redactAvailableJob(j) : j}
+                accepting={acceptingId === j.id}
+                onAccept={() => accept(j)}
+                locked={redactSensitive}
+              />
             ))}
           </div>
         </>
@@ -992,7 +1033,17 @@ export function AvailableJobsView({ onShowToast, previewMode = false }: { onShow
   );
 }
 
-function AvailableJobCard({ job, accepting, onAccept }: { job: AvailableJob; accepting: boolean; onAccept: () => void }) {
+function AvailableJobCard({
+  job,
+  accepting,
+  onAccept,
+  locked = false,
+}: {
+  job: AvailableJob;
+  accepting: boolean;
+  onAccept: () => void;
+  locked?: boolean;
+}) {
   return (
     <Card
       hover
@@ -1049,7 +1100,7 @@ function AvailableJobCard({ job, accepting, onAccept }: { job: AvailableJob; acc
           </div>
           <div style={{ textAlign: "right", flexShrink: 0 }}>
             <div style={{ fontFamily: T.mono, fontSize: 22, fontWeight: 500, color: T.navy, lineHeight: 1 }}>
-              {formatGBP(job.total)}
+              {locked ? "£•••" : formatGBP(job.total)}
             </div>
             <div style={{ fontSize: 10.5, color: T.coral, marginTop: 4, letterSpacing: 0.3, fontWeight: 600 }}>
               inc VAT
@@ -1074,8 +1125,8 @@ function AvailableJobCard({ job, accepting, onAccept }: { job: AvailableJob; acc
 
         <div style={{ marginTop: 14, display: "flex", alignItems: "center", gap: 10 }}>
           <span style={{ flex: 1 }} />
-          <Button variant="dark" size="sm" icon="check" onClick={onAccept} disabled={accepting}>
-            {accepting ? "Accepting…" : "Accept job"}
+          <Button variant="dark" size="sm" icon="check" onClick={onAccept} disabled={accepting || locked}>
+            {locked ? "Add card to accept" : accepting ? "Accepting…" : "Accept job"}
           </Button>
         </div>
       </div>
@@ -1086,7 +1137,15 @@ function AvailableJobCard({ job, accepting, onAccept }: { job: AvailableJob; acc
 // ============================================================
 // AVAILABLE QUOTES
 // ============================================================
-export function AvailableQuotesView({ onShowToast, previewMode = false }: { onShowToast: ShowToast; previewMode?: boolean }) {
+export function AvailableQuotesView({
+  onShowToast,
+  previewMode = false,
+  redactSensitive = false,
+}: {
+  onShowToast: ShowToast;
+  previewMode?: boolean;
+  redactSensitive?: boolean;
+}) {
   const partner = usePartner();
   const [tab, setTab] = useState<QuoteRequestStatus>("to-quote");
   const [drawerQuote, setDrawerQuote] = useState<QuoteRequest | null>(null);
@@ -1158,7 +1217,13 @@ export function AvailableQuotesView({ onShowToast, previewMode = false }: { onSh
           />
         ) : (
           segments[tab].map((q) => (
-            <QuoteRow key={q.id} q={q} status={tab} onOpen={() => !previewMode && setDrawerQuote(q)} />
+            <QuoteRow
+              key={q.id}
+              q={redactSensitive ? redactQuote(q) : q}
+              status={tab}
+              locked={redactSensitive}
+              onOpen={() => !previewMode && setDrawerQuote(q)}
+            />
           ))
         )}
       </div>
@@ -1181,7 +1246,17 @@ export function AvailableQuotesView({ onShowToast, previewMode = false }: { onSh
   );
 }
 
-function QuoteRow({ q, status, onOpen }: { q: QuoteRequest; status: QuoteRequestStatus; onOpen: () => void }) {
+function QuoteRow({
+  q,
+  status,
+  onOpen,
+  locked = false,
+}: {
+  q: QuoteRequest;
+  status: QuoteRequestStatus;
+  onOpen: () => void;
+  locked?: boolean;
+}) {
   const serviceType = q.serviceType || q.trades[0] || q.title;
   const address = q.propertyAddress || q.postcode || "—";
 
@@ -1223,7 +1298,9 @@ function QuoteRow({ q, status, onOpen }: { q: QuoteRequest; status: QuoteRequest
           )}
           {status === "to-quote" && (
             <div onClick={(e) => e.stopPropagation()}>
-              <Button variant="primary" size="sm" icon="send" onClick={onOpen}>Submit quote</Button>
+              <Button variant="primary" size="sm" icon="send" onClick={onOpen} disabled={locked}>
+                {locked ? "Add card" : "Submit quote"}
+              </Button>
             </div>
           )}
           {status === "submitted" && (

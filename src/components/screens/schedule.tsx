@@ -60,7 +60,15 @@ function mondayOf(date: Date): Date {
 }
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
-export function ScheduleView({ onOpenJob, previewMode = false }: { onOpenJob: OpenJob; previewMode?: boolean }) {
+export function ScheduleView({
+  onOpenJob,
+  previewMode = false,
+  redactSensitive = false,
+}: {
+  onOpenJob: OpenJob;
+  previewMode?: boolean;
+  redactSensitive?: boolean;
+}) {
   const { jobs, loading, error, refresh } = useMyJobs();
   const [view, setView] = useState("month");
   const [cursor, setCursor] = useState<Date>(() => {
@@ -84,10 +92,10 @@ export function ScheduleView({ onOpenJob, previewMode = false }: { onOpenJob: Op
       const ev: SchedEvent = {
         jobId: j.id,
         date: j.scheduledDate,
-        title: j.title,
-        customer: j.customer.name,
+        title: redactSensitive ? "Assigned job" : j.title,
+        customer: redactSensitive ? "Customer" : j.customer.name,
         status: j.status,
-        total: j.total,
+        total: redactSensitive ? 0 : j.total,
         startMin: start ? start.h * 60 + start.m : null,
         endMin: end ? end.h * 60 + end.m : null,
         startLabel: j.scheduled?.split(", ")[1]?.split("–")[0] ?? "",
@@ -102,7 +110,7 @@ export function ScheduleView({ onOpenJob, previewMode = false }: { onOpenJob: Op
     let count = 0;
     for (const [date, arr] of map) if (date.startsWith(monthPrefix)) count += arr.length;
     return { byDate: map, eventsInMonth: count };
-  }, [jobs, cursor]);
+  }, [jobs, cursor, redactSensitive]);
 
   const monthLabel = cursor.toLocaleDateString("en-GB", { month: "long", year: "numeric" });
   const stepCursor = (dir: number) => {

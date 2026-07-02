@@ -17,13 +17,17 @@ async function applySubscription(admin: Admin, sub: Stripe.Subscription) {
   const periodEnd = sub.items?.data?.[0]?.current_period_end ?? null;
   const priceId = sub.items?.data?.[0]?.price?.id ?? null;
   const plan = planIdForPriceId(priceId) ?? (sub.metadata?.plan as string | undefined) ?? "pro";
-  const update = {
+  const update: Record<string, unknown> = {
     subscription_status: sub.status,
     plan,
     stripe_customer_id: customerId,
     current_period_end: tsToIso(periodEnd),
     trial_ends_at: tsToIso(sub.trial_end),
   };
+  if (sub.status === "active" || sub.status === "trialing") {
+    update.status = "active";
+    update.billing_ready = true;
+  }
   const partnerId = sub.metadata?.partner_id;
   if (partnerId) {
     await admin.from("partners").update(update).eq("id", partnerId);

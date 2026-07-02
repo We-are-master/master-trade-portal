@@ -5,6 +5,7 @@ import { getPartnerSession } from "@/lib/partner-auth";
 import { createServiceClient } from "@/lib/supabase/service";
 import { getClientIp } from "@/lib/client-ip";
 import { PARTNER_CONTRACT_TYPES } from "@/lib/partner-contract-types";
+import { syncSignedContractToPartnerDocument } from "@/lib/partner-agreement-doc-sync";
 import {
   decodeSignatureBase64,
   fetchCompanyName,
@@ -85,6 +86,12 @@ export async function POST(req: Request) {
         deviceInfo,
         companyName,
         signedAt,
+      });
+      await syncSignedContractToPartnerDocument(svc, {
+        partnerId: session.partnerId,
+        contractType: result.contractType,
+        signaturePdfUrl: result.signaturePdfUrl,
+        signedAt: result.signedAt,
       });
       results.push({
         contractType: result.contractType,

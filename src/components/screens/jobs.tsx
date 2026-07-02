@@ -23,6 +23,7 @@ import { formatGBP } from "@/lib/format";
 import { jobMatchesDateFilter } from "@/lib/date-range-filter";
 import { useDateRangeFilter } from "@/hooks/use-date-range-filter";
 import { OnHoldResponseForm } from "@/components/screens/on-hold-response-form";
+import { redactMyJob } from "@/lib/preview-redact";
 import { useMyJobs } from "@/components/jobs-context";
 import { useToast } from "@/components/ui/toast";
 import type { JobSource, JobStatus, MyJob } from "@/types";
@@ -33,10 +34,12 @@ export function MyJobsView({
   onOpenJob,
   defaultView = "board",
   previewMode = false,
+  redactSensitive = false,
 }: {
   onOpenJob: OpenJob;
   defaultView?: string;
   previewMode?: boolean;
+  redactSensitive?: boolean;
 }) {
   const [view, setView] = useState(defaultView);
   const { jobs, loading, error } = useMyJobs();
@@ -45,6 +48,11 @@ export function MyJobsView({
   const filteredJobs = useMemo(
     () => jobs.filter((j) => jobMatchesDateFilter(j, dateFilter)),
     [jobs, dateFilter],
+  );
+
+  const displayJobs = useMemo(
+    () => (redactSensitive ? filteredJobs.map(redactMyJob) : filteredJobs),
+    [filteredJobs, redactSensitive],
   );
 
   const tabs = [
@@ -79,7 +87,7 @@ export function MyJobsView({
         <EmptyState icon="loader" title="Loading your jobs…" />
       ) : jobs.length === 0 ? (
         <EmptyState icon="briefcase" title="No jobs yet" hint="Accepted jobs and assignments will appear here." />
-      ) : filteredJobs.length === 0 ? (
+      ) : displayJobs.length === 0 ? (
         <EmptyState
           icon="calendar"
           title="No jobs in this period"
@@ -87,9 +95,9 @@ export function MyJobsView({
         />
       ) : (
         <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", overflow: "hidden" }}>
-          {view === "board" && <JobsBoard onOpenJob={onOpenJob} jobs={filteredJobs} />}
-          {view === "list" && <JobsList onOpenJob={onOpenJob} jobs={filteredJobs} />}
-          {view === "map" && <JobsMap onOpenJob={onOpenJob} jobs={filteredJobs} />}
+          {view === "board" && <JobsBoard onOpenJob={onOpenJob} jobs={displayJobs} />}
+          {view === "list" && <JobsList onOpenJob={onOpenJob} jobs={displayJobs} />}
+          {view === "map" && <JobsMap onOpenJob={onOpenJob} jobs={displayJobs} />}
         </div>
       )}
     </div>

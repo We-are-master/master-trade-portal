@@ -845,50 +845,19 @@ export function Modal({
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
   return (
-    <div
-      style={{
-        position: "fixed",
-        inset: 0,
-        zIndex: 60,
-        background: "rgba(2,0,64,0.48)",
-        backdropFilter: "blur(4px)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        animation: "fx-fade-in 200ms",
-      }}
-      onClick={onClose}
-    >
+    <div className="fx-modal-backdrop" onClick={onClose}>
       <div
+        className="fx-rise fx-modal-panel"
+        style={{ ["--fx-modal-width" as string]: `${width}px` }}
         onClick={(e) => e.stopPropagation()}
-        className="fx-rise"
-        style={{
-          background: T.white,
-          borderRadius: 16,
-          width,
-          maxWidth: "94vw",
-          maxHeight: "90vh",
-          display: "flex",
-          flexDirection: "column",
-          overflow: "hidden",
-          boxShadow: "0 24px 48px rgba(2,0,64,0.16)",
-        }}
       >
         {title !== undefined && (
-          <div
-            style={{
-              padding: "14px 18px",
-              borderBottom: `1px solid ${T.line}`,
-              display: "flex",
-              alignItems: "center",
-              gap: 12,
-            }}
-          >
-            <div style={{ flex: 1, fontSize: 15, fontWeight: 500, color: T.navy }}>{title}</div>
+          <div className="fx-modal-header">
+            <div className="fx-modal-title">{title}</div>
             <IconButton icon="x" size={30} tone="ghost" onClick={onClose} />
           </div>
         )}
-        <div style={{ flex: 1, overflow: "auto" }}>{children}</div>
+        <div className="fx-modal-body">{children}</div>
       </div>
     </div>
   );

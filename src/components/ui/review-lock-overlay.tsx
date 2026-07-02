@@ -7,22 +7,37 @@ import { Button, Icon } from "@/components/ui/primitives";
 export function ReviewLockOverlay({
   children,
   pageLabel,
-  onOpenSettings,
+  onPrimaryAction,
+  onMinimize,
 }: {
   children: ReactNode;
   pageLabel?: string;
-  onOpenSettings?: () => void;
+  onPrimaryAction?: () => void;
+  onMinimize?: () => void;
 }) {
+  const message = pageLabel
+    ? `${pageLabel} unlocks once Fixfy approves your account in the OS. Browse below — customer details and actions stay paused until then.`
+    : "We're reviewing your profile and documents in the OS. You can preview your portal now; work actions unlock after approval.";
+
   return (
-    <div style={{ position: "relative", flex: 1, minHeight: 0, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+    <div
+      style={{
+        position: "relative",
+        flex: 1,
+        minHeight: 0,
+        display: "flex",
+        flexDirection: "column",
+        overflow: "hidden",
+      }}
+    >
       <div
         aria-hidden
         style={{
           flex: 1,
           minHeight: 0,
           overflow: "auto",
-          opacity: 0.42,
-          filter: "blur(1px)",
+          opacity: 0.38,
+          filter: "blur(2px)",
           pointerEvents: "none",
           userSelect: "none",
         }}
@@ -37,8 +52,8 @@ export function ReviewLockOverlay({
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          padding: 24,
-          background: "linear-gradient(180deg, rgba(248,248,252,0.55) 0%, rgba(248,248,252,0.82) 100%)",
+          padding: "max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom))",
+          background: "linear-gradient(180deg, rgba(248,248,252,0.6) 0%, rgba(248,248,252,0.88) 100%)",
           pointerEvents: "none",
         }}
       >
@@ -47,7 +62,7 @@ export function ReviewLockOverlay({
             pointerEvents: "auto",
             maxWidth: 420,
             width: "100%",
-            padding: "28px 26px",
+            padding: "22px 20px",
             borderRadius: 16,
             background: T.white,
             border: `1px solid ${T.line}`,
@@ -57,30 +72,48 @@ export function ReviewLockOverlay({
         >
           <div
             style={{
-              width: 52,
-              height: 52,
+              width: 48,
+              height: 48,
               borderRadius: 14,
-              margin: "0 auto 16px",
+              margin: "0 auto 14px",
               display: "grid",
               placeItems: "center",
               background: T.amber50,
               border: `1px solid ${T.amber}`,
             }}
           >
-            <Icon name="clock" size={24} color={T.amber} />
+            <Icon name="clock" size={22} color={T.amber} />
           </div>
-          <div style={{ fontSize: 20, fontWeight: 700, color: T.navy, letterSpacing: "-0.02em", marginBottom: 8 }}>
-            Account in review
+          <div style={{ fontSize: 18, fontWeight: 700, color: T.navy, letterSpacing: "-0.02em", marginBottom: 8 }}>
+            Awaiting OS approval
           </div>
-          <p style={{ fontSize: 14, color: T.mute, lineHeight: 1.55, margin: "0 0 18px" }}>
-            {pageLabel
-              ? `${pageLabel} unlocks once Fixfy approves your account. Browse your dashboard below — actions stay paused until then.`
-              : "We're reviewing your profile and documents. You can preview your portal now; work actions unlock after approval."}
-          </p>
-          {onOpenSettings && (
-            <Button variant="secondary" size="sm" icon="settings" onClick={onOpenSettings}>
+          <p style={{ fontSize: 14, color: T.mute, lineHeight: 1.55, margin: "0 0 16px" }}>{message}</p>
+          {onPrimaryAction && (
+            <Button variant="secondary" size="sm" icon="settings" onClick={onPrimaryAction}>
               Update profile in Settings
             </Button>
+          )}
+          {onMinimize && (
+            <button
+              type="button"
+              onClick={onMinimize}
+              style={{
+                display: "block",
+                width: "100%",
+                marginTop: 12,
+                padding: 0,
+                border: "none",
+                background: "none",
+                fontFamily: T.sans,
+                fontSize: 13,
+                color: T.mute,
+                cursor: "pointer",
+                textDecoration: "underline",
+                textUnderlineOffset: 3,
+              }}
+            >
+              Browse portal — details stay locked until approval
+            </button>
           )}
         </div>
       </div>

@@ -1,10 +1,20 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Elements, PaymentElement, useElements, useStripe } from "@stripe/react-stripe-js";
 import { loadStripe, type StripeElementsOptions } from "@stripe/stripe-js";
 import { T } from "@/lib/tokens";
 import { Button } from "@/components/ui/primitives";
+
+async function readJsonResponse<T>(res: Response): Promise<T> {
+  const text = await res.text();
+  if (!text.trim()) return {} as T;
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    throw new Error("Unexpected response from server. Check Stripe env configuration.");
+  }
+}
 
 function SetupForm({ onSuccess, onError }: { onSuccess: () => void; onError: (msg: string) => void }) {
   const stripe = useStripe();
@@ -32,7 +42,7 @@ function SetupForm({ onSuccess, onError }: { onSuccess: () => void; onError: (ms
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ setupIntentId: setupIntent.id }),
       });
-      const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
+      const data = await readJsonResponse<{ ok?: boolean; error?: string }>(res);
       if (!res.ok || !data.ok) throw new Error(data.error || "Couldn't confirm card setup.");
       onSuccess();
     } catch (e) {
@@ -67,24 +77,40 @@ export function PaymentMethodSetup({
     void (async () => {
       try {
         const res = await fetch("/api/billing/setup-intent", { method: "POST" });
-        const data = (await res.json()) as { clientSecret?: string; publishableKey?: string; error?: string };
-        if (!res.ok || !data.clientSecret) throw new Error(data.error || "Couldn't start card setup.");
+        const data = await readJsonResponse<{
+          clientSecret?: string;
+          publishableKey?: string | null;
+          error?: string;
+        }>(res);
+        if (!res.ok || !data.clientSecret) {
+          throw new Error(data.error || "Couldn't start card setup.");
+        }
+        const pk = data.publishableKey ?? process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY?.trim() ?? "";
+        if (!pk) {
+          throw new Error("Stripe publishable key is not configured (NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY).");
+        }
         setClientSecret(data.clientSecret);
-        setPublishableKey(data.publishableKey ?? process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? null);
+        setPublishableKey(pk);
       } catch (e) {
-        setLoadError(e instanceof Error ? e.message : "Couldn't load payment form.");
+        const msg = e instanceof Error ? e.message : "Couldn't load payment form.";
+        setLoadError(msg);
+        onError?.(msg);
       }
     })();
-  }, []);
+  }, [onError]);
+
+  const stripePromise = useMemo(
+    () => (publishableKey ? loadStripe(publishableKey) : null),
+    [publishableKey],
+  );
 
   if (loadError) {
-    return <p style={{ fontSize: 14, color: T.coral, margin: 0 }}>{loadError}</p>;
+    return <p style={{ fontSize: 14, color: T.coral, margin: 0, lineHeight: 1.45 }}>{loadError}</p>;
   }
-  if (!clientSecret || !publishableKey) {
+  if (!clientSecret || !stripePromise) {
     return <p style={{ fontSize: 14, color: T.mute, margin: 0 }}>Loading secure payment form…</p>;
   }
 
-  const stripePromise = loadStripe(publishableKey);
   const options: StripeElementsOptions = { clientSecret, appearance: { theme: "stripe" } };
 
   return (
