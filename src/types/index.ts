@@ -43,6 +43,10 @@ export interface Partner {
   plan: string;
   billingReady: boolean;
   subscriptionStatus: string | null;
+  /** ISO timestamp set when the /get-started wizard finishes. Null while the wizard is still in progress. */
+  wizardCompletedAt?: string | null;
+  /** `subscription` = billed via Stripe · `free` = ops-managed free tier · null = admin has not tiered them yet. */
+  accountType?: "subscription" | "free" | null;
 }
 
 // master-os: clients / contacts on a job.

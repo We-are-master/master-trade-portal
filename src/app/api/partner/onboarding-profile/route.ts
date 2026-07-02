@@ -120,7 +120,9 @@ export async function POST(req: NextRequest) {
   if (trades.length) {
     update.trades = orderedTrades;
     update.trade = primaryTrade;
-    update.catalog_service_ids = catalogServiceIds.length ? catalogServiceIds : null;
+    // NOT NULL constraint on catalog_service_ids in some environments — an
+    // empty array is the correct "none selected" value, never null.
+    update.catalog_service_ids = catalogServiceIds;
   }
   if (legalType) {
     update.partner_legal_type = legalType;

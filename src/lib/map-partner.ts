@@ -31,6 +31,8 @@ export interface PartnerRow {
   years_experience?: number | null;
   service_radius_miles?: number | null;
   excluded_postcodes?: string[] | null;
+  wizard_completed_at?: string | null;
+  account_type?: string | null;
 }
 
 function initialsFrom(name: string): string {
@@ -77,5 +79,10 @@ export function mapPartner(row: PartnerRow): Partner {
     plan: row.plan?.trim() || "pro",
     billingReady: Boolean(row.billing_ready),
     subscriptionStatus: row.subscription_status?.trim() || null,
+    wizardCompletedAt: row.wizard_completed_at ?? null,
+    accountType:
+      row.account_type === "subscription" || row.account_type === "free"
+        ? row.account_type
+        : null,
   };
 }

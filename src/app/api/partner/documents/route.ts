@@ -8,6 +8,7 @@ import {
   resolvePartnerDocExpiresAt,
 } from "@/lib/partner-required-docs";
 import { createServiceClient } from "@/lib/supabase/service";
+import { resolvePartnerPortalCredential } from "@/lib/partner-portal-session";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -31,7 +32,6 @@ function insertErrorMessage(code: string | undefined, message: string): string {
 
 export async function POST(req: Request) {
   const session = await getPartnerSession();
-  if (!session) return NextResponse.json({ error: "Not signed in" }, { status: 401 });
 
   let form: FormData;
   try {
@@ -39,6 +39,19 @@ export async function POST(req: Request) {
   } catch {
     return NextResponse.json({ error: "Invalid multipart body" }, { status: 400 });
   }
+
+  // Fallback: if the OTP session cookie hasn't stuck yet, accept the wizard's
+  // draft `code` in the form data and resolve the partner from that instead.
+  let partnerId = session?.partnerId ?? "";
+  if (!partnerId) {
+    const draftCode = String(form.get("code") ?? "").trim();
+    if (draftCode) {
+      const draft = await resolvePartnerPortalCredential(draftCode);
+      if (draft?.partnerId) partnerId = draft.partnerId;
+    }
+  }
+  if (!partnerId) return NextResponse.json({ error: "Not signed in" }, { status: 401 });
+
   const docType = String(form.get("docType") ?? "").trim();
   const name = String(form.get("name") ?? "").trim();
   const file = form.get("file");
@@ -51,7 +64,7 @@ export async function POST(req: Request) {
 
   const svc = createServiceClient();
   const ts = new Date().toISOString().replace(/[:.]/g, "-");
-  const path = `${session.partnerId}/${docType}-${ts}.${extFromName(file.name)}`;
+  const path = `${partnerId}/${docType}-${ts}.${extFromName(file.name)}`;
   const bytes = new Uint8Array(await file.arrayBuffer());
   const { error: upErr } = await svc.storage.from(BUCKET).upload(path, bytes, {
     contentType: file.type || "application/octet-stream",
@@ -66,7 +79,7 @@ export async function POST(req: Request) {
   const { data: row, error: insErr } = await svc
     .from("partner_documents")
     .insert({
-      partner_id: session.partnerId,
+      partner_id: partnerId,
       doc_type: docType,
       name: name || defaultName,
       file_name: file.name,

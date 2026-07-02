@@ -18,6 +18,15 @@ export type OnboardingDraftInput = {
   trades?: string[];
   primaryTrade?: string;
   catalogServiceIds?: string[];
+  /** Business type — Step 3 of the wizard. */
+  legalType?: "self_employed" | "limited_company" | null;
+  /** UTR (sole trader) or CRN (limited company). */
+  regNumber?: string;
+  vatRegistered?: boolean | null;
+  vatNumber?: string;
+  /** Coverage — Step 6. */
+  coveragePostcode?: string;
+  coverageRadius?: number;
 };
 
 export type OnboardingDraftResult = {
@@ -126,6 +135,22 @@ export async function upsertOnboardingDraft(
     typeof input.primaryTrade === "string" && input.primaryTrade.trim()
       ? input.primaryTrade.trim()
       : trades[0] ?? "";
+  const legalType =
+    input.legalType === "self_employed" || input.legalType === "limited_company"
+      ? input.legalType
+      : null;
+  const regNumber =
+    typeof input.regNumber === "string" ? input.regNumber.trim().slice(0, 32) : "";
+  const vatNumber = typeof input.vatNumber === "string" ? input.vatNumber.trim().slice(0, 32) : "";
+  const coveragePostcode =
+    typeof input.coveragePostcode === "string"
+      ? input.coveragePostcode.trim().toUpperCase().slice(0, 16)
+      : "";
+  const coverageRadiusRaw =
+    typeof input.coverageRadius === "number" ? input.coverageRadius : Number(input.coverageRadius);
+  const coverageRadius = Number.isFinite(coverageRadiusRaw)
+    ? Math.max(1, Math.min(50, Math.round(coverageRadiusRaw)))
+    : null;
 
   const resolved = await resolvePartnerId(supabase, input);
   let partnerId = resolved?.partnerId;
@@ -151,7 +176,7 @@ export async function upsertOnboardingDraft(
         phone: phone || null,
         trade: primaryTrade || "",
         trades: orderedTrades,
-        catalog_service_ids: catalogServiceIds.length ? catalogServiceIds : null,
+        catalog_service_ids: catalogServiceIds,
         status: "onboarding",
         verified: false,
         partner_legal_type: "self_employed",
@@ -191,7 +216,34 @@ export async function upsertOnboardingDraft(
       : trades;
     update.trades = orderedTrades;
     update.trade = primaryTrade;
-    update.catalog_service_ids = catalogServiceIds.length ? catalogServiceIds : null;
+    update.catalog_service_ids = catalogServiceIds;
+  }
+  if (legalType || input.legalType !== undefined) {
+    update.partner_legal_type = legalType;
+    // UTR belongs to sole traders, CRN to limited companies. Keep the row
+    // clean by only writing the side that matches; blank the other side.
+    if (legalType === "self_employed") {
+      update.utr = regNumber || null;
+      update.crn = null;
+    } else if (legalType === "limited_company") {
+      update.crn = regNumber || null;
+      update.utr = null;
+    }
+  } else if (regNumber && input.legalType === undefined) {
+    // Draft came in with a reg number but no legal type context — leave the
+    // decision to the next save so we don't clobber a stored value.
+  }
+  if (input.vatRegistered !== undefined) {
+    update.vat_registered = input.vatRegistered ?? null;
+    update.vat_number = input.vatRegistered ? vatNumber || null : null;
+  }
+  if (coveragePostcode || coverageRadius != null) {
+    if (coveragePostcode) {
+      update.coverage_base_postcode = coveragePostcode;
+      update.location = coveragePostcode;
+    }
+    if (coverageRadius != null) update.service_radius_miles = coverageRadius;
+    update.coverage_mode = "radius";
   }
 
   const { error: updateErr } = await supabase.from("partners").update(update).eq("id", partnerId);
@@ -204,10 +256,7 @@ export async function upsertOnboardingDraft(
   return { partnerId, draftCode, created };
 }
 
-export async function loadOnboardingDraft(
-  supabase: SupabaseClient,
-  code: string,
-): Promise<{
+export interface LoadedOnboardingDraft {
   email: string;
   fullName: string;
   company: string;
@@ -215,13 +264,26 @@ export async function loadOnboardingDraft(
   partnerAddress: string;
   trades: string[];
   catalogServiceIds: string[];
-} | null> {
+  legalType: "self_employed" | "limited_company" | null;
+  regNumber: string;
+  vatRegistered: boolean | null;
+  vatNumber: string;
+  coveragePostcode: string;
+  coverageRadius: number | null;
+}
+
+export async function loadOnboardingDraft(
+  supabase: SupabaseClient,
+  code: string,
+): Promise<LoadedOnboardingDraft | null> {
   const resolved = await resolvePartnerId(supabase, { draftCode: code, inviteCode: code });
   if (!resolved) return null;
 
   const { data: partner, error } = await supabase
     .from("partners")
-    .select("email, contact_name, company_name, phone, partner_address, trades, trade, catalog_service_ids, auth_user_id")
+    .select(
+      "email, contact_name, company_name, phone, partner_address, trades, trade, catalog_service_ids, partner_legal_type, utr, crn, vat_registered, vat_number, coverage_base_postcode, service_radius_miles",
+    )
     .eq("id", resolved.partnerId)
     .maybeSingle();
 
@@ -235,9 +297,14 @@ export async function loadOnboardingDraft(
     trades?: string[] | null;
     trade?: string | null;
     catalog_service_ids?: string[] | null;
-    auth_user_id?: string | null;
+    partner_legal_type?: string | null;
+    utr?: string | null;
+    crn?: string | null;
+    vat_registered?: boolean | null;
+    vat_number?: string | null;
+    coverage_base_postcode?: string | null;
+    service_radius_miles?: number | null;
   };
-  if (p.auth_user_id?.trim()) return null;
 
   const trades =
     p.trades?.length && p.trades.some((t) => t?.trim())
@@ -245,6 +312,17 @@ export async function loadOnboardingDraft(
       : p.trade?.trim()
         ? [p.trade.trim()]
         : [];
+
+  const legalType =
+    p.partner_legal_type === "self_employed" || p.partner_legal_type === "limited_company"
+      ? (p.partner_legal_type as "self_employed" | "limited_company")
+      : null;
+  const regNumber =
+    (legalType === "self_employed" ? p.utr?.trim() : p.crn?.trim()) ??
+    p.utr?.trim() ??
+    p.crn?.trim() ??
+    "";
+  const rawRadius = Number(p.service_radius_miles ?? 0);
 
   return {
     email: p.email?.trim() ?? "",
@@ -256,5 +334,11 @@ export async function loadOnboardingDraft(
     catalogServiceIds: Array.isArray(p.catalog_service_ids)
       ? p.catalog_service_ids.filter((id): id is string => typeof id === "string" && id.trim().length > 0)
       : [],
+    legalType,
+    regNumber,
+    vatRegistered: p.vat_registered ?? null,
+    vatNumber: p.vat_number?.trim() ?? "",
+    coveragePostcode: p.coverage_base_postcode?.trim().toUpperCase() ?? "",
+    coverageRadius: rawRadius >= 1 && rawRadius <= 50 ? Math.round(rawRadius) : null,
   };
 }

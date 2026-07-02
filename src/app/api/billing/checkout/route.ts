@@ -6,12 +6,20 @@ import { parsePlanId, priceIdForPlan, type PlanId } from "@/lib/plan-catalog";
 import { requireStripe } from "@/lib/stripe";
 import { getPartnerSession } from "@/lib/partner-auth";
 import { createServiceClient } from "@/lib/supabase/service";
+import { partnerBillingAllowed } from "@/lib/partner-billing-guard";
 
 export const runtime = "nodejs";
 
 export async function POST(req: NextRequest) {
   const session = await getPartnerSession();
   if (!session) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+
+  if (!(await partnerBillingAllowed(createServiceClient(), session.partnerId))) {
+    return NextResponse.json(
+      { error: "billing_disabled", message: "This account is not on a paid plan." },
+      { status: 403 },
+    );
+  }
 
   let bodyPlan: PlanId | null = null;
   try {

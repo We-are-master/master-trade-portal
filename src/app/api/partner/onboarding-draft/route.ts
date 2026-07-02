@@ -33,6 +33,13 @@ export async function POST(req: NextRequest) {
 
   try {
     const svc = createServiceClient();
+    const rawLegal = typeof body.legalType === "string" ? body.legalType.trim() : "";
+    const legalType =
+      rawLegal === "self_employed" || rawLegal === "limited_company"
+        ? (rawLegal as "self_employed" | "limited_company")
+        : rawLegal === ""
+          ? undefined
+          : null;
     const result = await upsertOnboardingDraft(svc, {
       inviteCode: typeof body.inviteCode === "string" ? body.inviteCode : undefined,
       draftCode: typeof body.draftCode === "string" ? body.draftCode : undefined,
@@ -41,9 +48,28 @@ export async function POST(req: NextRequest) {
       company: typeof body.company === "string" ? body.company : undefined,
       phone: typeof body.phone === "string" ? body.phone : undefined,
       partnerAddress: typeof body.partnerAddress === "string" ? body.partnerAddress : undefined,
-      trades: Array.isArray(body.trades) ? body.trades : undefined,
+      trades: Array.isArray(body.trades) ? (body.trades as string[]) : undefined,
       primaryTrade: typeof body.primaryTrade === "string" ? body.primaryTrade : undefined,
-      catalogServiceIds: Array.isArray(body.catalogServiceIds) ? body.catalogServiceIds : undefined,
+      catalogServiceIds: Array.isArray(body.catalogServiceIds)
+        ? (body.catalogServiceIds as string[])
+        : undefined,
+      legalType,
+      regNumber: typeof body.regNumber === "string" ? body.regNumber : undefined,
+      vatRegistered:
+        typeof body.vatRegistered === "boolean"
+          ? body.vatRegistered
+          : body.vatRegistered === null
+            ? null
+            : undefined,
+      vatNumber: typeof body.vatNumber === "string" ? body.vatNumber : undefined,
+      coveragePostcode:
+        typeof body.coveragePostcode === "string" ? body.coveragePostcode : undefined,
+      coverageRadius:
+        typeof body.coverageRadius === "number"
+          ? body.coverageRadius
+          : typeof body.coverageRadius === "string"
+            ? Number(body.coverageRadius)
+            : undefined,
     });
     return NextResponse.json({ ok: true, ...result });
   } catch (e) {

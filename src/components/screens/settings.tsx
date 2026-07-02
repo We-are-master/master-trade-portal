@@ -14,6 +14,7 @@ import { SignaturePad } from "@/components/ui/signature-pad";
 import { useToast } from "@/components/ui/toast";
 import { PartnerRatingCard } from "@/components/ui/partner-rating";
 import { usePartner } from "@/components/partner-context";
+import { partnerBillingEnabled } from "@/lib/partner-work-access";
 import { usePartnerRating } from "@/hooks/use-partner-rating";
 import { createClient } from "@/lib/supabase/client";
 import { formatGBPdec } from "@/lib/format";
@@ -74,10 +75,15 @@ export function settingsPageLabel(id: string): string {
 }
 
 export function SettingsView({ initial = "profile" }: { initial?: string }) {
-  const [page, setPage] = useState(initial);
+  const partner = usePartner();
+  const billingEnabled = partnerBillingEnabled(partner);
+  // Free / un-tiered partners: no "Billing & plan" tab at all.
+  const pages = billingEnabled ? SETTINGS_PAGES : SETTINGS_PAGES.filter((p) => p.id !== "billing");
+  const safeInitial = initial === "billing" && !billingEnabled ? "profile" : initial;
+  const [page, setPage] = useState(safeInitial);
   useEffect(() => {
-    setPage(initial);
-  }, [initial]);
+    setPage(safeInitial);
+  }, [safeInitial]);
 
   return (
     <div style={{ display: "grid", gridTemplateColumns: "240px 1fr", flex: 1, overflow: "hidden" }}>
@@ -86,7 +92,7 @@ export function SettingsView({ initial = "profile" }: { initial?: string }) {
         <div style={{ fontSize: 11, letterSpacing: 0.5, color: T.mute, fontWeight: 500, textTransform: "uppercase", padding: "0 10px 8px" }}>
           Settings
         </div>
-        {SETTINGS_PAGES.map((p) => {
+        {pages.map((p) => {
           const sel = p.id === page;
           return (
             <div
@@ -118,7 +124,7 @@ export function SettingsView({ initial = "profile" }: { initial?: string }) {
         {page === "availability" && <AvailabilityPage />}
         {page === "area" && <ServiceAreaPage />}
         {page === "preferences" && <PreferencesPage />}
-        {page === "billing" && <BillingPage />}
+        {page === "billing" && billingEnabled && <BillingPage />}
         {page === "selfbill" && <SelfBillPage />}
         {page === "docs" && <DocsPage />}
         {page === "policies" && <PoliciesPage />}

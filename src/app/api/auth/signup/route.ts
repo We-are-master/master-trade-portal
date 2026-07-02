@@ -46,7 +46,38 @@ export async function POST(req: NextRequest) {
     status?: string | null;
   } | undefined;
 
+  // Resume branch — instead of hard-blocking with 409, let onboarding /
+  // inactive partners resume the wizard from where they stopped. We re-send
+  // the OTP to prove email ownership; the actual reactivation happens on
+  // successful verify, not here (avoids anyone flipping partner state simply
+  // by hitting this endpoint).
   if (existingPartner?.auth_user_id?.trim()) {
+    const status = String(existingPartner.status ?? "").trim();
+    const resumable = status === "onboarding" || status === "inactive" || status === "on_break";
+    if (resumable) {
+      let devCode: string | undefined;
+      let emailError: string | undefined;
+      const { data: link, error: genErr } = await admin.auth.admin.generateLink({ type: "magiclink", email });
+      const otpCode = link?.properties?.email_otp;
+      if (!genErr && otpCode) {
+        if (process.env.NODE_ENV !== "production") devCode = otpCode;
+        try {
+          await sendOtpEmail(email, otpCode);
+        } catch (e) {
+          emailError = e instanceof Error ? e.message : String(e);
+          console.error("[auth/signup] resume OTP email send failed:", e);
+        }
+      } else if (genErr) {
+        console.error("[auth/signup] resume generateLink failed:", genErr);
+      }
+      const dev = process.env.NODE_ENV !== "production";
+      return NextResponse.json({
+        ok: true,
+        resume: status === "inactive" || status === "on_break" ? "reactivate" : "onboarding",
+        ...(dev && devCode ? { devCode } : {}),
+        ...(dev && emailError ? { emailError } : {}),
+      });
+    }
     return NextResponse.json({ error: "That email is already registered. Sign in instead." }, { status: 409 });
   }
 

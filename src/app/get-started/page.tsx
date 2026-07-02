@@ -14,11 +14,11 @@ import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type CSSPr
 import { useSearchParams } from "next/navigation";
 import { T } from "@/lib/tokens";
 import { Button, Icon } from "@/components/ui/primitives";
-import { SignaturePad } from "@/components/ui/signature-pad";
 import { DEFAULT_PLAN_ID, getPlan, PARTNERS_LP_URL } from "@/lib/plan-catalog";
 import { createClient } from "@/lib/supabase/client";
 import { fetchContracts, type PartnerContract } from "@/lib/queries/contracts";
 import { COMPLIANCE_CONTRACT_TYPES } from "@/lib/partner-funnel-complete";
+import { PARTNER_CONTRACT_TITLES } from "@/lib/partner-contract-types";
 import {
   filterGetStartedSteps,
   isPartnerRegistrationFieldMandatory,
@@ -55,6 +55,7 @@ export default function GetStartedPage() {
 }
 
 const DRAFT_STORAGE_KEY = "fixfy_onboarding_draft_code";
+const DRAFT_STEP_STORAGE_KEY = "fixfy_onboarding_step_id";
 
 function GetStartedFunnel() {
   const sp = useSearchParams();
@@ -93,6 +94,8 @@ function GetStartedFunnel() {
   const [otp, setOtp] = useState("");
   const [accountPhase, setAccountPhase] = useState<"details" | "code">("details");
   const [devCode, setDevCode] = useState<string | null>(null);
+  /** When the email already belongs to a partner and they can pick up where they stopped. */
+  const [resumeKind, setResumeKind] = useState<"onboarding" | "reactivate" | null>(null);
 
   const [coveragePostcode, setCoveragePostcode] = useState("");
   const [coverageRadius, setCoverageRadius] = useState(15);
@@ -106,6 +109,42 @@ function GetStartedFunnel() {
   const activeSteps = useMemo(() => filterGetStartedSteps(registrationFields), [registrationFields]);
   const totalSteps = Math.max(activeSteps.length, 1);
   const currentStepId: GetStartedStepId = activeSteps[step] ?? activeSteps[0] ?? "account";
+
+  // Once we know which steps are active, restore the last-visited step from
+  // localStorage — but only for steps that are safe to hit WITHOUT an
+  // authenticated session. Any step at or past `account` requires OTP-backed
+  // auth cookies which a returning tab may not have; landing there straight
+  // from a refresh causes "Not signed in" errors on save-and-continue. When
+  // that happens we start them at the account step so they naturally
+  // re-verify (the resume flow re-sends an OTP for existing partners) and
+  // then walk through coverage / documents / agreements with a fresh
+  // session.
+  const SAFE_RESTORE_STEP_IDS = useMemo(
+    () => new Set<GetStartedStepId>(["trades", "lead", "business", "contact"]),
+    [],
+  );
+  const stepRestoredRef = useRef(false);
+  useEffect(() => {
+    if (stepRestoredRef.current) return;
+    if (configLoading || activeSteps.length === 0) return;
+    if (typeof window === "undefined") return;
+    const savedStepId = window.localStorage.getItem(DRAFT_STEP_STORAGE_KEY);
+    stepRestoredRef.current = true;
+    if (!savedStepId) return;
+    if (!SAFE_RESTORE_STEP_IDS.has(savedStepId as GetStartedStepId)) return;
+    const idx = activeSteps.indexOf(savedStepId as GetStartedStepId);
+    if (idx < 0) return;
+    setStep(idx);
+  }, [activeSteps, configLoading, SAFE_RESTORE_STEP_IDS]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!stepRestoredRef.current) return;
+    // Persist the CURRENT step id (not the numeric index — active steps can
+    // shift when Settings toggles a rule) so we can rematch it on return.
+    if (currentStepId === "getting_ready" || currentStepId === "how_it_works") return;
+    window.localStorage.setItem(DRAFT_STEP_STORAGE_KEY, currentStepId);
+  }, [currentStepId]);
 
   const showLegalType = isPartnerRegistrationFieldVisible("legal_type", registrationFields);
   const showTaxId = isPartnerRegistrationFieldVisible("tax_id", registrationFields);
@@ -166,6 +205,12 @@ function GetStartedFunnel() {
           partnerAddress?: string;
           trades?: string[];
           catalogServiceIds?: string[];
+          legalType?: "self_employed" | "limited_company" | null;
+          regNumber?: string;
+          vatRegistered?: boolean | null;
+          vatNumber?: string;
+          coveragePostcode?: string;
+          coverageRadius?: number | null;
         };
         if (!alive || !data.ok) return;
         if (data.email?.trim()) setEmail(data.email.trim());
@@ -173,6 +218,18 @@ function GetStartedFunnel() {
         if (data.company?.trim()) setCompany(data.company.trim());
         if (data.phone?.trim()) setPhone(data.phone.trim());
         if (data.partnerAddress?.trim()) setPartnerAddress(data.partnerAddress.trim());
+        if (data.legalType === "self_employed" || data.legalType === "limited_company") {
+          setLegalType(data.legalType);
+        }
+        if (data.regNumber?.trim()) setRegNumber(data.regNumber.trim());
+        if (data.vatRegistered === true || data.vatRegistered === false) {
+          setVatRegistered(data.vatRegistered);
+        }
+        if (data.vatNumber?.trim()) setVatNumber(data.vatNumber.trim());
+        if (data.coveragePostcode?.trim()) setCoveragePostcode(data.coveragePostcode.trim());
+        if (data.coverageRadius && data.coverageRadius >= 1 && data.coverageRadius <= 50) {
+          setCoverageRadius(data.coverageRadius);
+        }
         if (data.catalogServiceIds?.length && catalog.length) {
           const ids = new Set(data.catalogServiceIds.filter((id) => catalog.some((c) => c.id === id)));
           if (ids.size > 0) {
@@ -294,6 +351,12 @@ function GetStartedFunnel() {
           trades: names.length ? names : undefined,
           primaryTrade: primaryName || undefined,
           catalogServiceIds: ids.length ? ids : undefined,
+          legalType: legalType ?? undefined,
+          regNumber: regNumber.trim() || undefined,
+          vatRegistered: vatRegistered ?? undefined,
+          vatNumber: vatNumber.trim() || undefined,
+          coveragePostcode: coveragePostcode.trim() || undefined,
+          coverageRadius: coverageRadius,
         }),
       });
       const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string; draftCode?: string };
@@ -304,11 +367,35 @@ function GetStartedFunnel() {
       }
       return data;
     },
-    [selectedTradeNames, inviteCode, draftCode, email, fullName, company, phone, partnerAddress],
+    [
+      selectedTradeNames,
+      inviteCode,
+      draftCode,
+      email,
+      fullName,
+      company,
+      phone,
+      partnerAddress,
+      legalType,
+      regNumber,
+      vatRegistered,
+      vatNumber,
+      coveragePostcode,
+      coverageRadius,
+    ],
   );
 
   useEffect(() => {
-    if (currentStepId !== "lead") return;
+    // Debounced auto-save on every step that collects data — keeps the
+    // partner row in sync in the background so a browser refresh (or a
+    // return-visit days later) hydrates the wizard right where they stopped.
+    const drafty =
+      currentStepId === "trades" ||
+      currentStepId === "lead" ||
+      currentStepId === "business" ||
+      currentStepId === "contact" ||
+      currentStepId === "coverage";
+    if (!drafty) return;
     if (!email.includes("@") && !inviteCode && !draftCode) return;
     if (draftTimerRef.current) clearTimeout(draftTimerRef.current);
     draftTimerRef.current = setTimeout(() => {
@@ -319,7 +406,24 @@ function GetStartedFunnel() {
     return () => {
       if (draftTimerRef.current) clearTimeout(draftTimerRef.current);
     };
-  }, [currentStepId, email, fullName, company, phone, saveDraft, inviteCode, draftCode, selectedTradeNames]);
+  }, [
+    currentStepId,
+    email,
+    fullName,
+    company,
+    phone,
+    saveDraft,
+    inviteCode,
+    draftCode,
+    selectedTradeNames,
+    legalType,
+    regNumber,
+    vatRegistered,
+    vatNumber,
+    partnerAddress,
+    coveragePostcode,
+    coverageRadius,
+  ]);
 
   const regLabel = legalType === "limited_company" ? "Company number (CRN)" : "UTR (Unique Taxpayer Reference)";
   const detailsValid = leadValid;
@@ -344,6 +448,7 @@ function GetStartedFunnel() {
     const profRes = await fetch("/api/partner/onboarding-profile", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
       body: JSON.stringify({
         trades: names,
         primaryTrade: primaryName,
@@ -356,6 +461,13 @@ function GetStartedFunnel() {
         vatNumber: vatNumber.trim(),
       }),
     });
+    if (profRes.status === 401) {
+      const err = new Error("Your session expired — verify your email again to continue.") as Error & {
+        status?: number;
+      };
+      err.status = 401;
+      throw err;
+    }
     const prof = (await profRes.json().catch(() => ({}))) as { ok?: boolean; error?: string };
     if (!profRes.ok || !prof.ok) throw new Error(prof.error || "Couldn't save your details.");
   };
@@ -375,10 +487,16 @@ function GetStartedFunnel() {
           inviteCode: inviteCode || undefined,
         }),
       });
-      const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string; devCode?: string };
+      const data = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        error?: string;
+        devCode?: string;
+        resume?: "onboarding" | "reactivate";
+      };
       if (!res.ok || !data.ok) throw new Error(data.error || "Couldn't create your account.");
       setDevCode(data.devCode ?? null);
       if (data.devCode) setOtp(data.devCode);
+      setResumeKind(data.resume ?? null);
       setAccountPhase("code");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Couldn't create your account.");
@@ -394,12 +512,28 @@ function GetStartedFunnel() {
       const res = await fetch("/api/auth/verify-otp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
         body: JSON.stringify({ email: email.trim(), token: otp.trim() }),
       });
       const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
       if (!res.ok || !data.ok) throw new Error(data.error || "That code didn't work.");
 
-      await saveProfile();
+      // Resume flow: the partner already has profile data on file, so we skip
+      // saveProfile (which would blank out empty fields the user hasn't
+      // re-entered) and jump straight to the next step.
+      if (!resumeKind) {
+        try {
+          await saveProfile();
+        } catch (e) {
+          // If the auth cookie is missing right after verifyOtp (rare race
+          // in dev when Turbopack reloads), don't abandon the user — the
+          // session cookie IS set by now, next click will pick it up.
+          if ((e as { status?: number })?.status !== 401) throw e;
+        }
+      }
+      // Clear the resume marker so subsequent bounces don't loop back to the
+      // welcome copy after a successful verify.
+      setResumeKind(null);
       goNext();
     } catch (e) {
       setError(e instanceof Error ? e.message : "That code didn't work.");
@@ -415,8 +549,23 @@ function GetStartedFunnel() {
       const covRes = await fetch("/api/partner/onboarding-coverage", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
         body: JSON.stringify({ postcode: coveragePostcode.trim(), radiusMiles: coverageRadius }),
       });
+      // Auth endpoint 401'd (session cookie missing / expired). Instead of
+      // bouncing the user backwards, we save the same fields via the public
+      // draft endpoint (service-role write) and advance. Ops can geocode
+      // later, and the partner keeps their momentum.
+      if (covRes.status === 401) {
+        try {
+          await saveDraft();
+        } catch {
+          /* draft can gracefully fail — data was already saved by the
+             debounced auto-save while the user was on the step */
+        }
+        goNext();
+        return;
+      }
       const cov = (await covRes.json().catch(() => ({}))) as { ok?: boolean; error?: string };
       if (!covRes.ok || !cov.ok) throw new Error(cov.error || "Couldn't save your service area.");
       goNext();
@@ -506,7 +655,11 @@ function GetStartedFunnel() {
     return false;
   })();
 
-  const showFooter = currentStepId !== "documents" && currentStepId !== "agreements";
+  const showFooter =
+    currentStepId !== "documents" &&
+    currentStepId !== "agreements" &&
+    currentStepId !== "getting_ready" &&
+    currentStepId !== "how_it_works";
 
   return (
     <div
@@ -697,12 +850,12 @@ function GetStartedFunnel() {
                 {showLegalType && (
                   <>
                     <SelectCard selected={legalType === "self_employed"} onClick={() => setLegalType("self_employed")} align="start">
-                      <span style={{ fontSize: 16, fontWeight: 600, color: T.ink }}>Sole trader</span>
-                      <span style={{ fontSize: 13, color: T.mute }}>Self-employed · you'll provide your UTR</span>
+                      <span style={{ display: "block", fontSize: 16, fontWeight: 600, color: T.ink, lineHeight: 1.25 }}>Sole trader</span>
+                      <span style={{ display: "block", marginTop: 4, fontSize: 13, color: T.mute, lineHeight: 1.35 }}>Self-employed · you&apos;ll provide your UTR</span>
                     </SelectCard>
                     <SelectCard selected={legalType === "limited_company"} onClick={() => setLegalType("limited_company")} align="start">
-                      <span style={{ fontSize: 16, fontWeight: 600, color: T.ink }}>Limited company</span>
-                      <span style={{ fontSize: 13, color: T.mute }}>Registered at Companies House</span>
+                      <span style={{ display: "block", fontSize: 16, fontWeight: 600, color: T.ink, lineHeight: 1.25 }}>Limited company</span>
+                      <span style={{ display: "block", marginTop: 4, fontSize: 13, color: T.mute, lineHeight: 1.35 }}>Registered at Companies House</span>
                     </SelectCard>
                   </>
                 )}
@@ -764,12 +917,28 @@ function GetStartedFunnel() {
 
           {currentStepId === "account" && (
             <StepShell
-              eyebrow="Step 5 · Create your account"
-              title={accountPhase === "details" ? "Verify your email" : "Check your email"}
+              eyebrow={
+                resumeKind === "reactivate"
+                  ? "Step 5 · Welcome back"
+                  : resumeKind === "onboarding"
+                    ? "Step 5 · Continue where you stopped"
+                    : "Step 5 · Create your account"
+              }
+              title={
+                accountPhase === "details"
+                  ? "Verify your email"
+                  : resumeKind
+                    ? "Check your email to continue"
+                    : "Check your email"
+              }
               subtitle={
                 accountPhase === "details"
                   ? `We'll send a 6-digit code to ${email || "your email"} so you can continue. 7 days free on ${plan.name} — no card needed today.`
-                  : `We sent a 6-digit code to ${email}. Enter it to continue.`
+                  : resumeKind === "reactivate"
+                    ? `Your account was set inactive. Enter the 6-digit code we just sent to ${email} — we'll reactivate you and pick up onboarding.`
+                    : resumeKind === "onboarding"
+                      ? `We already have your onboarding on file. Enter the 6-digit code we just sent to ${email} — you'll skip straight to what's missing.`
+                      : `We sent a 6-digit code to ${email}. Enter it to continue.`
               }
             >
               <div style={{ maxWidth: 380, margin: "6px auto 0", textAlign: "left" }}>
@@ -812,6 +981,7 @@ function GetStartedFunnel() {
                       onClick={() => {
                         setAccountPhase("details");
                         setOtp("");
+                        setResumeKind(null);
                         setError(null);
                       }}
                       style={{ background: "transparent", border: "none", color: T.slate, fontFamily: T.sans, fontSize: 13, cursor: "pointer", textAlign: "left", padding: 0 }}
@@ -860,6 +1030,25 @@ function GetStartedFunnel() {
               mandatory={agreementsMandatory}
               signerDefault={fullName.trim()}
               onFinish={() => {
+                // Instead of going straight to the portal we advance to the
+                // gamified "getting ready" step which auto-transitions into
+                // the "how it works" summary before dropping the partner in.
+                goNext();
+              }}
+            />
+          )}
+          {currentStepId === "getting_ready" && (
+            <GettingReadyStep onDone={goNext} />
+          )}
+          {currentStepId === "how_it_works" && (
+            <HowItWorksStep
+              onFinish={() => {
+                if (typeof window !== "undefined") {
+                  // Wizard done — drop the saved step so a future revisit
+                  // doesn't land on this closing screen again.
+                  window.localStorage.removeItem(DRAFT_STEP_STORAGE_KEY);
+                  window.localStorage.removeItem(DRAFT_STORAGE_KEY);
+                }
                 window.location.href = "/?submitted=1";
               }}
             />
@@ -914,7 +1103,16 @@ function DocumentsStep({ mandatory, onContinue }: { mandatory: boolean; onContin
     let alive = true;
     void (async () => {
       try {
-        const res = await fetch("/api/partner/required-docs");
+        // Prefer the OTP session; if the cookie hasn't stuck, fall back to
+        // the wizard's draft code so we still get the correct checklist.
+        const draftCode =
+          typeof window !== "undefined"
+            ? window.localStorage.getItem(DRAFT_STORAGE_KEY)?.trim() ?? ""
+            : "";
+        const url = draftCode
+          ? `/api/partner/required-docs?code=${encodeURIComponent(draftCode)}`
+          : "/api/partner/required-docs";
+        const res = await fetch(url, { credentials: "same-origin" });
         const data = (await res.json().catch(() => ({}))) as { required?: RequiredDoc[]; error?: string };
         if (!res.ok) throw new Error(data.error || "Couldn't load your document checklist.");
         if (alive) setRequired(data.required ?? []);
@@ -996,10 +1194,12 @@ function AgreementsStep({ mandatory, signerDefault, onFinish }: { mandatory: boo
   const [contracts, setContracts] = useState<PartnerContract[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [sig, setSig] = useState<string | null>(null);
   const [signerName, setSignerName] = useState(signerDefault);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [viewing, setViewing] = useState<PartnerContract | null>(null);
+  /** Per-contract consent — the checkbox next to each agreement row. */
+  const [consented, setConsented] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     let cancelled = false;
@@ -1028,31 +1228,87 @@ function AgreementsStep({ mandatory, signerDefault, onFinish }: { mandatory: boo
     };
   }, []);
 
-  const complianceContracts = contracts.filter((c) =>
-    COMPLIANCE_CONTRACT_TYPES.includes(c.type as (typeof COMPLIANCE_CONTRACT_TYPES)[number]),
-  );
+  // Render both compliance contracts even if one has no active DB version yet
+  // — merge DB rows into a full slot list keyed by the constant.
+  const complianceContracts = useMemo<PartnerContract[]>(() => {
+    const byType = new Map<string, PartnerContract>();
+    for (const c of contracts) {
+      if (COMPLIANCE_CONTRACT_TYPES.includes(c.type as (typeof COMPLIANCE_CONTRACT_TYPES)[number])) {
+        byType.set(c.type, c);
+      }
+    }
+    return COMPLIANCE_CONTRACT_TYPES.map((type) => {
+      const existing = byType.get(type);
+      if (existing) return existing;
+      return {
+        versionId: `stub-${type}`,
+        type,
+        title:
+          PARTNER_CONTRACT_TITLES[type as keyof typeof PARTNER_CONTRACT_TITLES] ??
+          type.replace(/_/g, " "),
+        version: "",
+        bodyHtml: "",
+        signed: false,
+        signedAt: null,
+        signaturePdfUrl: null,
+      };
+    });
+  }, [contracts]);
   const unsigned = complianceContracts.filter((c) => !c.signed);
   const allSigned = complianceContracts.length > 0 && unsigned.length === 0;
+  const allConsented = unsigned.every((c) => consented[c.type] === true);
+  const canSubmit = !allSigned && allConsented && !!signerName.trim() && unsigned.length > 0;
+
+  /**
+   * Build a small PNG rendering of the typed signer name — click-through
+   * agreements don't require a drawn signature but the sign-all endpoint
+   * still needs a base64 image, so we render the name in a cursive style
+   * for the audit trail PDF.
+   */
+  const renderTypedSignaturePng = (name: string): string | null => {
+    if (typeof document === "undefined") return null;
+    const canvas = document.createElement("canvas");
+    canvas.width = 480;
+    canvas.height = 120;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return null;
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = "#0d0a2a";
+    ctx.font = "italic 46px 'Snell Roundhand', 'Brush Script MT', 'Segoe Script', cursive";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(name.trim(), canvas.width / 2, canvas.height / 2);
+    return canvas.toDataURL("image/png");
+  };
 
   const submit = async () => {
-    if (!sig || !signerName.trim() || unsigned.length === 0) return;
+    if (!canSubmit) return;
     setBusy(true);
     setError(null);
     try {
+      const typedPng = renderTypedSignaturePng(signerName);
+      if (!typedPng) throw new Error("Couldn't capture your consent.");
+      const draftCode =
+        typeof window !== "undefined"
+          ? window.localStorage.getItem(DRAFT_STORAGE_KEY)?.trim() ?? ""
+          : "";
       const res = await fetch("/api/contracts/sign-all", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
         body: JSON.stringify({
-          signatureImageBase64: sig,
+          signatureImageBase64: typedPng,
           signerName: signerName.trim(),
           deviceInfo: typeof navigator !== "undefined" ? navigator.userAgent : undefined,
+          code: draftCode || undefined,
         }),
       });
       const json = (await res.json().catch(() => ({}))) as { error?: string };
-      if (!res.ok) throw new Error(json.error || "Couldn't sign agreements");
+      if (!res.ok) throw new Error(json.error || "Couldn't record your consent");
       onFinish();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Couldn't sign agreements");
+      setError(e instanceof Error ? e.message : "Couldn't record your consent");
     } finally {
       setBusy(false);
     }
@@ -1075,33 +1331,86 @@ function AgreementsStep({ mandatory, signerDefault, onFinish }: { mandatory: boo
         {!loading && !loadError && (
           <>
             <div style={{ display: "grid", gap: 10, marginBottom: 20 }}>
-              {complianceContracts.map((c) => (
-                <div
-                  key={c.versionId}
-                  style={{
-                    padding: "14px 16px",
-                    borderRadius: 12,
-                    border: `1px solid ${c.signed ? "rgba(14,138,95,0.35)" : T.line}`,
-                    background: c.signed ? T.green50 : T.white,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    gap: 12,
-                  }}
-                >
-                  <span style={{ fontSize: 14, fontWeight: 600, color: T.ink }}>{c.title}</span>
-                  <span style={{ fontSize: 12, fontWeight: 600, color: c.signed ? T.green : T.coral }}>{c.signed ? "Signed" : "Pending"}</span>
-                </div>
-              ))}
+              {complianceContracts.map((c) => {
+                const isConsented = c.signed || !!consented[c.type];
+                return (
+                  <label
+                    key={c.versionId}
+                    htmlFor={`consent-${c.type}`}
+                    style={{
+                      padding: "14px 16px",
+                      borderRadius: 12,
+                      border: `1px solid ${isConsented ? "rgba(14,138,95,0.35)" : T.line}`,
+                      background: isConsented ? T.green50 : T.white,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: 12,
+                      cursor: c.signed ? "default" : "pointer",
+                      transition: "border-color 140ms ease, background 140ms ease",
+                    }}
+                  >
+                    <span style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
+                      <input
+                        id={`consent-${c.type}`}
+                        type="checkbox"
+                        disabled={c.signed}
+                        checked={isConsented}
+                        onChange={(e) =>
+                          setConsented((prev) => ({ ...prev, [c.type]: e.target.checked }))
+                        }
+                        style={{ width: 18, height: 18, accentColor: T.coral, cursor: c.signed ? "default" : "pointer" }}
+                      />
+                      <span style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
+                        <span style={{ fontSize: 14, fontWeight: 600, color: T.ink }}>
+                          I agree to the {c.title}
+                        </span>
+                        {!c.bodyHtml && !c.signed && (
+                          <span style={{ fontSize: 11, color: T.mute }}>
+                            (draft — full text pending publication)
+                          </span>
+                        )}
+                      </span>
+                    </span>
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 12, flexShrink: 0 }}>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setViewing(c);
+                        }}
+                        style={{
+                          background: "transparent",
+                          border: "none",
+                          padding: 0,
+                          fontFamily: T.sans,
+                          fontSize: 12,
+                          fontWeight: 600,
+                          color: T.slate,
+                          textDecoration: "underline",
+                          cursor: "pointer",
+                        }}
+                      >
+                        View
+                      </button>
+                      <span style={{ fontSize: 12, fontWeight: 600, color: c.signed ? T.green : isConsented ? T.green : T.coral }}>
+                        {c.signed ? "Signed" : isConsented ? "Ready" : "Pending"}
+                      </span>
+                    </span>
+                  </label>
+                );
+              })}
             </div>
             {!allSigned && (
               <div style={{ display: "grid", gap: 14 }}>
                 <LightField label="Full legal name">
                   <LightInput value={signerName} onChange={setSignerName} placeholder="As shown on your ID" />
                 </LightField>
-                <LightField label="Your signature">
-                  <SignaturePad onChange={setSig} />
-                </LightField>
+                <p style={{ margin: 0, fontSize: 12, color: T.mute, lineHeight: 1.5 }}>
+                  By ticking the boxes above and continuing you accept both agreements. Your name, timestamp
+                  and IP address are recorded for the audit trail — no drawn signature required.
+                </p>
               </div>
             )}
           </>
@@ -1125,13 +1434,100 @@ function AgreementsStep({ mandatory, signerDefault, onFinish }: { mandatory: boo
             size="lg"
             full
             onClick={allSigned ? onFinish : submit}
-            disabled={busy || (!allSigned && (!sig || !signerName.trim() || unsigned.length === 0))}
+            disabled={busy || (!allSigned && !canSubmit)}
             iconRight="check"
           >
-            {busy ? "Signing…" : allSigned ? "Submit application" : mandatory ? "Sign & submit application" : "Sign & continue"}
+            {busy ? "Recording…" : allSigned ? "Submit application" : mandatory ? "Agree & submit application" : "Agree & continue"}
           </Button>
         </div>
       </div>
+
+      {viewing && (
+        <div
+          onClick={() => setViewing(null)}
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(2,0,64,0.55)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 16,
+            zIndex: 1000,
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: "min(720px, 100%)",
+              maxHeight: "min(80vh, 900px)",
+              background: T.white,
+              borderRadius: 16,
+              boxShadow: "0 30px 80px -20px rgba(2,0,64,0.55)",
+              display: "flex",
+              flexDirection: "column",
+              overflow: "hidden",
+            }}
+          >
+            <div
+              style={{
+                padding: "16px 20px",
+                borderBottom: `1px solid ${T.line}`,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 12,
+              }}
+            >
+              <div>
+                <p style={{ margin: 0, fontSize: 15, fontWeight: 700, color: T.ink }}>{viewing.title}</p>
+                {viewing.version && (
+                  <p style={{ margin: "2px 0 0", fontSize: 12, color: T.mute }}>Version {viewing.version}</p>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => setViewing(null)}
+                aria-label="Close"
+                style={{
+                  border: "none",
+                  background: "transparent",
+                  fontSize: 22,
+                  lineHeight: 1,
+                  color: T.slate,
+                  cursor: "pointer",
+                  padding: 4,
+                }}
+              >
+                ×
+              </button>
+            </div>
+            <div
+              style={{
+                padding: "20px 24px",
+                overflowY: "auto",
+                fontSize: 14,
+                lineHeight: 1.6,
+                color: T.ink,
+              }}
+              // Contract HTML comes from our contract_versions table (authored by ops), not user input.
+              dangerouslySetInnerHTML={{ __html: viewing.bodyHtml || "<p>No content available yet.</p>" }}
+            />
+            <div
+              style={{
+                padding: "14px 20px",
+                borderTop: `1px solid ${T.line}`,
+                display: "flex",
+                justifyContent: "flex-end",
+              }}
+            >
+              <Button variant="secondary" size="md" onClick={() => setViewing(null)}>
+                Close
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
@@ -1158,7 +1554,18 @@ function DocUploadRow({
         form.set("docType", doc.docType);
         form.set("name", doc.name);
         form.set("file", file);
-        const res = await fetch("/api/partner/documents", { method: "POST", body: form });
+        // Include the draft code so uploads work even when the OTP session
+        // cookie hasn't been received yet by the server route handler.
+        const draftCode =
+          typeof window !== "undefined"
+            ? window.localStorage.getItem(DRAFT_STORAGE_KEY)?.trim() ?? ""
+            : "";
+        if (draftCode) form.set("code", draftCode);
+        const res = await fetch("/api/partner/documents", {
+          method: "POST",
+          body: form,
+          credentials: "same-origin",
+        });
         const data = (await res.json().catch(() => ({}))) as { ok?: boolean; id?: string; error?: string };
         if (!res.ok || !data.ok) throw new Error(data.error || "Upload failed.");
         onUploaded(data.id ?? "", file.name);
@@ -1426,13 +1833,378 @@ function LightInput({
 
 function FunnelWordmark() {
   return (
-    <span style={{ display: "inline-flex", alignItems: "center", gap: 8, fontWeight: 600, fontSize: 20, letterSpacing: "-0.03em", lineHeight: 1 }}>
+    <span style={{ display: "inline-flex", alignItems: "center", lineHeight: 1 }}>
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src="/fixfy-icon.png" alt="Fixfy" style={{ height: 22, width: "auto" }} />
-      <span>
-        <span style={{ color: T.navy }}>fix</span>
-        <span style={{ color: T.coral }}>fy</span>
-      </span>
+      <img
+        src="/logos/fixfy-primary-navy.png"
+        alt="Fixfy"
+        style={{ height: 28, width: "auto", display: "block" }}
+      />
     </span>
+  );
+}
+
+// ─── Gamified loading step ──────────────────────────────────────────────────
+/**
+ * Full-screen "we're getting you ready" animation. Cycles through 4 states
+ * (icon + caption) with a smooth crossfade, drives a progress bar to 100%,
+ * then calls onDone. Total run: ~4.8s.
+ */
+function GettingReadyStep({ onDone }: { onDone: () => void }) {
+  const stages = useMemo(
+    () => [
+      { icon: "shield-check", label: "Pre-validating your documents", tint: "#020040" },
+      { icon: "briefcase", label: "Setting up your first job offers", tint: T.coral },
+      { icon: "pound-sterling", label: "Locking in your payout schedule", tint: "#0E8A5F" },
+      { icon: "sparkles", label: "Polishing the last details", tint: "#8B5CF6" },
+    ],
+    [],
+  );
+  const [stage, setStage] = useState(0);
+  const [progress, setProgress] = useState(4);
+
+  useEffect(() => {
+    const stageMs = 1150;
+    const tickMs = 40;
+    let mounted = true;
+    const tickTimer = setInterval(() => {
+      if (!mounted) return;
+      setProgress((p) => {
+        const cap = 99;
+        const next = p + (100 / (stages.length * stageMs)) * tickMs;
+        return next >= cap ? cap : next;
+      });
+    }, tickMs);
+    const stageTimer = setInterval(() => {
+      if (!mounted) return;
+      setStage((s) => (s + 1 < stages.length ? s + 1 : s));
+    }, stageMs);
+    const doneTimer = setTimeout(() => {
+      if (!mounted) return;
+      setProgress(100);
+      setTimeout(() => {
+        if (mounted) onDone();
+      }, 260);
+    }, stageMs * stages.length + 80);
+    return () => {
+      mounted = false;
+      clearInterval(tickTimer);
+      clearInterval(stageTimer);
+      clearTimeout(doneTimer);
+    };
+  }, [onDone, stages.length]);
+
+  const current = stages[stage] ?? stages[0];
+
+  return (
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 28,
+        padding: "60px 24px 40px",
+        textAlign: "center",
+      }}
+    >
+      <div
+        style={{
+          fontFamily: T.mono,
+          fontSize: 12.5,
+          letterSpacing: "0.16em",
+          textTransform: "uppercase",
+          color: T.coralPress,
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 7,
+        }}
+      >
+        <span style={{ width: 6, height: 6, borderRadius: 9999, background: T.coral }} />
+        Getting you ready
+      </div>
+
+      <div
+        aria-hidden
+        style={{
+          position: "relative",
+          width: 132,
+          height: 132,
+          borderRadius: "50%",
+          background: `${current.tint}12`,
+          border: `2px solid ${current.tint}30`,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          transition: "background 320ms ease, border-color 320ms ease, transform 320ms ease",
+        }}
+      >
+        <div
+          key={stage}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            width: 92,
+            height: 92,
+            borderRadius: "50%",
+            background: T.white,
+            boxShadow: `0 12px 40px -14px ${current.tint}80`,
+            animation: "gs-pop 320ms cubic-bezier(0.16, 1, 0.3, 1)",
+          }}
+        >
+          <Icon name={current.icon} size={40} color={current.tint} />
+        </div>
+        <span
+          aria-hidden
+          style={{
+            position: "absolute",
+            inset: -6,
+            borderRadius: "50%",
+            border: `2px dashed ${current.tint}40`,
+            animation: "gs-spin 6s linear infinite",
+          }}
+        />
+      </div>
+
+      <div style={{ maxWidth: 380 }}>
+        <p
+          key={`label-${stage}`}
+          style={{
+            margin: 0,
+            fontFamily: T.sans,
+            fontSize: 22,
+            fontWeight: 700,
+            color: T.navy,
+            letterSpacing: "-0.02em",
+            lineHeight: 1.25,
+            animation: "gs-fade 320ms ease",
+          }}
+        >
+          {current.label}
+        </p>
+        <p style={{ margin: "10px 0 0", fontSize: 13, color: T.mute }}>
+          Hold tight — we&apos;re syncing your profile with our platform.
+        </p>
+      </div>
+
+      <div style={{ width: "min(320px, 100%)" }}>
+        <div style={{ height: 6, borderRadius: 999, background: T.line, overflow: "hidden" }}>
+          <div
+            style={{
+              width: `${Math.min(100, Math.round(progress))}%`,
+              height: "100%",
+              background: `linear-gradient(90deg, ${T.coral}, ${T.coralPress})`,
+              transition: "width 200ms linear",
+            }}
+          />
+        </div>
+        <p
+          style={{
+            margin: "8px 0 0",
+            fontFamily: T.mono,
+            fontSize: 11,
+            letterSpacing: "0.12em",
+            color: T.mute,
+            textAlign: "right",
+          }}
+        >
+          {Math.min(100, Math.round(progress))}%
+        </p>
+      </div>
+
+      <style>{`
+        @keyframes gs-fade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+        @keyframes gs-pop  { from { transform: scale(0.86); opacity: 0.4; } 60% { transform: scale(1.04); opacity: 1; } to { transform: scale(1); opacity: 1; } }
+        @keyframes gs-spin { to { transform: rotate(360deg); } }
+      `}</style>
+    </div>
+  );
+}
+
+// ─── How Fixfy Trade works — summary before entering the portal ────────────
+interface PortalPolicies {
+  companyName: string;
+  supportEmail: string;
+  payoutTerms: string;
+  partnerCancelFeeGbp: number;
+  currency: string;
+}
+
+function HowItWorksStep({ onFinish }: { onFinish: () => void }) {
+  const [policies, setPolicies] = useState<PortalPolicies | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await fetch("/api/portal/policies", { headers: { Accept: "application/json" } });
+        const j = (await r.json().catch(() => null)) as PortalPolicies | null;
+        if (!cancelled && j) setPolicies(j);
+      } catch {
+        /* keep defaults below */
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const payoutTerms = policies?.payoutTerms ?? "Every 2 weeks on Friday";
+  const cancelFee = policies?.partnerCancelFeeGbp ?? 15;
+  const supportEmail = policies?.supportEmail ?? "support@getfixfy.com";
+  const currency = policies?.currency === "USD" ? "$" : "£";
+
+  const tiles: {
+    icon: string;
+    tint: string;
+    title: string;
+    body: string;
+  }[] = [
+    {
+      icon: "hand-metal",
+      tint: T.coral,
+      title: "Jobs come in as offers",
+      body:
+        "Every lead, quote and booked job hits your inbox as an offer. Accept or decline in seconds — the first partner who accepts locks it in.",
+    },
+    {
+      icon: "pound-sterling",
+      tint: "#0E8A5F",
+      title: "Payouts land like clockwork",
+      body: `${payoutTerms}. We generate the self-bill PDF for you — no invoicing, no chasing.`,
+    },
+    {
+      icon: "calendar-clock",
+      tint: "#020040",
+      title: "Cancellations have a floor",
+      body: `If you have to cancel a booked job, ${currency}${cancelFee.toFixed(0)} covers our re-booking cost. Reschedule with the office to avoid it.`,
+    },
+    {
+      icon: "file-check",
+      tint: "#8B5CF6",
+      title: "One self-bill agreement",
+      body:
+        "You signed a single self-bill agreement covering every completed week. No POs, no invoices — Fixfy invoices itself on your behalf.",
+    },
+    {
+      icon: "life-buoy",
+      tint: "#0B5FFF",
+      title: "Support that answers",
+      body: `WhatsApp us or email ${supportEmail} — real humans, most replies inside 30 minutes during working hours.`,
+    },
+  ];
+
+  return (
+    <div
+      style={{
+        maxWidth: 720,
+        margin: "0 auto",
+        padding: "8px 8px 40px",
+      }}
+    >
+      <div
+        style={{
+          fontFamily: T.mono,
+          fontSize: 12.5,
+          letterSpacing: "0.16em",
+          textTransform: "uppercase",
+          color: T.coralPress,
+          marginBottom: 14,
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 7,
+        }}
+      >
+        <span style={{ width: 6, height: 6, borderRadius: 9999, background: T.coral }} />
+        You&apos;re in · quick tour
+      </div>
+      <h1
+        style={{
+          fontSize: 40,
+          fontWeight: 600,
+          letterSpacing: "-0.03em",
+          margin: "0 0 12px",
+          color: T.navy,
+        }}
+      >
+        How Fixfy Trade works
+      </h1>
+      <p
+        style={{
+          fontSize: 16,
+          color: T.slate,
+          maxWidth: 460,
+          margin: "0 auto",
+          lineHeight: 1.5,
+        }}
+      >
+        The 5-second summary — full details live inside the portal at any time.
+      </p>
+
+      <div
+        style={{
+          marginTop: 28,
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+          gap: 14,
+          textAlign: "left",
+        }}
+      >
+        {tiles.map((tile) => (
+          <div
+            key={tile.title}
+            style={{
+              padding: "18px 18px 16px",
+              borderRadius: 16,
+              background: T.white,
+              border: `1px solid ${T.line}`,
+              boxShadow: "0 1px 2px rgba(2,0,64,0.04)",
+              display: "flex",
+              flexDirection: "column",
+              gap: 10,
+            }}
+          >
+            <div
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: 10,
+                background: `${tile.tint}15`,
+                border: `1px solid ${tile.tint}30`,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                color: tile.tint,
+              }}
+            >
+              <Icon name={tile.icon} size={18} color={tile.tint} />
+            </div>
+            <p style={{ margin: 0, fontSize: 15, fontWeight: 700, color: T.ink, letterSpacing: "-0.01em" }}>
+              {tile.title}
+            </p>
+            <p style={{ margin: 0, fontSize: 13, color: T.slate, lineHeight: 1.5 }}>{tile.body}</p>
+          </div>
+        ))}
+      </div>
+
+      <div style={FOOTER_STYLE}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, width: "100%", maxWidth: 420 }}>
+          <Button
+            variant="primary"
+            size="lg"
+            full
+            onClick={onFinish}
+            disabled={loading}
+            iconRight="arrow-right"
+          >
+            Explore the portal
+          </Button>
+        </div>
+      </div>
+    </div>
   );
 }
