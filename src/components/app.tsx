@@ -1,14 +1,11 @@
 "use client";
 
-// TradePortalApp — root shell, client-side router, drawer + onboarding state.
+// TradePortalApp — root shell, client-side router, drawer state.
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { T } from "@/lib/tokens";
 import { useToast } from "@/components/ui/toast";
 import { usePartner } from "@/components/partner-context";
-import { createClient } from "@/lib/supabase/client";
-import { fetchPartnerDocuments } from "@/lib/queries/partner-documents";
-import { missingFromChecklist } from "@/lib/partner-required-docs";
 import { Sidebar } from "@/components/shell/sidebar";
 import { TopBar } from "@/components/shell/topbar";
 import { Dashboard } from "@/components/screens/dashboard";
@@ -17,7 +14,6 @@ import { MyJobsView } from "@/components/screens/jobs";
 import { JobDrawer } from "@/components/screens/job-drawer";
 import { ScheduleView } from "@/components/screens/schedule";
 import { SettingsView, settingsPageLabel } from "@/components/screens/settings";
-import { Onboarding } from "@/components/screens/onboarding";
 import { AddPaymentMethodModal } from "@/components/billing/add-payment-method-modal";
 import {
   partnerBillingEnabled,
@@ -38,76 +34,22 @@ const TITLES: Record<string, string> = {
 export function TradePortalApp() {
   const [route, setRoute] = useState("dashboard");
   const [drawerJobId, setDrawerJobId] = useState<string | null>(null);
-  const [showOnboarding, setShowOnboarding] = useState(false);
-  const [docsLocked, setDocsLocked] = useState(false);
   /** True right after the /get-started wizard finishes — shows the "under review" banner. */
   const [showReviewBanner, setShowReviewBanner] = useState(false);
   const partner = usePartner();
   const toast = useToast();
 
-  /** Wizard is finished when we've stamped a completion timestamp or the partner is already promoted. */
-  const wizardDone = !!partner.wizardCompletedAt || partner.status === "active";
-
-  const checkDocs = useCallback(async () => {
-    try {
-      const [docs, reqJson, funnelJson] = await Promise.all([
-        fetchPartnerDocuments(createClient(), partner.id),
-        fetch("/api/partner/required-docs").then((r) => r.json()).catch(() => ({ required: [] })),
-        fetch("/api/partner/funnel-complete").then((r) => r.json()).catch(() => ({ complete: false })),
-      ]);
-      const required = Array.isArray(reqJson?.required) ? reqJson.required : [];
-      const docRows = docs.map((d) => ({
-        id: d.id,
-        name: d.name,
-        doc_type: d.docType,
-        status: d.status,
-        created_at: new Date(0).toISOString(),
-      }));
-      const missing = missingFromChecklist(docRows, required);
-      const locked = missing.length > 0;
-      const funnelComplete = Boolean(funnelJson?.complete);
-      setDocsLocked(locked);
-      // Only re-open the in-portal onboarding modal while the wizard is still
-      // incomplete. Once wizardCompletedAt is stamped (or the partner is
-      // active) the modal never reopens — we surface a review banner instead.
-      if (partner.status === "onboarding" && !wizardDone) {
-        setShowOnboarding(!funnelComplete);
-      }
-    } catch {
-      /* network hiccup — don't lock the user out on a transient error */
-    }
-  }, [partner.id, partner.status, wizardDone]);
-
+  // Onboarding lives entirely in the /get-started wizard now. The old in-portal
+  // onboarding modal is gone — a partner who lands here has already finished
+  // (or is browsing while under review). We only surface the review banner
+  // when they arrive from the wizard's success redirect.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const submitted = params.get("submitted") === "1";
-    const welcomeParam = params.get("welcome") === "1";
-    if (submitted) {
-      // Just landed from the wizard's success redirect — celebrate + tell
-      // them we'll review + strip the query.
+    if (params.get("submitted") === "1" || params.get("welcome") === "1") {
       setShowReviewBanner(true);
-      setShowOnboarding(false);
       window.history.replaceState(null, "", window.location.pathname);
-    } else if (welcomeParam) {
-      if (!wizardDone) {
-        void fetch("/api/partner/funnel-complete")
-          .then((r) => r.json())
-          .then((json) => {
-            if (!json?.complete) setShowOnboarding(true);
-          })
-          .catch(() => setShowOnboarding(true));
-      }
-      window.history.replaceState(null, "", window.location.pathname);
-    } else if (partner.status === "onboarding" && !wizardDone) {
-      void fetch("/api/partner/funnel-complete")
-        .then((r) => r.json())
-        .then((json) => {
-          if (!json?.complete) setShowOnboarding(true);
-        })
-        .catch(() => setShowOnboarding(true));
     }
-    void checkDocs();
-  }, [checkDocs, partner.status, wizardDone]);
+  }, []);
 
   // Auto-start the Stripe subscription once the card is on file — but ONLY for
   // subscription-tier partners. Free / un-tiered accounts never touch billing.
@@ -176,17 +118,6 @@ export function TradePortalApp() {
       </main>
 
       {drawerJobId && <JobDrawer jobId={drawerJobId} onClose={() => setDrawerJobId(null)} onShowToast={toast} />}
-
-      {showOnboarding && !wizardDone && (
-        <Onboarding
-          locked={docsLocked}
-          onDocsChanged={checkDocs}
-          onClose={() => {
-            if (workLocked || docsLocked) return;
-            setShowOnboarding(false);
-          }}
-        />
-      )}
 
       {showReviewBanner && (
         <ReviewBanner onClose={() => setShowReviewBanner(false)} />
