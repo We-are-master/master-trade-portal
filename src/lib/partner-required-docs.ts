@@ -163,6 +163,10 @@ function resolvePartnerDocRule(id: string, rules: PartnerDocRuleRow[]): { enable
   return row ? { enabled: row.enabled, mandatory: row.mandatory && row.enabled } : { enabled: true, mandatory: true };
 }
 
+export function filterMandatoryRequiredDocs(defs: RequiredDocDef[], rules: PartnerDocRuleRow[]): RequiredDocDef[] {
+  return defs.filter((d) => resolvePartnerDocRule(d.id, rules).mandatory);
+}
+
 function filterDefsByRules(defs: RequiredDocDef[], rules: PartnerDocRuleRow[]): RequiredDocDef[] {
   return defs.filter((d) => resolvePartnerDocRule(d.id, rules).enabled);
 }

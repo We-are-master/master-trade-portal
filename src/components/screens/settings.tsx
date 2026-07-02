@@ -952,26 +952,29 @@ export function ServiceAreaPage() {
     }
     setSaving(true);
     try {
-      const excludedArr = excluded.split(",").map((s) => s.trim().toUpperCase()).filter(Boolean);
-      // partners.location is NOT NULL — always write a string. Clear the unused mode's fields.
-      const patch =
-        mode === "radius"
-          ? {
-              location: postcode.trim(),
-              coverage_mode: "radius",
-              coverage_base_postcode: postcode.trim() || null,
-              service_radius_miles: radius,
-              excluded_postcodes: excludedArr,
-              included_postcodes: null,
-            }
-          : {
-              location: postcode.trim(),
-              coverage_mode: "postcodes",
-              included_postcodes: included,
-              excluded_postcodes: excludedArr,
-            };
-      const { error } = await createClient().from("partners").update(patch).eq("id", partner.id);
-      if (error) throw error;
+      if (mode === "radius") {
+        const res = await fetch("/api/partner/onboarding-coverage", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ postcode: postcode.trim(), radiusMiles: radius }),
+        });
+        const json = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
+        if (!res.ok || !json.ok) throw new Error(json.error || "Couldn't save service area.");
+      } else {
+        const excludedArr = excluded.split(",").map((s) => s.trim().toUpperCase()).filter(Boolean);
+        const patch = {
+          location: postcode.trim(),
+          coverage_mode: "postcodes",
+          included_postcodes: included,
+          excluded_postcodes: excludedArr,
+          service_radius_miles: null,
+          coverage_latitude: null,
+          coverage_longitude: null,
+          coverage_base_postcode: null,
+        };
+        const { error } = await createClient().from("partners").update(patch).eq("id", partner.id);
+        if (error) throw error;
+      }
       setDirty(false);
       toast({ text: "Service area saved", icon: "check" });
       return true;

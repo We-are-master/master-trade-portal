@@ -27,8 +27,8 @@ export async function POST() {
   } | null;
 
   if (!p) return NextResponse.json({ error: "Partner not found" }, { status: 404 });
-  if (p.status !== "active") {
-    return NextResponse.json({ error: "account_not_active", message: "Subscription starts when your account is approved." }, { status: 403 });
+  if (p.status !== "active" && p.status !== "onboarding") {
+    return NextResponse.json({ error: "account_not_active", message: "Account cannot start billing yet." }, { status: 403 });
   }
   if (!p.billing_ready) {
     return NextResponse.json({ error: "billing_not_ready", message: "Add a payment method first." }, { status: 422 });
@@ -70,6 +70,8 @@ export async function POST() {
     .update({
       subscription_status: sub.status,
       plan: planId,
+      status: "active",
+      billing_ready: true,
       current_period_end: periodEnd ? new Date(periodEnd * 1000).toISOString() : null,
     })
     .eq("id", session.partnerId);

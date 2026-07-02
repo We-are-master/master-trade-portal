@@ -24,6 +24,9 @@ export async function GET(req: Request) {
       email: invite.email,
       contactName: invite.contactName,
       companyName: invite.companyName,
+      phone: invite.phone,
+      partnerAddress: invite.partnerAddress,
+      trades: invite.trades,
       expiresAt: invite.expiresAt,
       hasAuth: Boolean(authUserId),
     });

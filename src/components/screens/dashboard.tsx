@@ -20,6 +20,7 @@ import { fetchAvailableQuotes } from "@/lib/queries/quotes";
 import { PartnerLevelGoal } from "@/components/ui/partner-level-goal";
 import { resolvePartnerMonthlyGoal, revenueGoalProgress } from "@/lib/partner-revenue-goal";
 import type { ActivityTone, AvailableJob, MyJob, QuoteRequest } from "@/types";
+import { redactLead, redactAvailableJob, redactQuote, redactMyJob } from "@/lib/preview-redact";
 
 const OPPORTUNITY_POLL_MS = 30_000;
 
@@ -88,10 +89,12 @@ export function Dashboard({
   onOpenJob,
   onNav,
   previewMode = false,
+  redactSensitive = false,
 }: {
   onOpenJob: (id: string) => void;
   onNav: (route: string) => void;
   previewMode?: boolean;
+  redactSensitive?: boolean;
 }) {
   const partner = usePartner();
   const { rating, complaintCount, pointsLost, topComplaints, loaded: ratingLoaded } = usePartnerRating(partner.rating);
@@ -199,7 +202,7 @@ export function Dashboard({
 
     return {
       today,
-      scheduleJobs,
+      scheduleJobs: redactSensitive ? scheduleJobs.map(redactMyJob) : scheduleJobs,
       trend,
       weekEarnings,
       lastWeekEarnings,
@@ -215,7 +218,7 @@ export function Dashboard({
       inProgress,
       filteredCount: filteredJobs.length,
     };
-  }, [jobs, dateFilter]);
+  }, [jobs, dateFilter, redactSensitive]);
 
   const oppStats = useMemo(() => {
     const newLeads = opps.leads.filter((l) => l.status !== "contacted").length;
@@ -235,34 +238,45 @@ export function Dashboard({
     const items: DerivedActivity[] = [];
 
     for (const l of opps.leads.slice(0, 4)) {
+      const lead = redactSensitive ? redactLead(l) : l;
       items.push({
         id: `lead-${l.offerId}`,
         icon: "user-plus",
         tone: l.status === "contacted" ? "green" : "coral",
-        text: l.status === "contacted" ? `Lead contacted — ${l.title}` : `New lead — ${l.title}`,
-        meta: l.budget != null ? `${formatGBP(l.budget)} · ${l.status === "contacted" ? "done" : "act now"}` : "Hot enquiry",
+        text: l.status === "contacted" ? `Lead contacted — ${lead.title}` : `New lead — ${lead.title}`,
+        meta: redactSensitive
+          ? "Add card to unlock"
+          : l.budget != null
+            ? `${formatGBP(l.budget)} · ${l.status === "contacted" ? "done" : "act now"}`
+            : "Hot enquiry",
         when: relativeWhen(l.posted),
         sortKey: l.posted ?? "",
       });
     }
     for (const j of opps.jobs.slice(0, 4)) {
+      const job = redactSensitive ? redactAvailableJob(j) : j;
       items.push({
         id: `avail-${j.id}`,
         icon: "zap",
         tone: "coral",
-        text: `Job up for grabs — ${j.title}`,
-        meta: `${formatGBP(j.total)} · first to accept wins`,
+        text: `Job up for grabs — ${job.title}`,
+        meta: redactSensitive ? "Add card to unlock" : `${formatGBP(j.total)} · first to accept wins`,
         when: j.timing,
         sortKey: j.id,
       });
     }
     for (const q of opps.quotes.slice(0, 4)) {
+      const quote = redactSensitive ? redactQuote(q) : q;
       items.push({
         id: `quote-${q.id}`,
         icon: "file-text",
         tone: "amber",
-        text: `Quote to submit — ${q.title}`,
-        meta: q.yourBid != null ? `Your bid ${formatGBP(q.yourBid)} · due ${q.deadline}` : `Due ${q.deadline}`,
+        text: `Quote to submit — ${quote.title}`,
+        meta: redactSensitive
+          ? "Add card to unlock"
+          : q.yourBid != null
+            ? `Your bid ${formatGBP(q.yourBid)} · due ${q.deadline}`
+            : `Due ${q.deadline}`,
         when: q.deadline,
         sortKey: q.id,
       });
@@ -270,13 +284,14 @@ export function Dashboard({
 
     for (const j of jobs) {
       if (!jobMatchesDateFilter(j, dateFilter)) continue;
+      const job = redactSensitive ? redactMyJob(j) : j;
       if (j.status === "completed" && j.completedDate) {
         items.push({
           id: `c-${j.id}`,
           icon: "circle-check",
           tone: "green",
-          text: `Completed ${j.title}`,
-          meta: `${j.customer.name} · ${formatGBP(j.total)}`,
+          text: `Completed ${job.title}`,
+          meta: `${job.customer.name} · ${formatGBP(job.total)}`,
           when: j.completed ?? "",
           sortKey: j.completedDate,
         });
@@ -285,8 +300,8 @@ export function Dashboard({
           id: `a-${j.id}`,
           icon: "clock",
           tone: "amber",
-          text: `Final checks — ${j.title}`,
-          meta: `${j.customer.name} · ${formatGBP(j.total)}`,
+          text: `Final checks — ${job.title}`,
+          meta: `${job.customer.name} · ${formatGBP(job.total)}`,
           when: j.scheduled ?? "",
           sortKey: j.scheduledDate ?? "9999",
         });
@@ -295,8 +310,8 @@ export function Dashboard({
           id: `s-${j.id}`,
           icon: "calendar",
           tone: "navy",
-          text: `Scheduled ${j.title}`,
-          meta: `${j.customer.name} · ${j.postcode}`,
+          text: `Scheduled ${job.title}`,
+          meta: `${job.customer.name} · ${job.postcode}`,
           when: j.scheduled ?? "",
           sortKey: j.scheduledDate,
         });
@@ -304,7 +319,7 @@ export function Dashboard({
     }
 
     return items.sort((a, b) => b.sortKey.localeCompare(a.sortKey)).slice(0, 8);
-  }, [jobs, dateFilter, opps]);
+  }, [jobs, dateFilter, opps, redactSensitive]);
 
   if (loading) {
     return (

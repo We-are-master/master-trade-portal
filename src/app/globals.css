@@ -213,3 +213,297 @@ button {
     max-height: 200px !important;
   }
 }
+
+/* Modals — centered on desktop, bottom sheet on phones */
+.fx-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: rgba(2, 0, 64, 0.52);
+  backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom));
+  animation: fx-fade-in 200ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+.fx-modal-panel {
+  background: #fff;
+  border-radius: 16px;
+  width: min(var(--fx-modal-width, 560px), 94vw);
+  max-height: min(90dvh, 100%);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 24px 64px rgba(2, 0, 64, 0.2);
+}
+
+.fx-modal-header {
+  padding: 16px 18px;
+  border-bottom: 1px solid #e4e4ec;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.fx-modal-title {
+  flex: 1;
+  font-size: 16px;
+  font-weight: 600;
+  color: #020040;
+  letter-spacing: -0.02em;
+}
+
+.fx-modal-body {
+  flex: 1;
+  overflow: auto;
+  min-height: 0;
+}
+
+@media (max-width: 640px) {
+  .fx-modal-backdrop {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  .fx-modal-panel {
+    width: 100% !important;
+    max-width: 100%;
+    border-radius: 16px 16px 0 0;
+    max-height: min(92dvh, 100%);
+  }
+
+  .fx-modal-header {
+    padding-top: max(16px, env(safe-area-inset-top));
+  }
+}
+
+/* Secure plan modal */
+.fx-secure-plan-modal {
+  display: flex;
+  flex-direction: column;
+}
+
+.fx-secure-plan-hero {
+  position: relative;
+  padding: 28px 24px 24px;
+  background: linear-gradient(145deg, #020040 0%, #0a0a5c 55%, #1a1060 100%);
+  color: #fff;
+  text-align: center;
+}
+
+.fx-secure-plan-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 34px;
+  height: 34px;
+  border: none;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.1);
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  transition: background 120ms ease;
+}
+
+.fx-secure-plan-close:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.fx-secure-plan-hero-icon {
+  width: 52px;
+  height: 52px;
+  margin: 0 auto 14px;
+  border-radius: 16px;
+  background: rgba(237, 75, 0, 0.15);
+  border: 1px solid rgba(237, 75, 0, 0.35);
+  display: grid;
+  place-items: center;
+}
+
+.fx-secure-plan-heading {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.2;
+}
+
+.fx-secure-plan-sub {
+  margin: 8px auto 0;
+  max-width: 320px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.fx-secure-plan-body {
+  padding: 20px 22px max(22px, env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.fx-secure-plan-card {
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: #f7f7fb;
+  border: 1px solid #e4e4ec;
+}
+
+.fx-secure-plan-card-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #6b6b85;
+  margin-bottom: 6px;
+}
+
+.fx-secure-plan-card-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.fx-secure-plan-card-name {
+  font-size: 18px;
+  font-weight: 700;
+  color: #020040;
+  letter-spacing: -0.02em;
+}
+
+.fx-secure-plan-card-price {
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 16px;
+  font-weight: 600;
+  color: #ed4b00;
+}
+
+.fx-secure-plan-card-note {
+  margin: 8px 0 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: #3a3a55;
+}
+
+.fx-secure-plan-steps {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+
+.fx-secure-plan-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  text-align: center;
+}
+
+.fx-secure-plan-step-dot {
+  width: 22px;
+  height: 22px;
+  border-radius: 9999px;
+  border: 2px solid #e4e4ec;
+  background: #fff;
+  display: grid;
+  place-items: center;
+  font-size: 14px;
+  color: #ed4b00;
+  line-height: 1;
+}
+
+.fx-secure-plan-step.is-done .fx-secure-plan-step-dot {
+  background: #0e8a5f;
+  border-color: #0e8a5f;
+}
+
+.fx-secure-plan-step.is-active .fx-secure-plan-step-dot {
+  border-color: #ed4b00;
+  box-shadow: 0 0 0 3px rgba(237, 75, 0, 0.15);
+}
+
+.fx-secure-plan-step-label {
+  font-size: 10px;
+  font-weight: 500;
+  color: #6b6b85;
+  line-height: 1.2;
+}
+
+.fx-secure-plan-step.is-active .fx-secure-plan-step-label {
+  color: #020040;
+  font-weight: 600;
+}
+
+.fx-secure-plan-form {
+  padding: 14px;
+  border-radius: 12px;
+  border: 1px solid #e4e4ec;
+  background: #fff;
+}
+
+.fx-secure-plan-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #fff1ea;
+  border: 1px solid rgba(237, 75, 0, 0.25);
+  font-size: 13px;
+  line-height: 1.45;
+  color: #c43a00;
+}
+
+.fx-secure-plan-footnote {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin: 0;
+  font-size: 12px;
+  color: #6b6b85;
+}
+
+.fx-secure-plan-dismiss {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #e4e4ec;
+  border-radius: 10px;
+  background: #fff;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  color: #3a3a55;
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+
+.fx-secure-plan-dismiss:hover {
+  background: #f7f7fb;
+  border-color: #cdcdd8;
+}
+
+/* Interested leads — pipeline stages board */
+.fx-leads-stages {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(200px, 1fr));
+  gap: 10px;
+  flex: 1;
+  min-height: 360px;
+  overflow-x: auto;
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+}
+
+@media (max-width: 720px) {
+  .fx-leads-stages {
+    grid-template-columns: repeat(4, minmax(160px, 1fr));
+    min-height: 320px;
+  }
+}

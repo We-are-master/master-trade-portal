@@ -121,6 +121,8 @@ export async function POST(req: NextRequest) {
     trade: "",
     trades: [],
     location: "",
+    status: "onboarding",
+    verified: false,
     subscription_status: "trialing",
     plan,
     trial_ends_at: trialEnds,

@@ -23,29 +23,43 @@ async function ensureStripeCustomer(partnerId: string, email: string | null, nam
 }
 
 /** POST /api/billing/setup-intent — save card without charging. */
-export async function POST(req: NextRequest) {
+export async function POST(_req: NextRequest) {
   const session = await getPartnerSession();
   if (!session) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
-  const stripe = requireStripe();
-  const customerId = await ensureStripeCustomer(
-    session.partnerId,
-    session.email,
-    session.partner.tradingName,
-  );
-
-  const setupIntent = await stripe.setupIntents.create({
-    customer: customerId,
-    payment_method_types: ["card"],
-    metadata: { partner_id: session.partnerId },
-  });
-
-  if (!setupIntent.client_secret) {
-    return NextResponse.json({ error: "Couldn't start card setup." }, { status: 500 });
+  const publishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY?.trim();
+  if (!publishableKey) {
+    return NextResponse.json(
+      { error: "NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY is not set." },
+      { status: 503 },
+    );
   }
 
-  return NextResponse.json({
-    clientSecret: setupIntent.client_secret,
-    publishableKey: process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY?.trim() || null,
-  });
+  try {
+    const stripe = requireStripe();
+    const customerId = await ensureStripeCustomer(
+      session.partnerId,
+      session.email,
+      session.partner.tradingName,
+    );
+
+    const setupIntent = await stripe.setupIntents.create({
+      customer: customerId,
+      payment_method_types: ["card"],
+      metadata: { partner_id: session.partnerId },
+    });
+
+    if (!setupIntent.client_secret) {
+      return NextResponse.json({ error: "Couldn't start card setup." }, { status: 500 });
+    }
+
+    return NextResponse.json({
+      clientSecret: setupIntent.client_secret,
+      publishableKey,
+    });
+  } catch (e) {
+    console.error("[billing/setup-intent]", e);
+    const msg = e instanceof Error ? e.message : "Couldn't start card setup.";
+    return NextResponse.json({ error: msg }, { status: 500 });
+  }
 }
