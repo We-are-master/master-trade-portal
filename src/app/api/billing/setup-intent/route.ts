@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { getPartnerSession } from "@/lib/partner-auth";
 import { requireStripe } from "@/lib/stripe";
 import { createServiceClient } from "@/lib/supabase/service";
+import { partnerBillingAllowed } from "@/lib/partner-billing-guard";
 
 export const runtime = "nodejs";
 
@@ -26,6 +27,13 @@ async function ensureStripeCustomer(partnerId: string, email: string | null, nam
 export async function POST(_req: NextRequest) {
   const session = await getPartnerSession();
   if (!session) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+
+  if (!(await partnerBillingAllowed(createServiceClient(), session.partnerId))) {
+    return NextResponse.json(
+      { error: "billing_disabled", message: "This account is not on a paid plan." },
+      { status: 403 },
+    );
+  }
 
   const publishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY?.trim();
   if (!publishableKey) {

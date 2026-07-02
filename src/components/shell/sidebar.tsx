@@ -9,6 +9,7 @@ import { Avatar, Icon } from "@/components/ui/primitives";
 import { usePartnerRating } from "@/hooks/use-partner-rating";
 import { usePartner } from "@/components/partner-context";
 import { getPlan } from "@/lib/plan-catalog";
+import { partnerBillingEnabled } from "@/lib/partner-work-access";
 import { useMyJobs } from "@/components/jobs-context";
 import { createClient } from "@/lib/supabase/client";
 
@@ -210,6 +211,8 @@ function TrialCard({ onUpgrade }: { onUpgrade: () => void }) {
   const plan = getPlan(partner.plan);
   const daysLeft = partner.trialDaysLeft;
   const onTrial = daysLeft > 0 && partner.subscriptionStatus !== "active";
+  // Free / un-tiered partners have no platform billing — no plan card at all.
+  if (!partnerBillingEnabled(partner)) return null;
   return (
     <div
       style={{

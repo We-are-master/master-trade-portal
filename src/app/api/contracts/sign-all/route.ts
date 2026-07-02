@@ -6,6 +6,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { getClientIp } from "@/lib/client-ip";
 import { PARTNER_CONTRACT_TYPES } from "@/lib/partner-contract-types";
 import { syncSignedContractToPartnerDocument } from "@/lib/partner-agreement-doc-sync";
+import { resolvePartnerPortalCredential } from "@/lib/partner-portal-session";
 import {
   decodeSignatureBase64,
   fetchCompanyName,
@@ -21,11 +22,12 @@ type SignAllBody = {
   signatureImageBase64?: string;
   signerName?: string;
   deviceInfo?: string;
+  /** Wizard draft short-code — used as a fallback when the OTP session cookie hasn't landed yet. */
+  code?: string;
 };
 
 export async function POST(req: Request) {
   const session = await getPartnerSession();
-  if (!session) return NextResponse.json({ error: "Not signed in" }, { status: 401 });
 
   let body: SignAllBody;
   try {
@@ -33,6 +35,35 @@ export async function POST(req: Request) {
   } catch {
     return NextResponse.json({ error: "Invalid body" }, { status: 400 });
   }
+
+  // Resolve the acting partner. Prefer the OTP session — it also gives us the
+  // auth user id and email that go into the audit trail. Fall back to the
+  // wizard's draft code so the /get-started signing flow keeps working even
+  // in the dev races we've seen where the auth cookie is dropped between
+  // steps. Without a matching auth user we fake `userId` as the partnerId so
+  // the sign row still records a stable identifier.
+  let partnerId = session?.partnerId ?? "";
+  let userId = session?.userId ?? "";
+  let signerEmail = session?.email ?? "";
+  if (!partnerId) {
+    const draftCode = body.code?.trim() ?? "";
+    if (draftCode) {
+      const draft = await resolvePartnerPortalCredential(draftCode);
+      if (draft?.partnerId) {
+        partnerId = draft.partnerId;
+        const svcTmp = createServiceClient();
+        const { data: prow } = await svcTmp
+          .from("partners")
+          .select("auth_user_id, email")
+          .eq("id", partnerId)
+          .maybeSingle();
+        const pr = prow as { auth_user_id?: string | null; email?: string | null } | null;
+        userId = pr?.auth_user_id?.trim() || partnerId;
+        signerEmail = pr?.email?.trim() ?? "";
+      }
+    }
+  }
+  if (!partnerId) return NextResponse.json({ error: "Not signed in" }, { status: 401 });
 
   const cleanBase64 = decodeSignatureBase64(body.signatureImageBase64 || body.signatureDataUrl);
   const signerName = body.signerName?.trim();
@@ -76,9 +107,9 @@ export async function POST(req: Request) {
     try {
       const result = await signPartnerContract({
         svc,
-        partnerId: session.partnerId,
-        userId: session.userId,
-        signerEmail: session.email ?? "",
+        partnerId,
+        userId,
+        signerEmail,
         signerName,
         contractVersion: cv,
         cleanSignatureBase64: cleanBase64,
@@ -88,7 +119,7 @@ export async function POST(req: Request) {
         signedAt,
       });
       await syncSignedContractToPartnerDocument(svc, {
-        partnerId: session.partnerId,
+        partnerId,
         contractType: result.contractType,
         signaturePdfUrl: result.signaturePdfUrl,
         signedAt: result.signedAt,
@@ -115,6 +146,20 @@ export async function POST(req: Request) {
 
   const allAlready = results.every((r) => r.alreadySigned);
   const newlySigned = results.filter((r) => !r.alreadySigned);
+
+  // Stamp the wizard-completion timestamp so the portal stops showing the
+  // in-portal onboarding modal and the Master OS Ready tab picks the partner
+  // up even before every mandatory document is uploaded.
+  try {
+    await svc
+      .from("partners")
+      .update({ wizard_completed_at: signedAt })
+      .eq("id", partnerId)
+      .is("wizard_completed_at", null);
+  } catch (err) {
+    console.error("[contracts/sign-all] wizard_completed_at stamp failed:", err);
+    // Non-blocking — the sign is already recorded above.
+  }
 
   return NextResponse.json({
     signed: true,

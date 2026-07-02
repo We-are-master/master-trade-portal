@@ -1,7 +1,10 @@
 // GET /api/partner/required-docs
-// Dynamic mandatory-document checklist for the signed-in partner.
+// Dynamic mandatory-document checklist. Prefers the OTP session, but also
+// accepts a draft `?code=<shortCode>` fallback so the wizard's documents step
+// still loads a proper checklist during dev races where the auth cookie
+// hasn't stuck yet.
 
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import { getPartnerSession } from "@/lib/partner-auth";
 import {
   buildPortalRequiredDocumentChecklist,
@@ -9,6 +12,7 @@ import {
   type RequiredDocDef,
 } from "@/lib/partner-required-docs";
 import { tryCreateServiceClient } from "@/lib/supabase/service";
+import { resolvePartnerPortalCredential } from "@/lib/partner-portal-session";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -17,9 +21,21 @@ export type RequiredDocResponse = Pick<RequiredDocDef, "id" | "docType" | "name"
   mandatory: boolean;
 };
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  let partnerId: string | null = null;
+
   const session = await getPartnerSession();
-  if (!session) return NextResponse.json({ error: "Not signed in" }, { status: 401 });
+  if (session?.partnerId) partnerId = session.partnerId;
+
+  if (!partnerId) {
+    const code = req.nextUrl.searchParams.get("code")?.trim();
+    if (code) {
+      const draft = await resolvePartnerPortalCredential(code);
+      if (draft?.partnerId) partnerId = draft.partnerId;
+    }
+  }
+
+  if (!partnerId) return NextResponse.json({ error: "Not signed in" }, { status: 401 });
 
   const svc = tryCreateServiceClient();
   if (!svc) {
@@ -39,7 +55,7 @@ export async function GET() {
   const { data: prow } = await svc
     .from("partners")
     .select("trades, trade, partner_legal_type, crn")
-    .eq("id", session.partnerId)
+    .eq("id", partnerId)
     .maybeSingle();
   const p = prow as {
     trades?: string[] | null;

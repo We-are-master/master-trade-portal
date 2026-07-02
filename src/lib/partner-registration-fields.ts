@@ -120,7 +120,19 @@ export const SETTINGS_PAGE_RULE_ID: Record<string, string> = {
   selfbill: "bank_details",
 };
 
-export type GetStartedStepId = "trades" | "lead" | "business" | "contact" | "account" | "coverage" | "documents" | "agreements";
+export type GetStartedStepId =
+  | "trades"
+  | "lead"
+  | "business"
+  | "contact"
+  | "account"
+  | "coverage"
+  | "documents"
+  | "agreements"
+  /** Gamified "we're getting you ready" full-screen animation shown after agreements. Auto-advances. */
+  | "getting_ready"
+  /** Summary page explaining how jobs / payment / cancels work — pulls live values from OS company_settings. */
+  | "how_it_works";
 
 export const GET_STARTED_STEP_DEFS: { id: GetStartedStepId; ruleIds: string[] }[] = [
   { id: "trades", ruleIds: ["trades"] },
@@ -131,6 +143,10 @@ export const GET_STARTED_STEP_DEFS: { id: GetStartedStepId; ruleIds: string[] }[
   { id: "coverage", ruleIds: ["coverage"] },
   { id: "documents", ruleIds: ["documents"] },
   { id: "agreements", ruleIds: ["agreements"] },
+  // The two closing steps piggyback on the `account` rule (which is
+  // locked-visible) so they always run at the end of the wizard.
+  { id: "getting_ready", ruleIds: ["account"] },
+  { id: "how_it_works", ruleIds: ["account"] },
 ];
 
 export function filterGetStartedSteps(rules?: PartnerRegistrationRuleRow[] | null): GetStartedStepId[] {

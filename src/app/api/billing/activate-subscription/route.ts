@@ -3,6 +3,7 @@ import { getPartnerSession } from "@/lib/partner-auth";
 import { parsePlanId, priceIdForPlan, type PlanId } from "@/lib/plan-catalog";
 import { requireStripe } from "@/lib/stripe";
 import { createServiceClient } from "@/lib/supabase/service";
+import { accountTypeAllowsBilling } from "@/lib/partner-work-access";
 
 export const runtime = "nodejs";
 
@@ -27,6 +28,22 @@ export async function POST() {
   } | null;
 
   if (!p) return NextResponse.json({ error: "Partner not found" }, { status: 404 });
+
+  // Free / un-tiered partners have no platform billing. Best-effort select so
+  // a database without migration 247 doesn't break the route — a missing
+  // column reads as null → billing disabled, which is the safe default.
+  const { data: acctRow } = await admin
+    .from("partners")
+    .select("account_type")
+    .eq("id", session.partnerId)
+    .maybeSingle();
+  const accountType = (acctRow as { account_type?: string | null } | null)?.account_type ?? null;
+  if (!accountTypeAllowsBilling(accountType)) {
+    return NextResponse.json(
+      { error: "billing_disabled", message: "This account is not on a paid plan." },
+      { status: 403 },
+    );
+  }
   if (p.status !== "active" && p.status !== "onboarding") {
     return NextResponse.json({ error: "account_not_active", message: "Account cannot start billing yet." }, { status: 403 });
   }
