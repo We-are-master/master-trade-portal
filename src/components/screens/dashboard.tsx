@@ -12,6 +12,7 @@ import { DateRangeFilter } from "@/components/ui/date-range-filter";
 import { PartnerRatingCard } from "@/components/ui/partner-rating";
 import { usePartner } from "@/components/partner-context";
 import { usePartnerRating } from "@/hooks/use-partner-rating";
+import { HowFixfyWorksCard } from "@/components/screens/how-fixfy-works";
 import { useMyJobs } from "@/components/jobs-context";
 import { createClient } from "@/lib/supabase/client";
 import { fetchPartnerDocuments, type PartnerDoc } from "@/lib/queries/partner-documents";
@@ -451,6 +452,10 @@ export function Dashboard({
           </div>
         </Card>
       </div>
+
+      {/* How Fixfy Trade works — welcome-board info. Expanded while the partner
+          is under review (previewMode); collapsed once they're active. */}
+      <HowFixfyWorksCard defaultOpen={previewMode} />
 
       {trialDays > 0 && (
         <Card

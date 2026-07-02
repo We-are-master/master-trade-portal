@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 const DEFAULT_PAYOUT_TERMS = "Every 2 weeks on Friday";
-const DEFAULT_PARTNER_CANCEL_FEE_GBP = 15;
+const DEFAULT_PARTNER_CANCEL_FEE_GBP = 50;
 const DEFAULT_SUPPORT_EMAIL = "support@getfixfy.com";
 const DEFAULT_COMPANY_NAME = "Fixfy";
 

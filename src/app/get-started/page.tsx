@@ -142,7 +142,7 @@ function GetStartedFunnel() {
     if (!stepRestoredRef.current) return;
     // Persist the CURRENT step id (not the numeric index — active steps can
     // shift when Settings toggles a rule) so we can rematch it on return.
-    if (currentStepId === "getting_ready" || currentStepId === "how_it_works") return;
+    if (currentStepId === "getting_ready") return;
     window.localStorage.setItem(DRAFT_STEP_STORAGE_KEY, currentStepId);
   }, [currentStepId]);
 
@@ -658,8 +658,7 @@ function GetStartedFunnel() {
   const showFooter =
     currentStepId !== "documents" &&
     currentStepId !== "agreements" &&
-    currentStepId !== "getting_ready" &&
-    currentStepId !== "how_it_works";
+    currentStepId !== "getting_ready";
 
   return (
     <div
@@ -1038,18 +1037,16 @@ function GetStartedFunnel() {
             />
           )}
           {currentStepId === "getting_ready" && (
-            <GettingReadyStep onDone={goNext} />
-          )}
-          {currentStepId === "how_it_works" && (
-            <HowItWorksStep
-              onFinish={() => {
+            <GettingReadyStep
+              onDone={() => {
                 if (typeof window !== "undefined") {
                   // Wizard done — drop the saved step so a future revisit
-                  // doesn't land on this closing screen again.
+                  // doesn't re-enter the closing animation, then drop straight
+                  // into the portal (which shows the "under review" banner).
                   window.localStorage.removeItem(DRAFT_STEP_STORAGE_KEY);
                   window.localStorage.removeItem(DRAFT_STORAGE_KEY);
+                  window.location.href = "/?submitted=1";
                 }
-                window.location.href = "/?submitted=1";
               }}
             />
           )}
@@ -2018,193 +2015,6 @@ function GettingReadyStep({ onDone }: { onDone: () => void }) {
         @keyframes gs-pop  { from { transform: scale(0.86); opacity: 0.4; } 60% { transform: scale(1.04); opacity: 1; } to { transform: scale(1); opacity: 1; } }
         @keyframes gs-spin { to { transform: rotate(360deg); } }
       `}</style>
-    </div>
-  );
-}
-
-// ─── How Fixfy Trade works — summary before entering the portal ────────────
-interface PortalPolicies {
-  companyName: string;
-  supportEmail: string;
-  payoutTerms: string;
-  partnerCancelFeeGbp: number;
-  currency: string;
-}
-
-function HowItWorksStep({ onFinish }: { onFinish: () => void }) {
-  const [policies, setPolicies] = useState<PortalPolicies | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const r = await fetch("/api/portal/policies", { headers: { Accept: "application/json" } });
-        const j = (await r.json().catch(() => null)) as PortalPolicies | null;
-        if (!cancelled && j) setPolicies(j);
-      } catch {
-        /* keep defaults below */
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const payoutTerms = policies?.payoutTerms ?? "Every 2 weeks on Friday";
-  const cancelFee = policies?.partnerCancelFeeGbp ?? 15;
-  const supportEmail = policies?.supportEmail ?? "support@getfixfy.com";
-  const currency = policies?.currency === "USD" ? "$" : "£";
-
-  const tiles: {
-    icon: string;
-    tint: string;
-    title: string;
-    body: string;
-  }[] = [
-    {
-      icon: "hand-metal",
-      tint: T.coral,
-      title: "Jobs come in as offers",
-      body:
-        "Every lead, quote and booked job hits your inbox as an offer. Accept or decline in seconds — the first partner who accepts locks it in.",
-    },
-    {
-      icon: "pound-sterling",
-      tint: "#0E8A5F",
-      title: "Payouts land like clockwork",
-      body: `${payoutTerms}. We generate the self-bill PDF for you — no invoicing, no chasing.`,
-    },
-    {
-      icon: "calendar-clock",
-      tint: "#020040",
-      title: "Cancellations have a floor",
-      body: `If you have to cancel a booked job, ${currency}${cancelFee.toFixed(0)} covers our re-booking cost. Reschedule with the office to avoid it.`,
-    },
-    {
-      icon: "file-check",
-      tint: "#8B5CF6",
-      title: "One self-bill agreement",
-      body:
-        "You signed a single self-bill agreement covering every completed week. No POs, no invoices — Fixfy invoices itself on your behalf.",
-    },
-    {
-      icon: "life-buoy",
-      tint: "#0B5FFF",
-      title: "Support that answers",
-      body: `WhatsApp us or email ${supportEmail} — real humans, most replies inside 30 minutes during working hours.`,
-    },
-  ];
-
-  return (
-    <div
-      style={{
-        maxWidth: 720,
-        margin: "0 auto",
-        padding: "8px 8px 40px",
-      }}
-    >
-      <div
-        style={{
-          fontFamily: T.mono,
-          fontSize: 12.5,
-          letterSpacing: "0.16em",
-          textTransform: "uppercase",
-          color: T.coralPress,
-          marginBottom: 14,
-          display: "inline-flex",
-          alignItems: "center",
-          gap: 7,
-        }}
-      >
-        <span style={{ width: 6, height: 6, borderRadius: 9999, background: T.coral }} />
-        You&apos;re in · quick tour
-      </div>
-      <h1
-        style={{
-          fontSize: 40,
-          fontWeight: 600,
-          letterSpacing: "-0.03em",
-          margin: "0 0 12px",
-          color: T.navy,
-        }}
-      >
-        How Fixfy Trade works
-      </h1>
-      <p
-        style={{
-          fontSize: 16,
-          color: T.slate,
-          maxWidth: 460,
-          margin: "0 auto",
-          lineHeight: 1.5,
-        }}
-      >
-        The 5-second summary — full details live inside the portal at any time.
-      </p>
-
-      <div
-        style={{
-          marginTop: 28,
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
-          gap: 14,
-          textAlign: "left",
-        }}
-      >
-        {tiles.map((tile) => (
-          <div
-            key={tile.title}
-            style={{
-              padding: "18px 18px 16px",
-              borderRadius: 16,
-              background: T.white,
-              border: `1px solid ${T.line}`,
-              boxShadow: "0 1px 2px rgba(2,0,64,0.04)",
-              display: "flex",
-              flexDirection: "column",
-              gap: 10,
-            }}
-          >
-            <div
-              style={{
-                width: 36,
-                height: 36,
-                borderRadius: 10,
-                background: `${tile.tint}15`,
-                border: `1px solid ${tile.tint}30`,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                color: tile.tint,
-              }}
-            >
-              <Icon name={tile.icon} size={18} color={tile.tint} />
-            </div>
-            <p style={{ margin: 0, fontSize: 15, fontWeight: 700, color: T.ink, letterSpacing: "-0.01em" }}>
-              {tile.title}
-            </p>
-            <p style={{ margin: 0, fontSize: 13, color: T.slate, lineHeight: 1.5 }}>{tile.body}</p>
-          </div>
-        ))}
-      </div>
-
-      <div style={FOOTER_STYLE}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12, width: "100%", maxWidth: 420 }}>
-          <Button
-            variant="primary"
-            size="lg"
-            full
-            onClick={onFinish}
-            disabled={loading}
-            iconRight="arrow-right"
-          >
-            Explore the portal
-          </Button>
-        </div>
-      </div>
     </div>
   );
 }

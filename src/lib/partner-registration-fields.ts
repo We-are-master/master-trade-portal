@@ -129,10 +129,8 @@ export type GetStartedStepId =
   | "coverage"
   | "documents"
   | "agreements"
-  /** Gamified "we're getting you ready" full-screen animation shown after agreements. Auto-advances. */
-  | "getting_ready"
-  /** Summary page explaining how jobs / payment / cancels work — pulls live values from OS company_settings. */
-  | "how_it_works";
+  /** Gamified "we're getting you ready" full-screen animation shown after agreements, then straight into the portal. */
+  | "getting_ready";
 
 export const GET_STARTED_STEP_DEFS: { id: GetStartedStepId; ruleIds: string[] }[] = [
   { id: "trades", ruleIds: ["trades"] },
@@ -143,10 +141,9 @@ export const GET_STARTED_STEP_DEFS: { id: GetStartedStepId; ruleIds: string[] }[
   { id: "coverage", ruleIds: ["coverage"] },
   { id: "documents", ruleIds: ["documents"] },
   { id: "agreements", ruleIds: ["agreements"] },
-  // The two closing steps piggyback on the `account` rule (which is
-  // locked-visible) so they always run at the end of the wizard.
+  // Closing animation piggybacks on the `account` rule (locked-visible) so it
+  // always runs last, then redirects into the portal.
   { id: "getting_ready", ruleIds: ["account"] },
-  { id: "how_it_works", ruleIds: ["account"] },
 ];
 
 export function filterGetStartedSteps(rules?: PartnerRegistrationRuleRow[] | null): GetStartedStepId[] {
