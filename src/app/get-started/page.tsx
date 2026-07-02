@@ -1228,13 +1228,11 @@ function LightInput({
 
 function FunnelWordmark() {
   return (
-    <span style={{ display: "inline-flex", alignItems: "center", gap: 8, fontWeight: 600, fontSize: 20, letterSpacing: "-0.03em", lineHeight: 1 }}>
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src="/fixfy-icon.png" alt="Fixfy" style={{ height: 22, width: "auto" }} />
-      <span>
-        <span style={{ color: T.navy }}>fix</span>
-        <span style={{ color: T.coral }}>fy</span>
-      </span>
-    </span>
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src="/fixfy-primary-navy.png"
+      alt="Fixfy"
+      style={{ height: 32, width: "auto", display: "block" }}
+    />
   );
 }
