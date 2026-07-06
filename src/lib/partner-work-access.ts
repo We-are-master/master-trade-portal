@@ -25,15 +25,13 @@ export function accountTypeAllowsBilling(accountType: string | null | undefined)
 /**
  * Partner can use the full portal (leads, quotes, jobs).
  *
- * Onboarding partners are now LOCKED — they can browse the portal in preview
- * mode but cannot bid, quote or claim jobs until Master OS flips them to
- * `active`. Subscription-live rows unlock regardless of status so the paying
- * self-serve funnel still works without an admin touch.
+ * New self-signups arrive as `onboarding` + `trialing` and are LOCKED to preview
+ * mode until an admin approves them in Master OS (which flips status to `active`).
+ * A live PAID subscription unlocks too — but `trialing` does NOT, so free-trial /
+ * onboarding accounts always wait for the manual approval + notification flow.
  */
-export function partnerWorkUnlocked(partner: Pick<Partner, "status" | "subscriptionStatus" | "billingReady">): boolean {
+export function partnerWorkUnlocked(partner: Pick<Partner, "status" | "subscriptionStatus">): boolean {
   if (partner.status === "inactive" || partner.status === "on_break") return false;
   if (partner.status === "active") return true;
-  if (partnerSubscriptionLive(partner.subscriptionStatus)) return true;
-  if (partner.billingReady) return true;
-  return false;
+  return partner.subscriptionStatus === "active";
 }

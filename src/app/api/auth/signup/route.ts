@@ -10,7 +10,7 @@ import { claimPartnerInvite } from "@/lib/partner-auth-claim";
 import { DEFAULT_PLAN_ID, parsePlanId, PARTNERS_LP_URL } from "@/lib/plan-catalog";
 import { PARTNER_TRIAL_DAYS } from "@/lib/trial-config";
 import { createServiceClient } from "@/lib/supabase/service";
-import { sendOtpEmail } from "@/lib/email";
+import { sendOtpEmail, sendNewPartnerAdminNotification } from "@/lib/email";
 
 export const dynamic = "force-dynamic";
 
@@ -97,6 +97,10 @@ export async function POST(req: NextRequest) {
         })
         .eq("id", result.partnerId)
         .is("trial_ends_at", null);
+      // Notify ops so they can approve fast (fire-and-forget — never block signup).
+      void sendNewPartnerAdminNotification({ email, contactName: fullName, companyName: company, plan }).catch((e) =>
+        console.error("[auth/signup] admin notification (claim) failed:", e),
+      );
       const dev = process.env.NODE_ENV !== "production";
       return NextResponse.json({
         ok: true,
@@ -171,6 +175,11 @@ export async function POST(req: NextRequest) {
     console.error("[auth/signup] partners insert failed:", partnerErr);
     return NextResponse.json({ error: "Couldn't set up your trade profile. Try again." }, { status: 500 });
   }
+
+  // Notify ops of the new registration so they can approve fast (fire-and-forget).
+  void sendNewPartnerAdminNotification({ email, contactName: fullName, companyName: company, plan }).catch((e) =>
+    console.error("[auth/signup] admin notification failed:", e),
+  );
 
   // 4) Email the 6-digit sign-in code (generateLink itself sends nothing).
   let devCode: string | undefined;
