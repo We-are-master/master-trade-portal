@@ -77,6 +77,8 @@ export function TradePortalApp() {
   }, [needsPayment]);
 
   const workLocked = !partnerWorkUnlocked(partner);
+  // Locked because they're still awaiting approval (not a paused/deactivated account).
+  const pendingApproval = workLocked && partner.status !== "inactive" && partner.status !== "on_break";
 
   const [page, subpage] = route.split(":");
 
@@ -95,6 +97,8 @@ export function TradePortalApp() {
           title={TITLES[page]}
           breadcrumb={page === "settings" && subpage ? ["Settings", settingsPageLabel(subpage)] : []}
         />
+
+        {pendingApproval && <PendingApprovalBanner />}
 
         {page === "dashboard" && (
           <Dashboard previewMode={workLocked} redactSensitive={workLocked} onOpenJob={handleOpenJob} onNav={onNav} />
@@ -130,6 +134,37 @@ export function TradePortalApp() {
           onSaved={() => setShowPayModal(false)}
         />
       )}
+    </div>
+  );
+}
+
+/** Persistent, non-dismissible bar shown while the account is awaiting approval. */
+function PendingApprovalBanner() {
+  return (
+    <div
+      role="status"
+      style={{
+        display: "flex",
+        alignItems: "flex-start",
+        gap: 12,
+        background: T.coralTint,
+        borderBottom: "1px solid rgba(237,75,0,0.18)",
+        padding: "12px 20px",
+        fontFamily: T.sans,
+      }}
+    >
+      <span style={{ fontSize: 18, lineHeight: "20px", flex: "none" }} aria-hidden>
+        ⏳
+      </span>
+      <div style={{ minWidth: 0 }}>
+        <div style={{ fontSize: 13.5, fontWeight: 700, color: T.navy, letterSpacing: "-0.01em" }}>
+          Account under review — usually approved within 24–48 hours
+        </div>
+        <div style={{ fontSize: 12.5, color: T.slate, lineHeight: 1.5, marginTop: 2 }}>
+          You can explore the portal now. Leads, quotes &amp; jobs unlock the moment we activate you — we&apos;ll
+          email you as soon as you&apos;re live.
+        </div>
+      </div>
     </div>
   );
 }
@@ -182,8 +217,8 @@ function ReviewBanner({ onClose }: { onClose: () => void }) {
         </h2>
         <p style={{ margin: "12px 0 20px", fontSize: 14, color: T.slate, lineHeight: 1.55 }}>
           Thanks — we&apos;re reviewing your onboarding now. You can explore the portal in the meantime; leads,
-          quotes and jobs unlock as soon as our team activates your account (usually within 1 business day).
-          We&apos;ll email you the moment you&apos;re live.
+          quotes and jobs unlock as soon as our team activates your account (new accounts are usually approved
+          within 24–48 hours). We&apos;ll email you the moment you&apos;re live.
         </p>
         <button
           type="button"

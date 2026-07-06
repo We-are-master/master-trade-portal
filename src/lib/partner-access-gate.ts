@@ -1,5 +1,4 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { partnerSubscriptionLive } from "@/lib/partner-work-access";
 
 export type PartnerAccessStatus = "active" | "onboarding" | "inactive" | "on_break" | "needs_attention" | string;
 
@@ -27,14 +26,19 @@ async function getPartnerBilling(
   };
 }
 
-/** Returns an error message when the partner cannot take work actions yet. */
+/**
+ * Returns an error message when the partner cannot take work actions yet.
+ *
+ * Mirrors partnerWorkUnlocked (client gate): only an approved (`active`) partner
+ * or one on a live PAID subscription may act. `onboarding`/`trialing` stay blocked
+ * until an admin approves them in Master OS.
+ */
 export async function partnerWorkAccessBlocked(
   svc: SupabaseClient,
   partnerId: string,
 ): Promise<string | null> {
   const { status, subscription_status } = await getPartnerBilling(svc, partnerId);
-  if (!status || status === "active") return null;
-  if (partnerSubscriptionLive(subscription_status)) return null;
-  if (status === "onboarding" || status === "active") return null;
-  return "Your account isn't active yet. Contact support if you need help.";
+  if (status === "active") return null;
+  if (subscription_status === "active") return null;
+  return "Your account is still in review. New accounts are usually approved within 24–48h — we'll email you as soon as you're live.";
 }

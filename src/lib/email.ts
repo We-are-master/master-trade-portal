@@ -110,3 +110,74 @@ export async function sendOtpEmail(to: string, code: string): Promise<void> {
     html: otpEmailHtml(code),
   });
 }
+
+const esc = (s: string) =>
+  s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c] ?? c);
+
+function newPartnerAdminHtml(p: { email: string; contactName: string; companyName: string; plan: string }): string {
+  const year = new Date().getUTCFullYear();
+  const logoUrl = `${absoluteAppUrl()}/logos/fixfy-primary-navy.png`;
+  const row = (label: string, value: string) => `
+    <tr>
+      <td style="padding:8px 0;font-size:12px;color:${T.mute};width:120px;vertical-align:top;">${label}</td>
+      <td style="padding:8px 0;font-size:14px;color:${T.ink};font-weight:600;">${esc(value)}</td>
+    </tr>`;
+  return `
+<!doctype html>
+<html lang="en">
+  <head><meta charset="utf-8" /><meta name="viewport" content="width=device-width,initial-scale=1" /><title>New Fixfy Trade signup</title></head>
+  <body style="margin:0;padding:0;background:${T.paper};font-family:'Inter','Segoe UI',-apple-system,BlinkMacSystemFont,sans-serif;color:${T.ink};">
+    <div style="display:none;overflow:hidden;line-height:1px;opacity:0;max-height:0;max-width:0;">New partner registered — review & activate.</div>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:${T.paper};padding:32px 16px;">
+      <tr><td align="center">
+        <table role="presentation" width="480" cellpadding="0" cellspacing="0" border="0" style="max-width:480px;width:100%;">
+          <tr><td style="background:#ffffff;padding:26px 28px 18px;border:1px solid ${T.line};border-bottom:none;border-radius:18px 18px 0 0;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
+              <td><img src="${logoUrl}" alt="Fixfy" width="120" style="display:block;height:auto;max-width:120px;border:0;" /></td>
+              <td align="right" style="font-family:'SFMono-Regular','Menlo',monospace;font-size:10px;font-weight:700;letter-spacing:0.24em;color:${T.mute};">NEW SIGNUP</td>
+            </tr></table>
+          </td></tr>
+          <tr><td style="background:#ffffff;padding:32px 32px 26px;border-left:1px solid ${T.line};border-right:1px solid ${T.line};">
+            <p style="margin:0 0 6px;font-family:'SFMono-Regular','Menlo',monospace;font-size:11px;font-weight:700;letter-spacing:0.18em;color:${T.coral};text-transform:uppercase;">New partner registered</p>
+            <h1 style="margin:0 0 16px;font-size:22px;font-weight:700;letter-spacing:-0.02em;color:${T.navy};line-height:1.25;">${esc(p.companyName)}</h1>
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-top:1px solid ${T.line};">
+              ${row("Contact", p.contactName)}
+              ${row("Email", p.email)}
+              ${row("Plan", p.plan)}
+            </table>
+            <p style="margin:22px 0 0;font-size:13px;color:${T.slate};line-height:1.55;">
+              They're in the portal now with <strong>restricted access</strong> until you approve them.
+              Open <strong>Master OS → Partners</strong>, find this partner and hit <strong>Activate</strong> —
+              that unlocks their account and emails them automatically.
+            </p>
+          </td></tr>
+          <tr><td style="background:#ffffff;border:1px solid ${T.line};border-top:none;border-radius:0 0 18px 18px;padding:18px 32px 22px;">
+            <p style="margin:0;font-size:10px;color:${T.mute};letter-spacing:0.04em;">© ${year} Fixfy Ltd · London, United Kingdom</p>
+          </td></tr>
+        </table>
+      </td></tr>
+    </table>
+  </body>
+</html>`;
+}
+
+/**
+ * Notify the ops inbox that a new partner registered, so they can approve fast.
+ * Fire-and-forget: callers should not block or roll back signup if this throws.
+ */
+export async function sendNewPartnerAdminNotification(p: {
+  email: string;
+  contactName: string;
+  companyName: string;
+  plan: string;
+}): Promise<void> {
+  if (!resend) throw new Error("RESEND_API_KEY not set");
+  const from = process.env.RESEND_FROM_EMAIL || "Fixfy Trade <onboarding@resend.dev>";
+  const to = process.env.ADMIN_NOTIFICATION_EMAIL?.trim() || "victor@getfixfy.com";
+  await resend.emails.send({
+    from,
+    to,
+    subject: `New Fixfy Trade signup — ${p.companyName}`,
+    html: newPartnerAdminHtml(p),
+  });
+}
