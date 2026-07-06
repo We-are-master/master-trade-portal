@@ -47,6 +47,26 @@ const GROUP_LABELS: Record<RequiredDoc["group"], string> = {
 };
 
 export default function GetStartedPage() {
+  // First-party visit tracking (one hit per browser session) for the Master OS
+  // partner funnel. Fire-and-forget — never blocks or errors the page.
+  useEffect(() => {
+    try {
+      if (sessionStorage.getItem("fx_gs_hit")) return;
+      sessionStorage.setItem("fx_gs_hit", "1");
+    } catch {
+      /* private mode — fall through and still record the hit */
+    }
+    void fetch("/api/track/hit", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        path: "/get-started",
+        referrer: (typeof document !== "undefined" && document.referrer) || null,
+      }),
+      keepalive: true,
+    }).catch(() => {});
+  }, []);
+
   return (
     <Suspense fallback={null}>
       <GetStartedFunnel />
