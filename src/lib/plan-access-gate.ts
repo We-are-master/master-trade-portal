@@ -24,12 +24,30 @@ function currentPeriodStart(): string {
 
 async function loadUsageRow(partnerId: string): Promise<UsageRow | null> {
   const admin = createServiceClient();
-  const { data } = await admin
+  const { data, error } = await admin
     .from("partners")
     .select("plan, subscription_status, status, usage_period_start, leads_used, jobs_used, quotes_used")
     .eq("id", partnerId)
     .maybeSingle();
-  return (data as UsageRow | null) ?? null;
+  if (!error) return (data as UsageRow | null) ?? null;
+
+  // The usage-tracking columns may not exist yet on older / self-hosted DBs. A schema
+  // error (42703) must NOT read as "Partner not found" and block the action — fall back
+  // to the core plan fields and treat usage as unstarted (limits simply aren't enforced
+  // until the columns are migrated in).
+  const { data: core } = await admin
+    .from("partners")
+    .select("plan, subscription_status, status")
+    .eq("id", partnerId)
+    .maybeSingle();
+  if (!core) return null;
+  return {
+    ...(core as UsageRow),
+    usage_period_start: null,
+    leads_used: 0,
+    jobs_used: 0,
+    quotes_used: 0,
+  };
 }
 
 async function ensureUsagePeriod(partnerId: string, row: UsageRow): Promise<UsageRow> {
