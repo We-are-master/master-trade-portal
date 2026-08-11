@@ -6,20 +6,18 @@ export function partnerSubscriptionLive(status: string | null | undefined): bool
 }
 
 /**
- * True only for partners the OS has tiered as `subscription`. This is the single
- * gate for ALL platform-payment UI (billing page, trial card, payment modal,
- * Stripe endpoints). `free` and un-tiered (`null`) partners never see any
- * payment surface — they're either ops-managed or still under review.
+ * Platform billing UI (plan card, Stripe checkout, paywall) — paused for now.
+ * Free / Paid account types are not used in the portal until billing returns.
  */
 export function partnerBillingEnabled(
-  partner: Pick<Partner, "accountType">,
+  _partner: Pick<Partner, "accountType">,
 ): boolean {
-  return partner.accountType === "subscription";
+  return false;
 }
 
-/** Server-side variant — same rule from a raw account_type value. */
-export function accountTypeAllowsBilling(accountType: string | null | undefined): boolean {
-  return accountType === "subscription";
+/** Server-side variant — billing paused (same for every account_type). */
+export function accountTypeAllowsBilling(_accountType: string | null | undefined): boolean {
+  return false;
 }
 
 /**

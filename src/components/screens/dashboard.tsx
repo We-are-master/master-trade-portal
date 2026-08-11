@@ -246,7 +246,7 @@ export function Dashboard({
         tone: l.status === "contacted" ? "green" : "coral",
         text: l.status === "contacted" ? `Lead contacted — ${lead.title}` : `New lead — ${lead.title}`,
         meta: redactSensitive
-          ? "Add card to unlock"
+          ? "Available when approved"
           : l.budget != null
             ? `${formatGBP(l.budget)} · ${l.status === "contacted" ? "done" : "act now"}`
             : "Hot enquiry",
@@ -261,7 +261,7 @@ export function Dashboard({
         icon: "zap",
         tone: "coral",
         text: `Job up for grabs — ${job.title}`,
-        meta: redactSensitive ? "Add card to unlock" : `${formatGBP(j.total)} · first to accept wins`,
+        meta: redactSensitive ? "Available when approved" : `${formatGBP(j.total)} · first to accept wins`,
         when: j.timing,
         sortKey: j.id,
       });
@@ -274,7 +274,7 @@ export function Dashboard({
         tone: "amber",
         text: `Quote to submit — ${quote.title}`,
         meta: redactSensitive
-          ? "Add card to unlock"
+          ? "Available when approved"
           : q.yourBid != null
             ? `Your bid ${formatGBP(q.yourBid)} · due ${q.deadline}`
             : `Due ${q.deadline}`,

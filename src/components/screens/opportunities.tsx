@@ -1126,7 +1126,7 @@ function AvailableJobCard({
         <div style={{ marginTop: 14, display: "flex", alignItems: "center", gap: 10 }}>
           <span style={{ flex: 1 }} />
           <Button variant="dark" size="sm" icon="check" onClick={onAccept} disabled={accepting || locked}>
-            {locked ? "Add card to accept" : accepting ? "Accepting…" : "Accept job"}
+            {locked ? "Available when approved" : accepting ? "Accepting…" : "Accept job"}
           </Button>
         </div>
       </div>
@@ -1299,7 +1299,7 @@ function QuoteRow({
           {status === "to-quote" && (
             <div onClick={(e) => e.stopPropagation()}>
               <Button variant="primary" size="sm" icon="send" onClick={onOpen} disabled={locked}>
-                {locked ? "Add card" : "Submit quote"}
+                {locked ? "Available when approved" : "Submit quote"}
               </Button>
             </div>
           )}

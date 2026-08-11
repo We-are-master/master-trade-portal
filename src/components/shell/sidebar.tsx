@@ -1,6 +1,6 @@
 "use client";
 
-// Sidebar, TrialCard, UserMiniCard — ported from shell.jsx.
+// Sidebar, UserMiniCard — ported from shell.jsx.
 import { useState, type CSSProperties } from "react";
 import { AuthWordmark, BrandPanelBackground } from "@/components/brand/auth-wordmark";
 import { T } from "@/lib/tokens";
@@ -8,8 +8,6 @@ import { PartnerRatingInline } from "@/components/ui/partner-rating";
 import { Avatar, Icon } from "@/components/ui/primitives";
 import { usePartnerRating } from "@/hooks/use-partner-rating";
 import { usePartner } from "@/components/partner-context";
-import { getPlan } from "@/lib/plan-catalog";
-import { partnerBillingEnabled } from "@/lib/partner-work-access";
 import { useMyJobs } from "@/components/jobs-context";
 import { createClient } from "@/lib/supabase/client";
 
@@ -19,6 +17,8 @@ interface NavItem {
   icon: string;
   badge?: number;
   hot?: boolean;
+  /** Soft “coming soon” — visible but not a live feature yet. */
+  soon?: boolean;
 }
 
 // Original section structure kept; only the item labels are renamed. Badges are
@@ -28,7 +28,7 @@ const NAV: { section: string; items: NavItem[] }[] = [
   {
     section: "Opportunities",
     items: [
-      { id: "leads", label: "Hot Leads", icon: "user-plus", hot: true },
+      { id: "leads", label: "Hot Leads", icon: "user-plus", hot: true, soon: true },
       { id: "available", label: "Available Jobs", icon: "wrench" },
       { id: "quotes", label: "Available Quotes", icon: "file-text" },
     ],
@@ -64,11 +64,11 @@ export function Sidebar({
   active,
   onNav,
   density = "comfortable",
-  workLocked = false,
 }: {
   active: string;
   onNav: (id: string) => void;
   density?: "comfortable" | "compact";
+  /** @deprecated Locks removed — all active partners share the same nav. Kept for call-site compat. */
   workLocked?: boolean;
 }) {
   const isDense = density === "compact";
@@ -77,7 +77,6 @@ export function Sidebar({
   // Real, derived badges only (no fabricated counts). Available/quotes/leads would need their
   // own fetch, so they stay unbadged until there's a shared count source.
   const badgeFor = (id: string): number | undefined => (id === "jobs" && activeJobs > 0 ? activeJobs : undefined);
-  const lockedNav = new Set(["leads", "available", "quotes", "jobs", "schedule"]);
 
   function Row({ item }: { item: NavItem }) {
     const sel = item.id === active;
@@ -120,7 +119,7 @@ export function Sidebar({
           {item.label}
         </span>
         <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-          {workLocked && lockedNav.has(item.id) && (
+          {item.soon ? (
             <span
               style={{
                 fontSize: 9,
@@ -129,28 +128,28 @@ export function Sidebar({
                 textTransform: "uppercase",
                 padding: "2px 6px",
                 borderRadius: 4,
-                background: "rgba(255,255,255,0.12)",
-                color: "rgba(255,255,255,0.55)",
+                background: "rgba(237,75,0,0.22)",
+                color: T.coral,
               }}
             >
-              Locked
+              Soon
+            </span>
+          ) : null}
+          {item.badge != null && (
+            <span
+              style={{
+                fontFamily: T.mono,
+                fontSize: 10.5,
+                padding: "1px 6px",
+                background: T.coral,
+                color: T.white,
+                borderRadius: 9999,
+                fontWeight: 500,
+              }}
+            >
+              {item.badge}
             </span>
           )}
-        {item.badge != null && (
-          <span
-            style={{
-              fontFamily: T.mono,
-              fontSize: 10.5,
-              padding: "1px 6px",
-              background: T.coral,
-              color: T.white,
-              borderRadius: 9999,
-              fontWeight: 500,
-            }}
-          >
-            {item.badge}
-          </span>
-        )}
         </span>
       </div>
     );
@@ -200,72 +199,8 @@ export function Sidebar({
         ))}
       </div>
 
-      <TrialCard onUpgrade={() => onNav("settings:billing")} />
       <UserMiniCard onSettings={() => onNav("settings")} />
     </BrandPanelBackground>
-  );
-}
-
-function TrialCard({ onUpgrade }: { onUpgrade: () => void }) {
-  const partner = usePartner();
-  const plan = getPlan(partner.plan);
-  const daysLeft = partner.trialDaysLeft;
-  const onTrial = daysLeft > 0 && partner.subscriptionStatus !== "active";
-  // Free / un-tiered partners have no platform billing — no plan card at all.
-  if (!partnerBillingEnabled(partner)) return null;
-  return (
-    <div
-      style={{
-        margin: "12px 0 8px",
-        padding: 12,
-        borderRadius: 10,
-        background: "rgba(255,255,255,0.05)",
-        border: "1px solid rgba(255,255,255,0.08)",
-        color: T.white,
-        display: "flex",
-        flexDirection: "column",
-        gap: 8,
-      }}
-    >
-      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <Icon name="credit-card" size={14} color={T.coral} />
-        <span style={{ fontSize: 12, fontWeight: 500 }}>{plan.name}</span>
-        {onTrial && (
-          <span
-            style={{
-              marginLeft: "auto",
-              fontFamily: T.mono,
-              fontSize: 11,
-              padding: "1px 6px",
-              background: T.coral,
-              color: T.white,
-              borderRadius: 4,
-            }}
-          >
-            {daysLeft}d left
-          </span>
-        )}
-      </div>
-      <div style={{ fontSize: 11.5, color: "rgba(255,255,255,0.7)", lineHeight: 1.4 }}>
-        {plan.priceLabel} · {partner.billingReady ? "Card on file" : "Add card in onboarding"}
-      </div>
-      <button
-        onClick={onUpgrade}
-        style={{
-          background: T.white,
-          color: T.navy,
-          border: "none",
-          borderRadius: 8,
-          padding: "7px 10px",
-          fontSize: 12,
-          fontWeight: 500,
-          cursor: "pointer",
-          fontFamily: T.sans,
-        }}
-      >
-        Manage plan
-      </button>
-    </div>
   );
 }
 
