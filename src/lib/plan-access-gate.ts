@@ -1,7 +1,5 @@
 import { createServiceClient } from "@/lib/supabase/service";
 import {
-  getPlan,
-  planAllows,
   planLimit,
   type PlanFeature,
   type PlanId,
@@ -65,32 +63,16 @@ function usageCount(row: UsageRow, feature: PlanFeature): number {
   return row.quotes_used ?? 0;
 }
 
-/** Returns user-facing block message, or null if allowed. */
+/**
+ * Returns user-facing block message, or null if allowed.
+ *
+ * Plan Free/Paid tiers are paused — every active partner has the same access
+ * (leads / jobs / quotes). Account status gates still apply in partner-access-gate.
+ */
 export async function partnerFeatureBlocked(
-  partnerId: string,
-  feature: PlanFeature,
+  _partnerId: string,
+  _feature: PlanFeature,
 ): Promise<string | null> {
-  const row = await loadUsageRow(partnerId);
-  if (!row) return "Partner not found.";
-  if (row.status !== "active") return null; // account gate handles non-active
-
-  const planId = (row.plan ?? "pro") as PlanId;
-  if (!planAllows(planId, feature)) {
-    if (feature === "jobs") return "Upgrade to Pro or VIP to accept jobs.";
-    if (feature === "quotes") return "Upgrade to Pro or VIP to bid on quotes.";
-    return "This feature isn't on your plan.";
-  }
-
-  const limit = planLimit(planId, feature);
-  if (limit === null) return null;
-
-  const fresh = await ensureUsagePeriod(partnerId, row);
-  const used = usageCount(fresh, feature);
-  if (used >= limit) {
-    const plan = getPlan(planId);
-    if (planId === "pro") return `You've reached your ${limit} ${feature} limit this month. Upgrade to VIP for unlimited access.`;
-    return `You've reached your ${plan.name} limit for ${feature} this month.`;
-  }
   return null;
 }
 

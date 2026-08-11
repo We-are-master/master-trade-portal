@@ -28,7 +28,8 @@ const STARTER: PlanDefinition = {
     "Profile & document management",
     "Weekly payout schedule",
   ],
-  limits: { leads: null, jobs: 0, quotes: 0 },
+  // Equal access for all active partners (Free/Paid plan gates paused).
+  limits: { leads: null, jobs: null, quotes: null },
 };
 
 const PRO: PlanDefinition = {
@@ -45,7 +46,8 @@ const PRO: PlanDefinition = {
     "10 quote bids per month",
     "Full schedule & operations",
   ],
-  limits: { leads: 30, jobs: 15, quotes: 10 },
+  // Equal access for all active partners (Free/Paid plan gates paused).
+  limits: { leads: null, jobs: null, quotes: null },
 };
 
 const VIP: PlanDefinition = {
