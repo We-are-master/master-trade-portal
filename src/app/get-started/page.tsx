@@ -140,7 +140,7 @@ function GetStartedFunnel() {
   // then walk through coverage / documents / agreements with a fresh
   // session.
   const SAFE_RESTORE_STEP_IDS = useMemo(
-    () => new Set<GetStartedStepId>(["trades", "lead", "business", "contact"]),
+    () => new Set<GetStartedStepId>(["trades", "lead", "business", "contact", "pending_review"]),
     [],
   );
   const stepRestoredRef = useRef(false);
@@ -148,14 +148,18 @@ function GetStartedFunnel() {
     if (stepRestoredRef.current) return;
     if (configLoading || activeSteps.length === 0) return;
     if (typeof window === "undefined") return;
-    const savedStepId = window.localStorage.getItem(DRAFT_STEP_STORAGE_KEY);
     stepRestoredRef.current = true;
+    // Returning after submit (or from a portal redirect) → waiting screen.
+    const forceWaiting = sp.get("waiting") === "1";
+    const savedStepId = forceWaiting
+      ? "pending_review"
+      : window.localStorage.getItem(DRAFT_STEP_STORAGE_KEY);
     if (!savedStepId) return;
-    if (!SAFE_RESTORE_STEP_IDS.has(savedStepId as GetStartedStepId)) return;
+    if (!SAFE_RESTORE_STEP_IDS.has(savedStepId as GetStartedStepId) && !forceWaiting) return;
     const idx = activeSteps.indexOf(savedStepId as GetStartedStepId);
     if (idx < 0) return;
     setStep(idx);
-  }, [activeSteps, configLoading, SAFE_RESTORE_STEP_IDS]);
+  }, [activeSteps, configLoading, SAFE_RESTORE_STEP_IDS, sp]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -165,6 +169,81 @@ function GetStartedFunnel() {
     if (currentStepId === "getting_ready") return;
     window.localStorage.setItem(DRAFT_STEP_STORAGE_KEY, currentStepId);
   }, [currentStepId]);
+
+  async function signOutAndExit() {
+    try {
+      const supabase = createClient();
+      await supabase.auth.signOut();
+    } catch {
+      /* still leave */
+    }
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem(DRAFT_STEP_STORAGE_KEY);
+      window.localStorage.removeItem(DRAFT_STORAGE_KEY);
+      window.location.href = PARTNERS_LP_URL || "/login";
+    }
+  }
+
+  // Waiting screen: fill email from the signed-in session when draft is empty.
+  useEffect(() => {
+    if (currentStepId !== "pending_review") return;
+    if (email.trim()) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const supabase = createClient();
+        const { data } = await supabase.auth.getUser();
+        const sessionEmail = data.user?.email?.trim();
+        if (!cancelled && sessionEmail) setEmail(sessionEmail);
+      } catch {
+        /* ignore */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [currentStepId, email]);
+
+  // Signed-in partner who already finished the wizard but isn't activated yet
+  // should always land on the waiting screen (even without ?waiting=1).
+  // Activated partners bounce to the portal.
+  useEffect(() => {
+    if (configLoading || activeSteps.length === 0) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const supabase = createClient();
+        const { data: auth } = await supabase.auth.getUser();
+        if (!auth.user || cancelled) return;
+        const { data: row } = await supabase
+          .from("partners")
+          .select("wizard_completed_at, status, subscription_status, email")
+          .eq("auth_user_id", auth.user.id)
+          .maybeSingle();
+        if (!row || cancelled) return;
+        if (row.status === "inactive" || row.status === "on_break") return;
+        const unlocked =
+          row.status === "active" || row.subscription_status === "active";
+        if (unlocked) {
+          window.location.href = "/";
+          return;
+        }
+        if (!row.wizard_completed_at) return;
+        const idx = activeSteps.indexOf("pending_review");
+        if (idx >= 0) {
+          window.localStorage.setItem(DRAFT_STEP_STORAGE_KEY, "pending_review");
+          setStep(idx);
+        }
+        const partnerEmail = typeof row.email === "string" ? row.email.trim() : "";
+        if (partnerEmail) setEmail(partnerEmail);
+      } catch {
+        /* ignore — localStorage / ?waiting=1 still cover the happy path */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeSteps, configLoading]);
 
   const showLegalType = isPartnerRegistrationFieldVisible("legal_type", registrationFields);
   const showTaxId = isPartnerRegistrationFieldVisible("tax_id", registrationFields);
@@ -678,7 +757,8 @@ function GetStartedFunnel() {
   const showFooter =
     currentStepId !== "documents" &&
     currentStepId !== "agreements" &&
-    currentStepId !== "getting_ready";
+    currentStepId !== "getting_ready" &&
+    currentStepId !== "pending_review";
 
   return (
     <div
@@ -721,34 +801,51 @@ function GetStartedFunnel() {
         }}
       >
         <FunnelWordmark />
-        <div style={{ flex: 1, maxWidth: 520, height: 6, borderRadius: 9999, background: T.paper2, overflow: "hidden" }}>
-          <div
-            style={{
-              width: `${((step + 1) / totalSteps) * 100}%`,
-              height: "100%",
-              borderRadius: 9999,
-              background: T.coral,
-              transition: `width 300ms ${T.ease}`,
-            }}
-          />
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 16, fontSize: 13 }}>
-          <span style={{ color: T.mute, fontFamily: T.mono, fontSize: 11.5, letterSpacing: "0.04em" }}>
-            Step {step + 1} of {totalSteps}
-          </span>
-          <button
-            type="button"
-            onClick={exit}
-            style={{ display: "inline-flex", alignItems: "center", gap: 5, background: "transparent", border: "none", color: T.slate, fontFamily: T.sans, fontSize: 13, cursor: "pointer" }}
-          >
-            Exit <Icon name="x" size={14} />
-          </button>
-        </div>
+        {currentStepId !== "pending_review" && currentStepId !== "getting_ready" ? (
+          <>
+            <div style={{ flex: 1, maxWidth: 520, height: 6, borderRadius: 9999, background: T.paper2, overflow: "hidden" }}>
+              <div
+                style={{
+                  width: `${((step + 1) / totalSteps) * 100}%`,
+                  height: "100%",
+                  borderRadius: 9999,
+                  background: T.coral,
+                  transition: `width 300ms ${T.ease}`,
+                }}
+              />
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 16, fontSize: 13 }}>
+              <span style={{ color: T.mute, fontFamily: T.mono, fontSize: 11.5, letterSpacing: "0.04em" }}>
+                Step {step + 1} of {totalSteps}
+              </span>
+              <button
+                type="button"
+                onClick={exit}
+                style={{ display: "inline-flex", alignItems: "center", gap: 5, background: "transparent", border: "none", color: T.slate, fontFamily: T.sans, fontSize: 13, cursor: "pointer" }}
+              >
+                Exit <Icon name="x" size={14} />
+              </button>
+            </div>
+          </>
+        ) : (
+          <div style={{ flex: 1 }} />
+        )}
       </header>
 
-      <main style={{ position: "relative", zIndex: 2, flex: 1, display: "flex", justifyContent: "center", padding: "48px 24px 170px" }}>
+      <main
+        style={{
+          position: "relative",
+          zIndex: 2,
+          flex: 1,
+          display: "flex",
+          justifyContent: "center",
+          padding: currentStepId === "pending_review" ? "36px 24px 64px" : "48px 24px 170px",
+        }}
+      >
         <div style={{ width: "100%", maxWidth: 760, textAlign: "center" }}>
-          <StepDots step={step} total={totalSteps} />
+          {currentStepId !== "pending_review" && currentStepId !== "getting_ready" ? (
+            <StepDots step={step} total={totalSteps} />
+          ) : null}
 
           {currentStepId === "trades" && (
             <StepShell
@@ -1060,15 +1157,18 @@ function GetStartedFunnel() {
             <GettingReadyStep
               onDone={() => {
                 if (typeof window !== "undefined") {
-                  // Wizard done — drop the saved step so a future revisit
-                  // doesn't re-enter the closing animation, then drop straight
-                  // into the portal (which shows the "under review" banner).
+                  // Wizard done — clear draft step so refresh doesn't replay the
+                  // animation. Stay on get-started for the waiting screen; no
+                  // portal access until staff activates the account.
                   window.localStorage.removeItem(DRAFT_STEP_STORAGE_KEY);
-                  window.localStorage.removeItem(DRAFT_STORAGE_KEY);
-                  window.location.href = "/?submitted=1";
+                  window.localStorage.setItem(DRAFT_STEP_STORAGE_KEY, "pending_review");
                 }
+                goNext();
               }}
             />
+          )}
+          {currentStepId === "pending_review" && (
+            <PendingReviewStep email={email.trim()} onSignOut={() => void signOutAndExit()} />
           )}
 
           {error && (
@@ -1339,7 +1439,7 @@ function AgreementsStep({ mandatory, signerDefault, onFinish }: { mandatory: boo
       </div>
       <h1 style={{ fontSize: 40, fontWeight: 600, letterSpacing: "-0.03em", margin: "0 0 12px", color: T.navy }}>Sign your agreements</h1>
       <p style={{ fontSize: 16, color: T.slate, maxWidth: 460, margin: "0 auto", lineHeight: 1.5 }}>
-        One signature covers all Fixfy partner agreements. We&apos;ll review your application within 24 hours.
+        One signature covers all Fixfy partner agreements. Approval usually takes 48–72 hours.
       </p>
 
       <div style={{ marginTop: 26, textAlign: "left", maxWidth: 520, marginInline: "auto" }}>
@@ -1858,6 +1958,165 @@ function FunnelWordmark() {
         style={{ height: 28, width: "auto", display: "block" }}
       />
     </span>
+  );
+}
+
+/** Final screen — no portal access until staff activates (usually 48–72 hours). */
+function PendingReviewStep({ email, onSignOut }: { email: string; onSignOut: () => void }) {
+  const steps = [
+    {
+      n: "1",
+      title: "We review your documents",
+      body: "Our team checks ID, insurance and trade certificates against what you uploaded.",
+    },
+    {
+      n: "2",
+      title: "We activate your account",
+      body: "When everything checks out, we flip you live on the Fixfy partner platform.",
+    },
+    {
+      n: "3",
+      title: "You get login access",
+      body: "We'll email you as soon as you're approved — same email you used to sign up. Then you can pick up jobs.",
+    },
+  ];
+
+  return (
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        gap: 28,
+        padding: "28px 8px 8px",
+        textAlign: "center",
+        maxWidth: 520,
+        margin: "0 auto",
+      }}
+    >
+      <div
+        style={{
+          fontFamily: T.mono,
+          fontSize: 12.5,
+          letterSpacing: "0.16em",
+          textTransform: "uppercase",
+          color: T.coralPress,
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 7,
+        }}
+      >
+        <span style={{ width: 6, height: 6, borderRadius: 9999, background: T.coral }} />
+        Application received
+      </div>
+
+      <div
+        aria-hidden
+        style={{
+          width: 88,
+          height: 88,
+          borderRadius: "50%",
+          background: T.coralTint,
+          border: `1.5px solid rgba(237,75,0,0.22)`,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          boxShadow: "0 16px 40px -18px rgba(237,75,0,0.45)",
+        }}
+      >
+        <Icon name="hourglass" size={36} color={T.coral} />
+      </div>
+
+      <div>
+        <h1
+          style={{
+            margin: 0,
+            fontSize: 34,
+            fontWeight: 700,
+            letterSpacing: "-0.03em",
+            color: T.navy,
+            lineHeight: 1.15,
+          }}
+        >
+          You&apos;re on the waiting list
+        </h1>
+        <p style={{ margin: "14px 0 0", fontSize: 15.5, color: T.slate, lineHeight: 1.55 }}>
+          Your application is under review. Approval usually takes{" "}
+          <strong style={{ color: T.navy, fontWeight: 700 }}>48–72 hours</strong>. You
+          won&apos;t have access to the partner platform until we activate you.
+        </p>
+        {email ? (
+          <p style={{ margin: "12px 0 0", fontSize: 13.5, color: T.mute, lineHeight: 1.45 }}>
+            We&apos;ll notify{" "}
+            <span style={{ color: T.navy, fontWeight: 600 }}>{email}</span> when you&apos;re live.
+          </p>
+        ) : null}
+      </div>
+
+      <div
+        style={{
+          width: "100%",
+          textAlign: "left",
+          background: T.white,
+          border: `1px solid ${T.line}`,
+          borderRadius: 16,
+          padding: "18px 18px 10px",
+          boxShadow: "0 10px 30px -22px rgba(2,0,64,0.35)",
+        }}
+      >
+        <div
+          style={{
+            fontFamily: T.mono,
+            fontSize: 11,
+            letterSpacing: "0.12em",
+            textTransform: "uppercase",
+            color: T.mute,
+            marginBottom: 12,
+          }}
+        >
+          Next steps
+        </div>
+        <ol style={{ listStyle: "none", margin: 0, padding: 0, display: "grid", gap: 14 }}>
+          {steps.map((s) => (
+            <li key={s.n} style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
+              <span
+                style={{
+                  flex: "none",
+                  width: 28,
+                  height: 28,
+                  borderRadius: 9999,
+                  background: T.coralTint,
+                  color: T.coral,
+                  fontFamily: T.mono,
+                  fontSize: 12,
+                  fontWeight: 700,
+                  display: "grid",
+                  placeItems: "center",
+                }}
+              >
+                {s.n}
+              </span>
+              <div style={{ minWidth: 0, paddingTop: 2 }}>
+                <div style={{ fontSize: 14.5, fontWeight: 700, color: T.navy, letterSpacing: "-0.01em" }}>
+                  {s.title}
+                </div>
+                <div style={{ fontSize: 13, color: T.slate, lineHeight: 1.45, marginTop: 2 }}>{s.body}</div>
+              </div>
+            </li>
+          ))}
+        </ol>
+      </div>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 10, width: "100%", maxWidth: 360 }}>
+        <Button variant="secondary" size="lg" full onClick={onSignOut} icon="log-out">
+          Sign out
+        </Button>
+        <p style={{ margin: 0, fontSize: 12.5, color: T.mute, lineHeight: 1.45 }}>
+          Come back anytime — if you sign in before approval, you&apos;ll land on this screen
+          again until we activate your account.
+        </p>
+      </div>
+    </div>
   );
 }
 
