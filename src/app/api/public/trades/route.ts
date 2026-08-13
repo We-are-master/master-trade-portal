@@ -1,4 +1,5 @@
-// GET /api/public/trades — active service_catalog rows in the Trades category (no auth).
+// GET /api/public/trades — active service_catalog rows partners can pick at
+// get-started (Trades + Cleaning). Certificates stay out of this picker.
 
 import { NextResponse } from "next/server";
 import { serviceCategory } from "@/lib/service-category";
@@ -6,6 +7,8 @@ import { tryCreateServiceClient } from "@/lib/supabase/service";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+
+const PARTNER_PICKABLE = new Set(["Trades", "Cleaning"] as const);
 
 export async function GET() {
   const svc = tryCreateServiceClient();
@@ -27,7 +30,7 @@ export async function GET() {
 
   const trades = ((data ?? []) as { id: string; name: string | null }[])
     .map((r) => ({ id: r.id, name: (r.name || "Service").trim() }))
-    .filter((r) => serviceCategory(r.name) === "Trades");
+    .filter((r) => PARTNER_PICKABLE.has(serviceCategory(r.name) as "Trades" | "Cleaning"));
 
   return NextResponse.json({ trades });
 }
