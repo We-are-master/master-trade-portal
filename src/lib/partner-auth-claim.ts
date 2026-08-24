@@ -155,14 +155,28 @@ export async function provisionPartnerAuthUser(
     throw Object.assign(new Error("Couldn't set up your account. Try again."), { status: 500 });
   }
 
+  // Every caller here links an auth user to a partner row that ALREADY exists —
+  // an office-created partner, an invite, a resumed signup. Linking is not an
+  // onboarding event, so it must not overwrite a status the office already set:
+  // forcing "onboarding" on an approved partner silently revokes their portal
+  // access on first sign-in. Only fill the status in when there isn't one.
+  const { data: currentRow } = await admin
+    .from("partners")
+    .select("status")
+    .eq("id", partnerId)
+    .maybeSingle();
+  const currentStatus = (currentRow as { status?: string | null } | null)?.status?.trim();
+
+  const patch: Record<string, unknown> = {
+    auth_user_id: userId,
+    contact_name: contactName,
+    company_name: companyName,
+  };
+  if (!currentStatus) patch.status = "onboarding";
+
   const { error: partnerErr } = await admin
     .from("partners")
-    .update({
-      auth_user_id: userId,
-      contact_name: contactName,
-      company_name: companyName,
-      status: "onboarding",
-    })
+    .update(patch)
     .eq("id", partnerId);
   if (partnerErr) {
     throw Object.assign(new Error("Couldn't link your partner profile. Try again."), { status: 500 });
