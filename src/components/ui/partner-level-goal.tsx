@@ -7,6 +7,7 @@ import {
   partnerLevelFromProgress,
   partnerLevelMilestones,
   type PartnerLevelIconId,
+  type PartnerLevelState,
   type PartnerLevelTone,
 } from "@/lib/partner-revenue-goal";
 
@@ -132,6 +133,100 @@ export function PartnerLevelGoal({ earned, goal }: { earned: number; goal: numbe
       </div>
 
       <p style={{ margin: 0, fontSize: 11.5, color: T.slate, lineHeight: 1.45 }}>{level.footerLine}</p>
+    </div>
+  );
+}
+
+/**
+ * Compact level strip for the top bar — the incentive follows the partner
+ * across every screen instead of living in a card on the dashboard.
+ *
+ * Shows the level, how far through the goal they are, and what the next level
+ * costs. `stacked` puts the amount under the bar for narrow (mobile) bars.
+ */
+export function PartnerLevelStrip({
+  level,
+  stacked = false,
+}: {
+  level: PartnerLevelState;
+  stacked?: boolean;
+}) {
+  const styles = TONE_STYLES[level.tone];
+  const displayPct = level.isElitePlus ? 100 : level.barPct;
+  // "£1,250 to Level 2 · better visibility…" — the reason is already on the
+  // dashboard copy; the bar only needs the number that changes behaviour.
+  const goalLine =
+    level.nextLevel && level.amountToNext > 0
+      ? `${formatGBP(level.amountToNext)} to Level ${level.nextLevel.level}`
+      : level.isElitePlus
+        ? "Maximum priority"
+        : level.amountToNext > 0
+          ? `${formatGBP(level.amountToNext)} to double your goal`
+          : "Goal hit";
+
+  return (
+    <div
+      title={level.footerLine}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 8,
+        minWidth: 0,
+        fontFamily: T.sans,
+      }}
+    >
+      <PartnerLevelIcon icon={level.icon} tone={level.tone} size={stacked ? 12 : 13} />
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 3, minWidth: 0, flex: 1 }}>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 6, minWidth: 0 }}>
+          <span
+            style={{
+              fontSize: 11.5,
+              fontWeight: 500,
+              color: T.navy,
+              whiteSpace: "nowrap",
+            }}
+          >
+            Level {level.level}
+          </span>
+          <span
+            style={{
+              fontSize: 11.5,
+              color: T.mute,
+              whiteSpace: "nowrap",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+            }}
+          >
+            {goalLine}
+          </span>
+        </div>
+
+        <div
+          role="progressbar"
+          aria-valuenow={displayPct}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-label={`Level ${level.level} progress`}
+          style={{
+            height: 4,
+            borderRadius: 9999,
+            background: T.paper2,
+            overflow: "hidden",
+            minWidth: stacked ? 0 : 90,
+          }}
+        >
+          <div
+            style={{
+              width: `${Math.max(2, displayPct)}%`,
+              height: "100%",
+              borderRadius: 9999,
+              background: styles.bar,
+              transition: `width 320ms ${T.ease}`,
+            }}
+          />
+        </div>
+      </div>
     </div>
   );
 }

@@ -4,7 +4,7 @@
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { T } from "@/lib/tokens";
-import { Button, Card, Icon, IconButton, LiveIndicator, StatCard, StatusDot } from "@/components/ui/primitives";
+import { Button, Card, Icon, LiveIndicator, StatCard, StatusDot } from "@/components/ui/primitives";
 import { formatGBP } from "@/lib/format";
 import { jobMatchesDateFilter, londonYmd } from "@/lib/date-range-filter";
 import { useDateRangeFilter } from "@/hooks/use-date-range-filter";
@@ -17,8 +17,6 @@ import { createClient } from "@/lib/supabase/client";
 import { fetchPartnerDocuments, type PartnerDoc } from "@/lib/queries/partner-documents";
 import { fetchAvailableJobs } from "@/lib/queries/available-jobs";
 import { fetchAvailableQuotes } from "@/lib/queries/quotes";
-import { PartnerLevelGoal } from "@/components/ui/partner-level-goal";
-import { resolvePartnerMonthlyGoal, revenueGoalProgress } from "@/lib/partner-revenue-goal";
 import type { ActivityTone, AvailableJob, MyJob, QuoteRequest } from "@/types";
 import { redactLead, redactAvailableJob, redactQuote, redactMyJob } from "@/lib/preview-redact";
 import { useIsMobile } from "@/hooks/use-media-query";
@@ -44,11 +42,6 @@ function daysAgoYmd(n: number): string {
   const d = new Date();
   d.setDate(d.getDate() - n);
   return londonYmd(d);
-}
-
-function londonMonthStartYmd(): string {
-  const ymd = londonYmd(new Date());
-  return `${ymd.slice(0, 7)}-01`;
 }
 
 function relativeWhen(iso: string | null | undefined): string {
@@ -265,7 +258,6 @@ export function Dashboard({
 
   const d = useMemo(() => {
     const today = londonYmd();
-    const monthStart = londonMonthStartYmd();
     const filteredJobs = jobs.filter((j) => jobMatchesDateFilter(j, dateFilter));
     const scheduleJobs = filteredJobs
       .filter((j) => j.status !== "completed" && j.status !== "cancelled")
@@ -302,10 +294,6 @@ export function Dashboard({
     const prevSoFar = Array.from({ length: periodDay }, (_, i) => addDays(prevStart, i))
       .map(earnedOn)
       .reduce((s, n) => s + n, 0);
-    const monthEarnings = jobs
-      .filter((j) => j.status === "completed" && (j.completedDate ?? "") >= monthStart)
-      .reduce((s, j) => s + j.total, 0);
-
     const active = jobs.filter((j) => j.status === "scheduled" || j.status === "in_progress");
     const awaiting = jobs.filter((j) => j.status === "final_check");
     const since30 = daysAgoYmd(30);
@@ -313,8 +301,6 @@ export function Dashboard({
     const pendingPayout = awaiting.reduce((s, j) => s + j.total, 0);
     const scheduleTotal = scheduleJobs.reduce((s, j) => s + j.total, 0);
     const inProgress = jobs.find((j) => j.status === "in_progress");
-    const monthGoal = resolvePartnerMonthlyGoal(fortnightEarnings);
-    const goal = revenueGoalProgress(monthEarnings, monthGoal);
 
     return {
       today,
@@ -325,9 +311,6 @@ export function Dashboard({
       periodProgress,
       prevSoFar,
       fortnightEarnings,
-      monthEarnings,
-      monthGoal,
-      goal,
       active,
       awaiting,
       completed30,
@@ -569,16 +552,6 @@ export function Dashboard({
           </div>
         </div>
 
-        {/* Gamified strip: month goal + live opportunities */}
-        <Card style={{ padding: "12px 14px", display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
-          <PartnerLevelGoal earned={d.monthEarnings} goal={d.goal.goal} />
-          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-            <LiveIndicator label="Live" />
-            <OppPill icon="zap" label="Jobs" count={opps.jobs.length} hot={opps.jobs.length > 0} tone="navy" onClick={() => onNav("available")} />
-            <OppPill icon="file-text" label="Quotes" count={opps.quotes.length} hot={opps.quotes.length > 0} tone="amber" onClick={() => onNav("quotes")} />
-            <IconButton icon="refresh-cw" size={28} tone="ghost" onClick={() => void loadOpportunities()} />
-          </div>
-        </Card>
       </div>
 
       {trialDays > 0 && (
@@ -743,67 +716,6 @@ export function Dashboard({
   );
 }
 
-function OppPill({
-  icon,
-  label,
-  count,
-  hot,
-  tone,
-  onClick,
-}: {
-  icon: string;
-  label: string;
-  count: number;
-  hot?: boolean;
-  tone: "coral" | "navy" | "amber";
-  onClick: () => void;
-}) {
-  const toneMap = {
-    coral: { bg: T.coralTint, fg: T.coral, border: "rgba(237,75,0,0.25)" },
-    navy: { bg: T.paper2, fg: T.navy, border: T.line },
-    amber: { bg: T.amber50, fg: T.amber, border: "rgba(196,122,0,0.25)" },
-  } as const;
-  const t = toneMap[tone];
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        gap: 8,
-        padding: "6px 12px",
-        borderRadius: 9999,
-        border: `1px solid ${hot ? t.border : T.line}`,
-        background: hot ? t.bg : T.white,
-        cursor: "pointer",
-        fontFamily: T.sans,
-      }}
-    >
-      {hot && <span className="fx-live-dot" />}
-      <Icon name={icon} size={14} color={t.fg} />
-      <span style={{ fontSize: 12.5, fontWeight: 500, color: T.ink }}>{label}</span>
-      <span
-        style={{
-          minWidth: 20,
-          height: 20,
-          padding: "0 6px",
-          borderRadius: 9999,
-          background: count > 0 ? t.fg : T.paper2,
-          color: count > 0 ? T.white : T.mute,
-          fontSize: 11,
-          fontWeight: 600,
-          fontFamily: T.mono,
-          display: "inline-flex",
-          alignItems: "center",
-          justifyContent: "center",
-        }}
-      >
-        {count}
-      </span>
-    </button>
-  );
-}
 
 function ScheduleRow({ job, onClick, divider }: { job: MyJob; onClick: () => void; divider: boolean }) {
   const [h, setH] = useState(false);
