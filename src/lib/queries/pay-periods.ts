@@ -93,6 +93,35 @@ function rowPayRunYmd(row: PayPeriodRow): string | null {
   return null;
 }
 
+/**
+ * Which self-bill is "the period I am earning into" when several cover today.
+ *
+ * The OS can leave more than one row open over the same days: an empty
+ * `accumulating` shell next to the row that actually holds the work. Preferring
+ * `accumulating` alone picked the empty one and the card read £0 while the
+ * partner was owed £950, so money comes first among open rows.
+ *
+ * The old comparator also returned a constant when two windows were the same
+ * length, which is not a valid ordering — the winner depended on the order rows
+ * came back from the database, so the same partner could see different totals
+ * between loads. Every step below is a total order, ending on `week_start` so
+ * the result is stable whatever the input order.
+ */
+export function compareRunningCandidates(a: PayPeriodRow, b: PayPeriodRow): number {
+  const openDiff = Number(OPEN.has(b.status ?? "")) - Number(OPEN.has(a.status ?? ""));
+  if (openDiff !== 0) return openDiff;
+
+  // Among rows in the same state, the one carrying work describes the period.
+  const moneyDiff = Number((b.net_payout ?? 0) > 0) - Number((a.net_payout ?? 0) > 0);
+  if (moneyDiff !== 0) return moneyDiff;
+
+  const spanDiff = daysBetween(b.week_start!, b.week_end!) - daysBetween(a.week_start!, a.week_end!);
+  if (spanDiff !== 0) return spanDiff;
+
+  // Last resort, so the order never depends on how the rows arrived.
+  return a.week_start!.localeCompare(b.week_start!);
+}
+
 export function buildPayPeriodSummary(rows: PayPeriodRow[], todayYmd: string = londonYmd()): PayPeriodSummary {
   const usable = rows.filter((r) => r.week_start && r.week_end);
 
@@ -101,12 +130,7 @@ export function buildPayPeriodSummary(rows: PayPeriodRow[], todayYmd: string = l
   // of "the fortnight in progress", shifted cycles included.
   const containingToday = usable
     .filter((r) => r.week_start! <= todayYmd && todayYmd <= r.week_end! && !VOID.has(r.status ?? ""))
-    .sort((a, b) => {
-      // An accumulating row beats a stale one; then prefer the longer window.
-      const openDiff = Number(OPEN.has(b.status ?? "")) - Number(OPEN.has(a.status ?? ""));
-      if (openDiff !== 0) return openDiff;
-      return daysBetween(a.week_start!, a.week_end!) - daysBetween(b.week_start!, b.week_end!) > 0 ? -1 : 1;
-    })[0];
+    .sort(compareRunningCandidates)[0];
 
   let current: RunningPeriod;
   if (containingToday) {
