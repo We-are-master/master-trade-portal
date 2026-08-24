@@ -1409,31 +1409,6 @@ export function PaymentHowItWorksCard() {
         </div>
       </PageCard>
 
-      {/* Your next payment — hero */}
-      <Card style={{ padding: 0, overflow: "hidden", borderColor: T.coral }}>
-        <div style={{ padding: "16px 18px", background: T.coralTint, borderBottom: `1px solid ${T.line}` }}>
-          <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: 0.5, color: T.coral }}>YOUR NEXT PAYMENT</div>
-        </div>
-        <div style={{ padding: "18px 20px" }}>
-          <div style={{ fontSize: 28, fontWeight: 600, color: T.navy, letterSpacing: -0.5 }}>{fmtPayFriday(next.payFriday)}</div>
-          <div style={{ fontSize: 13, color: T.slate, marginTop: 6, lineHeight: 1.5 }}>This payment covers jobs from:</div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 12 }}>
-            {[
-              { label: "Week 1", range: next.week1 },
-              { label: "Week 2", range: next.week2 },
-            ].map(({ label, range }) => (
-              <div key={label} style={{ padding: "12px 14px", borderRadius: 10, background: T.paper, border: `1px solid ${T.line}` }}>
-                <div style={{ fontSize: 11, fontWeight: 600, color: T.coral, letterSpacing: 0.4, marginBottom: 6 }}>{label}</div>
-                <div style={{ fontSize: 13, fontWeight: 500, color: T.ink }}>{fmtDay(range.start)} → {fmtDay(range.end)}</div>
-              </div>
-            ))}
-          </div>
-          <div style={{ marginTop: 14, padding: "10px 12px", borderRadius: 8, background: T.green50, fontSize: 12.5, color: T.slate, lineHeight: 1.5 }}>
-            If your job started between these dates and was approved, it will be paid on <strong style={{ color: T.ink }}>{fmtPayFriday(next.payFriday)}</strong>.
-          </div>
-        </div>
-      </Card>
-
       {/* Schedule table */}
       <PageCard title="Next payment dates" subtitle="Same system every 2 weeks after this.">
         <div style={{ borderRadius: 10, border: `1px solid ${T.line}`, overflow: "hidden" }}>
@@ -1748,18 +1723,9 @@ export function SelfBillPage() {
 
   return (
     <>
-      {!inOnboarding && <SettingsHeader title="Self-bill" subtitle="UK self-billing: Fixfy issues invoices to you for completed jobs. HMRC-compliant." />}
+      {!inOnboarding && <SettingsHeader title="Self-bill" subtitle="Every invoice Fixfy has issued on your behalf. The agreement lives in Documents; how payment works is in Policies." />}
 
-      <PageCard title="Agreement" subtitle="Valid 12 months. Re-sign required at 11 months." action={<Badge tone="success" icon="shield-check">Signed</Badge>}>
-        <div style={{ display: "grid", gridTemplateColumns: inOnboarding ? "1fr" : "1fr auto", gap: 14, alignItems: "center" }}>
-          <div style={{ fontSize: 12.5, color: T.slate, lineHeight: 1.6 }}>
-            You authorise GET FIXFY LTD to issue self-bill invoices on your behalf for jobs completed via the platform. You agree not to issue separate invoices for the same work.
-          </div>
-          {!inOnboarding && <Button variant="secondary" icon="download">View agreement</Button>}
-        </div>
-      </PageCard>
-
-      <PaymentHowItWorksCard />
+      {inOnboarding && <PaymentHowItWorksCard />}
 
       {!inOnboarding && <PayoutsCard />}
 
@@ -1825,6 +1791,10 @@ export function DocsPage({ onChanged }: { onChanged?: () => void } = {}) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busyType, setBusyType] = useState<string | null>(null);
+  // The self-billing agreement is a Fixfy-issued document, so it belongs on
+  // this page rather than buried in the Self-bill screen.
+  const [selfBill, setSelfBill] = useState<PartnerContract | null>(null);
+  const [readingSelfBill, setReadingSelfBill] = useState(false);
 
   const load = useCallback(async () => {
     setError(null);
@@ -1839,6 +1809,12 @@ export function DocsPage({ onChanged }: { onChanged?: () => void } = {}) {
       ]);
       setDocs(rows);
       if (Array.isArray(reqJson?.required)) setRequired(reqJson.required as RequiredDoc[]);
+      try {
+        const contracts = await fetchContracts(createClient(), partner.id);
+        setSelfBill(contracts.find((c) => c.type === "self_bill_agreement") ?? null);
+      } catch {
+        /* agreement is supplementary here — the checklist above still stands */
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load documents");
     } finally {
@@ -1910,6 +1886,34 @@ export function DocsPage({ onChanged }: { onChanged?: () => void } = {}) {
               : `${missing.length} required document${missing.length === 1 ? "" : "s"} still needed before you can use the platform.`}
           </div>
 
+          {selfBill && (
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: 0.4, textTransform: "uppercase", color: T.mute, marginBottom: 8 }}>
+                Fixfy agreements
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                <PolicyDocCard
+                  icon="receipt"
+                  title={selfBill.title}
+                  meta={selfBill.signed ? `Signed ${selfBill.signedAt ?? ""}`.trim() : "Sign it under Policies"}
+                  badge={
+                    selfBill.signed ? (
+                      <Badge tone="success" size="sm" icon="check">Signed</Badge>
+                    ) : (
+                      <Badge tone="warning" size="sm">Pending</Badge>
+                    )
+                  }
+                  onRead={() => setReadingSelfBill(true)}
+                  onDownload={
+                    selfBill.signaturePdfUrl
+                      ? () => window.open(selfBill.signaturePdfUrl!, "_blank", "noopener,noreferrer")
+                      : undefined
+                  }
+                />
+              </div>
+            </div>
+          )}
+
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
             {required.map((req) => {
               const doc = pickRequiredDocMatch(docRows, req);
@@ -1930,6 +1934,21 @@ export function DocsPage({ onChanged }: { onChanged?: () => void } = {}) {
             <DocUploadCard busy={busyType === "other"} onUpload={(name, file) => upload("other", name || "Document", file)} />
           </div>
         </>
+      )}
+
+      {readingSelfBill && selfBill && (
+        <Modal title={selfBill.title} onClose={() => setReadingSelfBill(false)} width={680}>
+          <div style={{ padding: 20, maxHeight: "60vh", overflow: "auto", fontSize: 13, color: T.ink, lineHeight: 1.6 }}>
+            {selfBill.bodyHtml ? (
+              <div dangerouslySetInnerHTML={{ __html: hydrateContractHtml(selfBill.bodyHtml) }} />
+            ) : (
+              <div style={{ color: T.mute }}>No agreement text available.</div>
+            )}
+          </div>
+          <div style={{ padding: 16, borderTop: `1px solid ${T.line}`, display: "flex", justifyContent: "flex-end" }}>
+            <Button variant="secondary" onClick={() => setReadingSelfBill(false)}>Close</Button>
+          </div>
+        </Modal>
       )}
     </>
   );
@@ -2087,6 +2106,52 @@ const CONTRACT_ICON: Record<string, string> = {
   contractor_service_agreement: "file-signature",
 };
 
+/**
+ * A card in the Policies grid for a document Fixfy publishes but the partner
+ * does not sign — the payment rules, for instance. Same shape as a contract
+ * card so the grid reads as one list.
+ */
+function PolicyDocCard({
+  icon,
+  title,
+  meta,
+  badge,
+  onRead,
+  onDownload,
+}: {
+  icon: string;
+  title: string;
+  meta?: string;
+  badge?: ReactNode;
+  onRead: () => void;
+  onDownload?: () => void;
+}) {
+  return (
+    <Card style={{ padding: 16, display: "flex", flexDirection: "column", gap: 12 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        <div style={{ width: 36, height: 36, borderRadius: 9, background: T.paper2, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+          <Icon name={icon} size={18} color={T.navy} />
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 13.5, fontWeight: 500, color: T.ink }}>{title}</div>
+          {meta && <div style={{ fontSize: 11.5, color: T.mute, marginTop: 2 }}>{meta}</div>}
+        </div>
+        {badge}
+      </div>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <Button variant="ghost" size="sm" iconRight="arrow-up-right" onClick={onRead} style={{ flex: 1, minWidth: 100 }}>
+          Read
+        </Button>
+        {onDownload && (
+          <Button variant="secondary" size="sm" icon="download" onClick={onDownload} style={{ flex: 1, minWidth: 100 }}>
+            PDF
+          </Button>
+        )}
+      </div>
+    </Card>
+  );
+}
+
 export function PoliciesPage() {
   const partner = usePartner();
   const toast = useToast();
@@ -2095,14 +2160,18 @@ export function PoliciesPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [reading, setReading] = useState<PartnerContract | null>(null);
+  const [readingPayment, setReadingPayment] = useState(false);
   const [bulkSigning, setBulkSigning] = useState(false);
   const [sig, setSig] = useState<string | null>(null);
   const [signerName, setSignerName] = useState(`${partner.firstName} ${partner.lastName}`.trim());
   const [signBusy, setSignBusy] = useState(false);
 
-  const visibleContracts = contracts.filter((c) => !isEmploymentContract(c));
-  const unsignedContracts = visibleContracts.filter((c) => !c.signed);
-  const allSigned = visibleContracts.length > 0 && unsignedContracts.length === 0;
+  const signableContracts = contracts.filter((c) => !isEmploymentContract(c));
+  // The self-billing agreement is surfaced under Documents, so it is not listed
+  // here — but it still has to be signed, so it stays in the signing set.
+  const visibleContracts = signableContracts.filter((c) => c.type !== "self_bill_agreement");
+  const unsignedContracts = signableContracts.filter((c) => !c.signed);
+  const allSigned = signableContracts.length > 0 && unsignedContracts.length === 0;
 
   const submitBulkSignature = async () => {
     if (!sig || !signerName.trim() || unsignedContracts.length === 0) return;
@@ -2183,8 +2252,6 @@ export function PoliciesPage() {
         </div>
       ) : error ? (
         <div style={{ padding: 8, color: T.coral, fontSize: 13 }}>{error}</div>
-      ) : visibleContracts.length === 0 ? (
-        <div style={{ padding: 8, color: T.mute, fontSize: 13 }}>No active contracts published.</div>
       ) : (
         <>
           {unsignedContracts.length > 0 && (
@@ -2203,6 +2270,12 @@ export function PoliciesPage() {
             </Card>
           )}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <PolicyDocCard
+              icon="wallet"
+              title="How you get paid"
+              meta="Payment schedule & rules"
+              onRead={() => setReadingPayment(true)}
+            />
             {visibleContracts.map((c) => (
               <Card key={c.versionId} style={{ padding: 16, display: "flex", flexDirection: "column", gap: 12 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
@@ -2268,6 +2341,17 @@ export function PoliciesPage() {
             <Button variant="primary" icon="check" onClick={submitBulkSignature} disabled={signBusy || !sig || !signerName.trim()}>
               {signBusy ? "Signing…" : "Agree & sign all"}
             </Button>
+          </div>
+        </Modal>
+      )}
+
+      {readingPayment && (
+        <Modal title="How you get paid" onClose={() => setReadingPayment(false)} width={680}>
+          <div style={{ padding: 20, maxHeight: "60vh", overflow: "auto" }}>
+            <PaymentHowItWorksCard />
+          </div>
+          <div style={{ padding: 16, borderTop: `1px solid ${T.line}`, display: "flex", justifyContent: "flex-end" }}>
+            <Button variant="secondary" onClick={() => setReadingPayment(false)}>Close</Button>
           </div>
         </Modal>
       )}

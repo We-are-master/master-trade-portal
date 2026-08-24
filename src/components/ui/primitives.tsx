@@ -653,9 +653,9 @@ export function StatCard({
   accent,
   hero,
   icon,
-  trend,
-  prevTrend,
-  compare,
+  valueSuffix,
+  progress,
+  footer,
   style,
   onClick,
 }: {
@@ -665,9 +665,12 @@ export function StatCard({
   accent?: "coral" | "amber" | "green";
   hero?: boolean;
   icon?: string;
-  trend?: number[];
-  prevTrend?: number[];
-  compare?: { text: string; tone: "green" | "coral" | "mute" };
+  /** Muted word sitting next to the number, e.g. "earned". */
+  valueSuffix?: ReactNode;
+  /** How far through a cycle the card is, with a caption on each end. */
+  progress?: { pct: number; left: ReactNode; right: ReactNode };
+  /** Rendered under a hairline rule — used for the pay run strip. */
+  footer?: ReactNode;
   style?: CSSProperties;
   onClick?: () => void;
 }) {
@@ -701,67 +704,55 @@ export function StatCard({
         {icon && <Icon name={icon} size={14} />}
         {label}
       </div>
-      <div
-        style={{
-          fontSize: hero ? 34 : 28,
-          fontWeight: 600,
-          letterSpacing: -0.6,
-          color: hero ? T.white : T.navy,
-          fontFamily: T.sans,
-          lineHeight: 1,
-        }}
-      >
-        {value}
-      </div>
-      {compare && (
-        <span
+      <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+        <div
           style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 4,
-            alignSelf: "flex-start",
-            padding: "3px 8px",
-            borderRadius: 9999,
-            fontSize: 11,
+            fontSize: hero ? 34 : 28,
             fontWeight: 600,
-            fontFamily: T.mono,
-            background: compare.tone === "green" ? T.green50 : compare.tone === "coral" ? T.coralTint : T.paper2,
-            color: compare.tone === "green" ? T.green : compare.tone === "coral" ? T.coral : T.mute,
+            letterSpacing: -0.6,
+            color: hero ? T.white : T.navy,
+            fontFamily: T.sans,
+            lineHeight: 1,
           }}
         >
-          {compare.tone === "green" && <Icon name="trending-up" size={11} />}
-          {compare.tone === "coral" && <Icon name="trending-down" size={11} />}
-          {compare.text}
-        </span>
-      )}
-      {trend && (
-        <div style={{ display: "flex", alignItems: "flex-end", gap: 3, height: 28 }}>
-          {trend.map((v, i) => {
-            const max = Math.max(...trend, ...(prevTrend ?? []), 1);
-            const prev = prevTrend?.[i] ?? 0;
-            return (
-              <span key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "stretch", gap: 1, height: "100%", justifyContent: "flex-end" }}>
-                {prevTrend && (
-                  <span
-                    style={{
-                      height: `${(prev / max) * 45}%`,
-                      minHeight: prev > 0 ? 2 : 0,
-                      borderRadius: 1.5,
-                      background: hero ? "rgba(255,255,255,0.2)" : T.paper2,
-                    }}
-                  />
-                )}
-                <span
-                  style={{
-                    height: `${(v / max) * 100}%`,
-                    minHeight: 2,
-                    borderRadius: 1.5,
-                    background: hero ? T.coral : T.coralTint,
-                  }}
-                />
-              </span>
-            );
-          })}
+          {value}
+        </div>
+        {valueSuffix && (
+          <span style={{ fontSize: 12, color: hero ? "rgba(255,255,255,0.55)" : T.mute }}>{valueSuffix}</span>
+        )}
+      </div>
+      {progress && (
+        <div style={{ marginTop: 2 }}>
+          <div
+            style={{
+              display: "flex",
+              height: 5,
+              borderRadius: 3,
+              overflow: "hidden",
+              background: hero ? "rgba(255,255,255,0.12)" : T.paper2,
+            }}
+          >
+            <div
+              style={{
+                width: `${Math.min(100, Math.max(0, progress.pct * 100))}%`,
+                background: T.coral,
+                transition: `width 240ms ${T.ease}`,
+              }}
+            />
+          </div>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              gap: 8,
+              marginTop: 6,
+              fontSize: 11,
+              color: hero ? "rgba(255,255,255,0.5)" : T.mute,
+            }}
+          >
+            <span>{progress.left}</span>
+            <span>{progress.right}</span>
+          </div>
         </div>
       )}
       {hint && (
@@ -783,6 +774,17 @@ export function StatCard({
           }}
         >
           {hint}
+        </div>
+      )}
+      {footer && (
+        <div
+          style={{
+            marginTop: 2,
+            paddingTop: 10,
+            borderTop: `1px solid ${hero ? "rgba(255,255,255,0.14)" : T.line}`,
+          }}
+        >
+          {footer}
         </div>
       )}
     </Card>

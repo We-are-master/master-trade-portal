@@ -12,7 +12,6 @@ import { DateRangeFilter } from "@/components/ui/date-range-filter";
 import { PartnerRatingCard } from "@/components/ui/partner-rating";
 import { usePartner } from "@/components/partner-context";
 import { usePartnerRating } from "@/hooks/use-partner-rating";
-import { HowFixfyWorksCard } from "@/components/screens/how-fixfy-works";
 import { useMyJobs } from "@/components/jobs-context";
 import { createClient } from "@/lib/supabase/client";
 import { fetchPartnerDocuments, type PartnerDoc } from "@/lib/queries/partner-documents";
@@ -22,6 +21,21 @@ import { PartnerLevelGoal } from "@/components/ui/partner-level-goal";
 import { resolvePartnerMonthlyGoal, revenueGoalProgress } from "@/lib/partner-revenue-goal";
 import type { ActivityTone, AvailableJob, MyJob, QuoteRequest } from "@/types";
 import { redactLead, redactAvailableJob, redactQuote, redactMyJob } from "@/lib/preview-redact";
+import {
+  addDays,
+  fortnightWindow,
+  formatPayRunDate,
+  formatPeriodRange,
+  payRunDateFor,
+  windowDays,
+} from "@/lib/pay-period";
+import {
+  fetchPayPeriodSummary,
+  type PayPeriodSummary,
+  type PendingPayRun,
+  type PeriodCadence,
+  type RunningPeriod,
+} from "@/lib/queries/pay-periods";
 
 const OPPORTUNITY_POLL_MS = 30_000;
 
@@ -70,20 +84,91 @@ interface OpportunitySnapshot {
   loaded: boolean;
 }
 
-function weekCompareLabel(thisWeek: number, lastWeek: number): { text: string; tone: "green" | "coral" | "mute" } {
-  if (lastWeek === 0 && thisWeek === 0) return { text: "Flat vs last week", tone: "mute" };
-  if (lastWeek === 0) return { text: `+${formatGBP(thisWeek)} vs last week`, tone: "green" };
-  const pct = Math.round(((thisWeek - lastWeek) / lastWeek) * 100);
-  if (pct === 0) return { text: "Flat vs last week", tone: "mute" };
-  if (pct > 0) return { text: `+${pct}% vs last week`, tone: "green" };
-  return { text: `${pct}% vs last week`, tone: "coral" };
+// Most partners are on a fortnightly cycle, but the OS also runs weekly and
+// monthly ones — label the card with whatever period the partner is actually on.
+const PERIOD_NOUN: Record<PeriodCadence, string> = {
+  week: "week",
+  fortnight: "fortnight",
+  month: "month",
+};
+
+const PERIOD_TITLE: Record<PeriodCadence, string> = {
+  week: "Week",
+  fortnight: "Fortnight",
+  month: "Month",
+};
+
+/**
+ * Money the partner is owed sits on a lighter green so it reads as "banked"
+ * against the navy card — T.green is tuned for white surfaces and goes muddy here.
+ */
+const GREEN_ON_NAVY = "#3FD08A";
+
+/**
+ * The strip under the running period. Before anything closes it just names the
+ * pay date; once a period closes its total shows here in green and the card
+ * above resets to zero for the new period.
+ */
+function PayRunStrip({ pending, payRunYmd }: { pending: PendingPayRun | null; payRunYmd: string }) {
+  if (!pending) {
+    return (
+      <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+        <Icon name="calendar" size={14} color="rgba(255,255,255,0.5)" />
+        <span style={{ fontSize: 12, color: "rgba(255,255,255,0.72)" }}>
+          You get paid <span style={{ color: T.white, fontWeight: 500 }}>{formatPayRunDate(payRunYmd)}</span>
+        </span>
+      </div>
+    );
+  }
+  const overdue = pending.payRunYmd < londonYmd();
+  return (
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+      <div style={{ minWidth: 0 }}>
+        <div
+          style={{
+            fontSize: 10,
+            letterSpacing: 0.5,
+            textTransform: "uppercase",
+            color: "rgba(255,255,255,0.55)",
+            fontWeight: 500,
+          }}
+        >
+          {overdue ? "Payout processing" : "Next payout"}
+        </div>
+        <div style={{ fontSize: 14, color: T.white, marginTop: 2 }}>{formatPayRunDate(pending.payRunYmd)}</div>
+        <div style={{ fontSize: 11, color: "rgba(255,255,255,0.45)", marginTop: 1 }}>
+          {formatPeriodRange(pending.startYmd, pending.endYmd)} closed
+        </div>
+      </div>
+      <div className="fx-mono" style={{ fontSize: 22, fontWeight: 600, color: GREEN_ON_NAVY, letterSpacing: -0.4 }}>
+        {formatGBP(pending.net)}
+      </div>
+    </div>
+  );
 }
 
 function greetingWord(): string {
   const hour = Number(new Date().toLocaleString("en-GB", { hour: "2-digit", hour12: false, timeZone: "Europe/London" }));
-  if (hour < 12) return "Morning";
-  if (hour < 18) return "Afternoon";
-  return "Evening";
+  if (hour < 12) return "Good morning";
+  if (hour < 18) return "Good afternoon";
+  return "Good evening";
+}
+
+/**
+ * Fortnight-over-fortnight growth for the greeting line. Compares like for
+ * like: the same number of days into the previous period, so a period two days
+ * old is not measured against a full one.
+ */
+function growthLine(
+  thisPeriod: number,
+  lastPeriod: number,
+): { text: string; tone: "green" | "coral" | "mute"; icon?: string } {
+  if (lastPeriod === 0 && thisPeriod === 0) return { text: "No earnings yet this fortnight", tone: "mute" };
+  if (lastPeriod === 0) return { text: `${formatGBP(thisPeriod)} up on last fortnight`, tone: "green", icon: "trending-up" };
+  const pct = Math.round(((thisPeriod - lastPeriod) / lastPeriod) * 100);
+  if (pct === 0) return { text: "Level with last fortnight", tone: "mute" };
+  if (pct > 0) return { text: `${pct}% up on last fortnight`, tone: "green", icon: "trending-up" };
+  return { text: `${Math.abs(pct)}% down on last fortnight`, tone: "coral", icon: "trending-down" };
 }
 
 export function Dashboard({
@@ -106,6 +191,7 @@ export function Dashboard({
   const [trialDays, setTrialDays] = useState<number>(partner.trialDaysLeft);
   const [opps, setOpps] = useState<OpportunitySnapshot>({ leads: [], jobs: [], quotes: [], loaded: false });
   const [pulseTick, setPulseTick] = useState(0);
+  const [payPeriod, setPayPeriod] = useState<PayPeriodSummary | null>(null);
 
   const loadOpportunities = useCallback(async () => {
     try {
@@ -138,6 +224,12 @@ export function Dashboard({
         if (!cancelled) setDocs(rows);
       } catch {
         /* keep null */
+      }
+      try {
+        const summary = await fetchPayPeriodSummary(supabase, partner.id);
+        if (!cancelled) setPayPeriod(summary);
+      } catch {
+        /* no self_bills yet — the card falls back to the standard fortnight */
       }
       try {
         const { data } = await supabase.from("partners").select("trial_ends_at").eq("id", partner.id).maybeSingle();
@@ -177,16 +269,37 @@ export function Dashboard({
       .filter((j) => j.status !== "completed" && j.status !== "cancelled")
       .sort((a, b) => (a.scheduled ?? "").localeCompare(b.scheduled ?? ""));
 
-    const trendDays = Array.from({ length: 7 }, (_, i) => daysAgoYmd(6 - i));
-    const trend = trendDays.map((day) =>
-      jobs.filter((j) => j.status === "completed" && j.completedDate === day).reduce((s, j) => s + j.total, 0),
-    );
-    const weekEarnings = trend.reduce((s, n) => s + n, 0);
-    const prevTrendDays = Array.from({ length: 7 }, (_, i) => daysAgoYmd(13 - i));
-    const prevTrend = prevTrendDays.map((day) =>
-      jobs.filter((j) => j.status === "completed" && j.completedDate === day).reduce((s, j) => s + j.total, 0),
-    );
-    const lastWeekEarnings = prevTrend.reduce((s, n) => s + n, 0);
+    // Earnings run on the OS pay cycle (a fortnight), not a rolling 7 days, so
+    // the number on the card is the one the partner gets paid.
+    const fallbackWindow = fortnightWindow(today);
+    const period: RunningPeriod = payPeriod?.current ?? {
+      ...fallbackWindow,
+      osNet: null,
+      payRunYmd: payRunDateFor(fallbackWindow.endYmd),
+      fromOs: false,
+      cadence: "fortnight",
+    };
+    const earnedOn = (day: string) =>
+      jobs.filter((j) => j.status === "completed" && j.completedDate === day).reduce((s, j) => s + j.total, 0);
+
+    const days = windowDays(period);
+    const jobEarnings = days.map(earnedOn).reduce((s, n) => s + n, 0);
+    // The OS self-bill is authoritative once it exists; before the first bill
+    // is raised we fall back to the partner's own completed jobs.
+    const fortnightEarnings = period.osNet && period.osNet > 0 ? period.osNet : jobEarnings;
+
+    // How far through the cycle we are. The period rolls at midnight, so day 1
+    // of the new one starts at zero with nothing carried over.
+    const periodLength = days.length;
+    const periodDay = Math.min(periodLength, Math.max(1, days.indexOf(today) + 1 || periodLength));
+    const periodProgress = periodDay / periodLength;
+
+    // Like-for-like: only the same slice of the previous period, so day 2 of a
+    // fortnight is not compared against a full one.
+    const prevStart = addDays(period.startYmd, -periodLength);
+    const prevSoFar = Array.from({ length: periodDay }, (_, i) => addDays(prevStart, i))
+      .map(earnedOn)
+      .reduce((s, n) => s + n, 0);
     const monthEarnings = jobs
       .filter((j) => j.status === "completed" && (j.completedDate ?? "") >= monthStart)
       .reduce((s, j) => s + j.total, 0);
@@ -198,16 +311,18 @@ export function Dashboard({
     const pendingPayout = awaiting.reduce((s, j) => s + j.total, 0);
     const scheduleTotal = scheduleJobs.reduce((s, j) => s + j.total, 0);
     const inProgress = jobs.find((j) => j.status === "in_progress");
-    const monthGoal = resolvePartnerMonthlyGoal(weekEarnings);
+    const monthGoal = resolvePartnerMonthlyGoal(fortnightEarnings);
     const goal = revenueGoalProgress(monthEarnings, monthGoal);
 
     return {
       today,
       scheduleJobs: redactSensitive ? scheduleJobs.map(redactMyJob) : scheduleJobs,
-      trend,
-      weekEarnings,
-      lastWeekEarnings,
-      prevTrend,
+      period,
+      periodDay,
+      periodLength,
+      periodProgress,
+      prevSoFar,
+      fortnightEarnings,
       monthEarnings,
       monthGoal,
       goal,
@@ -219,21 +334,7 @@ export function Dashboard({
       inProgress,
       filteredCount: filteredJobs.length,
     };
-  }, [jobs, dateFilter, redactSensitive]);
-
-  const oppStats = useMemo(() => {
-    const newLeads = opps.leads.filter((l) => l.status !== "contacted").length;
-    const leadValue = opps.leads.reduce((s, l) => s + (l.budget ?? 0), 0);
-    const jobValue = opps.jobs.reduce((s, j) => s + j.total, 0);
-    const quoteValue = 0;
-    return {
-      newLeads,
-      leadValue,
-      jobValue,
-      quoteValue,
-      totalLive: opps.leads.length + opps.jobs.length + opps.quotes.length,
-    };
-  }, [opps]);
+  }, [jobs, dateFilter, redactSensitive, payPeriod]);
 
   const pulseFeed = useMemo<DerivedActivity[]>(() => {
     const items: DerivedActivity[] = [];
@@ -341,6 +442,8 @@ export function Dashboard({
     );
   }
 
+  const growth = growthLine(d.fortnightEarnings, d.prevSoFar);
+
   const todayLabel = new Date().toLocaleDateString("en-GB", {
     weekday: "long",
     day: "numeric",
@@ -356,7 +459,6 @@ export function Dashboard({
         ? "Tomorrow's schedule"
         : `Schedule · ${dateFilterLabel.toLowerCase()}`;
 
-  const weekCompare = weekCompareLabel(d.weekEarnings, d.lastWeekEarnings);
 
   return (
     <div style={{ padding: 24, display: "flex", flexDirection: "column", gap: 18, flex: 1, overflow: "auto" }}>
@@ -366,21 +468,31 @@ export function Dashboard({
           <div style={{ fontSize: 26, fontWeight: 600, letterSpacing: -0.4, color: T.navy }}>
             {greetingWord()}, {partner.firstName}.
           </div>
-          <div style={{ fontSize: 14, color: T.slate, marginTop: 4 }}>
-            <span style={{ color: T.coral, fontWeight: 500 }}>
-              {d.scheduleJobs.length} {d.scheduleJobs.length === 1 ? "job" : "jobs"}
-            </span>{" "}
-            · {dateFilterLabel.toLowerCase()} · {d.active.length} active
+          <div style={{ fontSize: 14, color: T.slate, marginTop: 4, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+            {growth.icon && (
+              <Icon
+                name={growth.icon}
+                size={15}
+                color={growth.tone === "green" ? T.green : growth.tone === "coral" ? T.coral : T.mute}
+              />
+            )}
+            <span
+              style={{
+                color: growth.tone === "green" ? T.green : growth.tone === "coral" ? T.coral : T.slate,
+                fontWeight: growth.tone === "mute" ? 400 : 500,
+              }}
+            >
+              {growth.text}
+            </span>
             {trialDays > 0 && (
-              <>
-                {" "}·{" "}
+              <span style={{ color: T.slate }}>
+                ·{" "}
                 <span className="fx-mono" style={{ color: T.amber }}>
                   {trialDays} day{trialDays === 1 ? "" : "s"}
                 </span>{" "}
                 left on trial
-              </>
+              </span>
             )}
-            .
           </div>
         </div>
         <DateRangeFilter value={dateFilter} onChange={setDateFilter} />
@@ -409,24 +521,26 @@ export function Dashboard({
         <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr 1fr 1fr", gap: 12 }}>
           <StatCard
             hero
-            label="This week's earnings"
-            value={formatGBP(d.weekEarnings)}
-            hint="Completed · last 7 days"
-            trend={d.trend}
-            compare={weekCompare}
-            prevTrend={d.prevTrend}
+            label={`${PERIOD_TITLE[d.period.cadence]} ${formatPeriodRange(d.period.startYmd, d.period.endYmd)}`}
+            value={formatGBP(d.fortnightEarnings)}
+            valueSuffix="earned"
+            progress={{
+              pct: d.periodProgress,
+              left: `Day ${d.periodDay} of ${d.periodLength}`,
+              right: `Closes ${formatPayRunDate(d.period.endYmd)}`,
+            }}
+            footer={<PayRunStrip pending={payPeriod?.pending ?? null} payRunYmd={d.period.payRunYmd} />}
           />
           <StatCard
             label="Active jobs"
             value={d.active.length}
-            hint="Scheduled + in progress"
             icon="briefcase"
             onClick={() => onNav("jobs")}
           />
           <StatCard
             label="Final checks"
             value={d.awaiting.length}
-            hint={d.pendingPayout > 0 ? `${formatGBP(d.pendingPayout)} pending` : "Nothing pending"}
+            hint={d.pendingPayout > 0 ? `${formatGBP(d.pendingPayout)} pending` : undefined}
             accent="coral"
             icon="clock"
             onClick={() => onNav("jobs")}
@@ -445,17 +559,12 @@ export function Dashboard({
           <PartnerLevelGoal earned={d.monthEarnings} goal={d.goal.goal} />
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
             <LiveIndicator label="Live" />
-            <OppPill icon="user-plus" label="Leads" count={opps.leads.length} hot={oppStats.newLeads > 0} tone="coral" onClick={() => onNav("leads")} />
             <OppPill icon="zap" label="Jobs" count={opps.jobs.length} hot={opps.jobs.length > 0} tone="navy" onClick={() => onNav("available")} />
             <OppPill icon="file-text" label="Quotes" count={opps.quotes.length} hot={opps.quotes.length > 0} tone="amber" onClick={() => onNav("quotes")} />
             <IconButton icon="refresh-cw" size={28} tone="ghost" onClick={() => void loadOpportunities()} />
           </div>
         </Card>
       </div>
-
-      {/* How Fixfy Trade works — welcome-board info. Expanded while the partner
-          is under review (previewMode); collapsed once they're active. */}
-      <HowFixfyWorksCard defaultOpen={previewMode} />
 
       {trialDays > 0 && (
         <Card
@@ -475,9 +584,9 @@ export function Dashboard({
             <div style={{ fontSize: 13.5, fontWeight: 500, color: T.ink }}>
               You&apos;ve earned{" "}
               <span className="fx-mono" style={{ color: T.amber }}>
-                {formatGBP(d.weekEarnings)}
+                {formatGBP(d.fortnightEarnings)}
               </span>{" "}
-              this week on trial. £99/mo keeps it flowing.
+              this {PERIOD_NOUN[d.period.cadence]} on trial. £99/mo keeps it flowing.
             </div>
             <div style={{ fontSize: 12, color: T.mute, marginTop: 2 }}>
               That&apos;s <b>0% commission</b> on your completed work. {trialDays} day{trialDays === 1 ? "" : "s"} left on your trial.
