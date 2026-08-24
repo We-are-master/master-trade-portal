@@ -22,6 +22,8 @@ body {
 
 #app-root {
   height: 100vh;
+  /* dvh tracks the collapsing mobile URL bar; vh above is the fallback. */
+  height: 100dvh;
   overflow: hidden;
 }
 
@@ -505,5 +507,78 @@ button {
   .fx-leads-stages {
     grid-template-columns: repeat(4, minmax(160px, 1fr));
     min-height: 320px;
+  }
+}
+
+/* Bottom sheet (mobile "More" menu) */
+@keyframes fx-sheet-up {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+/* ------------------------------------------------------------------
+   Mobile layout
+   The app styles inline, so media queries can't reach component styles
+   the normal way. These rules use !important deliberately — it is the
+   only lever that beats an inline style — to collapse desktop grids to
+   a single column and keep every screen inside the viewport. Opt a grid
+   back out with .fx-keep-grid, or force a 2-up with .fx-grid-2.
+   Breakpoint matches MOBILE_BREAKPOINT in hooks/use-media-query.ts.
+   ------------------------------------------------------------------ */
+@media (max-width: 899px) {
+  html,
+  body {
+    overflow-x: hidden;
+  }
+
+  #app-root,
+  #app-root main {
+    max-width: 100vw;
+    overflow-x: hidden;
+  }
+
+  /* Screen roots sit directly under <main> and all pad themselves at 24px. */
+  #app-root main > div {
+    padding-left: 14px !important;
+    padding-right: 14px !important;
+  }
+
+  /* One column by default — nothing gets pushed off-screen. */
+  /* minmax(0, …) not 1fr: grid items default to min-width:auto, so a wide
+     child (a pair of inputs, a long reference) pushes the column past the
+     screen even in a single-column grid. */
+  #app-root [style*="grid-template-columns"]:not(.fx-keep-grid):not(.fx-grid-2):not(.fx-grid-3) {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  #app-root .fx-grid-2 {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important;
+  }
+
+  #app-root .fx-grid-3 {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+  }
+
+  /* Nothing may force the page wider than the screen. */
+  #app-root img,
+  #app-root svg,
+  #app-root canvas {
+    max-width: 100%;
+  }
+
+  #app-root table {
+    width: 100% !important;
+    table-layout: fixed;
+  }
+
+  /* Long words and refs wrap instead of stretching their container. */
+  #app-root td,
+  #app-root th {
+    overflow-wrap: anywhere;
   }
 }

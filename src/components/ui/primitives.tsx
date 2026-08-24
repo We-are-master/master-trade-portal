@@ -11,6 +11,7 @@ import {
   type ReactNode,
 } from "react";
 import { T } from "@/lib/tokens";
+import { useIsMobile } from "@/hooks/use-media-query";
 import { Icon } from "./icon";
 
 export { Icon } from "./icon";
@@ -634,10 +635,23 @@ export function SectionHeader({
   actions?: ReactNode;
   style?: CSSProperties;
 }) {
+  const isMobile = useIsMobile();
   return (
-    <div style={{ display: "flex", alignItems: "flex-end", gap: 16, ...style }}>
+    <div
+      style={{
+        display: "flex",
+        // Actions (filters, view switchers) are far too wide to sit beside the
+        // title on a phone — they squeeze it to one letter per line.
+        flexDirection: isMobile ? "column" : "row",
+        alignItems: isMobile ? "stretch" : "flex-end",
+        gap: isMobile ? 10 : 16,
+        ...style,
+      }}
+    >
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 22, fontWeight: 600, letterSpacing: -0.3, color: T.navy }}>{title}</div>
+        <div style={{ fontSize: isMobile ? 19 : 22, fontWeight: 600, letterSpacing: -0.3, color: T.navy }}>
+          {title}
+        </div>
         {subtitle && <div style={{ fontSize: 13, color: T.mute, marginTop: 4 }}>{subtitle}</div>}
       </div>
       {actions}
@@ -674,12 +688,15 @@ export function StatCard({
   style?: CSSProperties;
   onClick?: () => void;
 }) {
+  const isMobile = useIsMobile();
+  // Three counters share a row on mobile — they need to shrink to fit.
+  const compact = isMobile && !hero;
   return (
     <Card
       onClick={onClick}
       hover={!!onClick}
       style={{
-        padding: hero ? 18 : 16,
+        padding: hero ? 18 : compact ? 11 : 16,
         display: "flex",
         flexDirection: "column",
         gap: 8,
@@ -694,20 +711,21 @@ export function StatCard({
           display: "flex",
           alignItems: "center",
           gap: 8,
-          fontSize: 11.5,
-          letterSpacing: 0.4,
+          fontSize: compact ? 9.5 : 11.5,
+          letterSpacing: compact ? 0.2 : 0.4,
           textTransform: "uppercase",
           color: hero ? "rgba(255,255,255,0.64)" : T.mute,
           fontWeight: 500,
+          lineHeight: 1.2,
         }}
       >
-        {icon && <Icon name={icon} size={14} />}
+        {icon && !compact && <Icon name={icon} size={14} />}
         {label}
       </div>
       <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
         <div
           style={{
-            fontSize: hero ? 34 : 28,
+            fontSize: hero ? 34 : compact ? 21 : 28,
             fontWeight: 600,
             letterSpacing: -0.6,
             color: hero ? T.white : T.navy,
@@ -758,7 +776,7 @@ export function StatCard({
       {hint && (
         <div
           style={{
-            fontSize: 12,
+            fontSize: compact ? 10.5 : 12,
             color:
               accent === "coral"
                 ? T.coral

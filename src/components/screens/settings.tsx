@@ -14,6 +14,7 @@ import { SignaturePad } from "@/components/ui/signature-pad";
 import { useToast } from "@/components/ui/toast";
 import { PartnerRatingCard } from "@/components/ui/partner-rating";
 import { usePartner } from "@/components/partner-context";
+import { useIsMobile } from "@/hooks/use-media-query";
 import { partnerBillingEnabled } from "@/lib/partner-work-access";
 import { usePartnerRating } from "@/hooks/use-partner-rating";
 import { createClient } from "@/lib/supabase/client";
@@ -81,13 +82,22 @@ export function SettingsView({ initial = "profile" }: { initial?: string }) {
   const pages = billingEnabled ? SETTINGS_PAGES : SETTINGS_PAGES.filter((p) => p.id !== "billing");
   const safeInitial = initial === "billing" && !billingEnabled ? "profile" : initial;
   const [page, setPage] = useState(safeInitial);
+  const isMobile = useIsMobile();
   useEffect(() => {
     setPage(safeInitial);
   }, [safeInitial]);
 
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "240px 1fr", flex: 1, overflow: "hidden" }}>
-      {/* Sub-nav */}
+    <div
+      style={
+        isMobile
+          ? { display: "flex", flexDirection: "column", flex: 1, overflow: "hidden" }
+          : { display: "grid", gridTemplateColumns: "240px 1fr", flex: 1, overflow: "hidden" }
+      }
+    >
+      {/* Sub-nav — on mobile the same list already lives in the top bar's
+          overflow sheet, so repeating it here just buries the content. */}
+      {!isMobile && (
       <div style={{ borderRight: `1px solid ${T.line}`, padding: 16, overflow: "auto", background: T.white }}>
         <div style={{ fontSize: 11, letterSpacing: 0.5, color: T.mute, fontWeight: 500, textTransform: "uppercase", padding: "0 10px 8px" }}>
           Settings
@@ -117,6 +127,7 @@ export function SettingsView({ initial = "profile" }: { initial?: string }) {
           );
         })}
       </div>
+      )}
       <div style={{ flex: 1, overflow: "auto", padding: 24 }}>
         {page === "profile" && <ProfilePage />}
         {page === "trades" && <TradesPage />}

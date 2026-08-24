@@ -9,6 +9,7 @@ import { T } from "@/lib/tokens";
 import { Badge, Button, Card, Icon, IconButton, SectionHeader, STATUS_LABELS, Tabs } from "@/components/ui/primitives";
 import { formatGBP } from "@/lib/format";
 import { useMyJobs } from "@/components/jobs-context";
+import { useIsMobile } from "@/hooks/use-media-query";
 import type { JobStatus } from "@/types";
 
 type OpenJob = (id: string) => void;
@@ -70,18 +71,27 @@ export function ScheduleView({
   redactSensitive?: boolean;
 }) {
   const { jobs, loading, error, refresh } = useMyJobs();
+  const isMobile = useIsMobile();
+  // Month and week are column grids — they need width the phone doesn't have,
+  // so mobile gets the agenda and day views only.
   const [view, setView] = useState("month");
+  const effectiveView = isMobile && (view === "month" || view === "week") ? "agenda" : view;
   const [cursor, setCursor] = useState<Date>(() => {
     const t = londonTodayISO().split("-").map(Number);
     return new Date(t[0], t[1] - 1, t[2]);
   });
 
-  const tabs = [
-    { id: "day", label: "Day", icon: "sun" },
-    { id: "week", label: "Week", icon: "calendar-days" },
-    { id: "month", label: "Month", icon: "calendar" },
-    { id: "agenda", label: "Agenda", icon: "list" },
-  ];
+  const tabs = isMobile
+    ? [
+        { id: "agenda", label: "Agenda", icon: "list" },
+        { id: "day", label: "Day", icon: "sun" },
+      ]
+    : [
+        { id: "day", label: "Day", icon: "sun" },
+        { id: "week", label: "Week", icon: "calendar-days" },
+        { id: "month", label: "Month", icon: "calendar" },
+        { id: "agenda", label: "Agenda", icon: "list" },
+      ];
 
   const { byDate, eventsInMonth } = useMemo(() => {
     const map = new Map<string, SchedEvent[]>();
@@ -115,8 +125,8 @@ export function ScheduleView({
   const monthLabel = cursor.toLocaleDateString("en-GB", { month: "long", year: "numeric" });
   const stepCursor = (dir: number) => {
     const d = new Date(cursor);
-    if (view === "month") d.setMonth(d.getMonth() + dir);
-    else if (view === "week") d.setDate(d.getDate() + dir * 7);
+    if (effectiveView === "month") d.setMonth(d.getMonth() + dir);
+    else if (effectiveView === "week") d.setDate(d.getDate() + dir * 7);
     else d.setDate(d.getDate() + dir);
     setCursor(d);
   };
@@ -144,21 +154,30 @@ export function ScheduleView({
   }
 
   return (
-    <div style={{ padding: 24, display: "flex", flexDirection: "column", gap: 16, flex: 1, overflow: "hidden" }}>
+    <div style={{ padding: 24, display: "flex", flexDirection: "column", gap: isMobile ? 12 : 16, flex: 1, overflow: "hidden" }}>
       <SectionHeader
         title="Schedule"
         subtitle={`${monthLabel} · ${eventsInMonth} scheduled ${eventsInMonth === 1 ? "job" : "jobs"} this month`}
-        actions={<Tabs tabs={tabs} active={view} onChange={setView} variant="pills" />}
+        actions={<Tabs tabs={tabs} active={effectiveView} onChange={setView} variant="pills" />}
+        style={isMobile ? { flexDirection: "column", alignItems: "stretch", gap: 10 } : undefined}
       />
 
-      <div style={{ display: "grid", gridTemplateColumns: "260px 1fr", gap: 12, flex: 1, minHeight: 0 }}>
-        <WeekSummary cursor={cursor} byDate={byDate} onOpenJob={onOpenJob} />
-        {view === "month" && (
+      <div
+        style={
+          isMobile
+            ? { display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }
+            : { display: "grid", gridTemplateColumns: "260px 1fr", gap: 12, flex: 1, minHeight: 0 }
+        }
+      >
+        {/* The week summary rail is a desktop affordance — on mobile the agenda
+            already lists the same jobs, so a second copy is just scrolling. */}
+        {!isMobile && <WeekSummary cursor={cursor} byDate={byDate} onOpenJob={onOpenJob} />}
+        {effectiveView === "month" && (
           <MonthGrid cursor={cursor} byDate={byDate} monthLabel={monthLabel} onOpenJob={onOpenJob} onStep={stepCursor} onToday={goToday} />
         )}
-        {view === "week" && <WeekGrid cursor={cursor} byDate={byDate} onOpenJob={onOpenJob} onStep={stepCursor} onToday={goToday} />}
-        {view === "day" && <DayList cursor={cursor} byDate={byDate} onOpenJob={onOpenJob} onStep={stepCursor} onToday={goToday} />}
-        {view === "agenda" && <AgendaList byDate={byDate} onOpenJob={onOpenJob} />}
+        {effectiveView === "week" && <WeekGrid cursor={cursor} byDate={byDate} onOpenJob={onOpenJob} onStep={stepCursor} onToday={goToday} />}
+        {effectiveView === "day" && <DayList cursor={cursor} byDate={byDate} onOpenJob={onOpenJob} onStep={stepCursor} onToday={goToday} />}
+        {effectiveView === "agenda" && <AgendaList byDate={byDate} onOpenJob={onOpenJob} />}
       </div>
     </div>
   );

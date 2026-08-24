@@ -8,6 +8,14 @@ import {
   type DateFilterMode,
   type DateFilterValue,
 } from "@/lib/date-range-filter";
+import { useIsMobile } from "@/hooks/use-media-query";
+
+/**
+ * How many quick options stay as pills on a phone. Three (All · Today ·
+ * Tomorrow) plus the overflow button is the most that fits one line at 375px —
+ * beyond that the row wraps and eats a second line of the screen.
+ */
+const MOBILE_INLINE_OPTIONS = 3;
 
 export function DateRangeFilter({
   value,
@@ -20,6 +28,7 @@ export function DateRangeFilter({
 }) {
   const [overflowOpen, setOverflowOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
+  const isMobile = useIsMobile();
 
   useEffect(() => {
     if (!overflowOpen) return;
@@ -36,6 +45,12 @@ export function DateRangeFilter({
   };
 
   const isCustom = value.mode === "custom";
+  const inlineOptions = isMobile ? DATE_FILTER_QUICK_OPTIONS.slice(0, MOBILE_INLINE_OPTIONS) : DATE_FILTER_QUICK_OPTIONS;
+  const overflowOptions = isMobile ? DATE_FILTER_QUICK_OPTIONS.slice(MOBILE_INLINE_OPTIONS) : [];
+  const hiddenSelection = overflowOptions.find((o) => o.id === value.mode);
+  // The dots must not hide the current filter — when the selection lives in the
+  // menu, the button wears its label instead.
+  const overflowActive = isCustom || !!hiddenSelection;
 
   const chip = (active: boolean): CSSProperties => ({
     padding: "5px 12px",
@@ -63,24 +78,26 @@ export function DateRangeFilter({
           border: `1px solid ${T.line}`,
         }}
       >
-        {DATE_FILTER_QUICK_OPTIONS.map((opt) => (
+        {inlineOptions.map((opt) => (
           <button key={opt.id} type="button" onClick={() => selectQuick(opt.id)} style={chip(value.mode === opt.id)}>
             {opt.label}
           </button>
         ))}
         <button
           type="button"
-          aria-label="Custom date range"
+          aria-label={hiddenSelection ? hiddenSelection.label : "More date ranges"}
+          aria-expanded={overflowOpen}
           onClick={() => setOverflowOpen((v) => !v)}
           style={{
-            ...chip(isCustom),
-            padding: "5px 8px",
+            ...chip(overflowActive),
+            padding: hiddenSelection ? "5px 10px" : "5px 8px",
             display: "inline-flex",
             alignItems: "center",
-            justifyContent: "center",
+            gap: 5,
           }}
         >
-          <Icon name="more-horizontal" size={14} color={isCustom ? T.white : T.slate} />
+          {hiddenSelection ? hiddenSelection.label : null}
+          <Icon name="more-horizontal" size={14} color={overflowActive ? T.white : T.slate} />
         </button>
       </div>
 
@@ -91,7 +108,7 @@ export function DateRangeFilter({
             right: 0,
             top: "calc(100% + 6px)",
             zIndex: 50,
-            width: 260,
+            width: isMobile ? 240 : 260,
             borderRadius: 12,
             border: `1px solid ${T.line}`,
             background: T.white,
@@ -99,6 +116,20 @@ export function DateRangeFilter({
             padding: 12,
           }}
         >
+          {overflowOptions.length > 0 && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 8 }}>
+              {overflowOptions.map((opt) => (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => selectQuick(opt.id)}
+                  style={{ ...chip(value.mode === opt.id), width: "100%", textAlign: "left" }}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          )}
           <button
             type="button"
             onClick={() => onChange({ ...value, mode: "custom" })}

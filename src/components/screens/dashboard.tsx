@@ -21,6 +21,7 @@ import { PartnerLevelGoal } from "@/components/ui/partner-level-goal";
 import { resolvePartnerMonthlyGoal, revenueGoalProgress } from "@/lib/partner-revenue-goal";
 import type { ActivityTone, AvailableJob, MyJob, QuoteRequest } from "@/types";
 import { redactLead, redactAvailableJob, redactQuote, redactMyJob } from "@/lib/preview-redact";
+import { useIsMobile } from "@/hooks/use-media-query";
 import {
   addDays,
   fortnightWindow,
@@ -192,6 +193,7 @@ export function Dashboard({
   const [opps, setOpps] = useState<OpportunitySnapshot>({ leads: [], jobs: [], quotes: [], loaded: false });
   const [pulseTick, setPulseTick] = useState(0);
   const [payPeriod, setPayPeriod] = useState<PayPeriodSummary | null>(null);
+  const isMobile = useIsMobile();
 
   const loadOpportunities = useCallback(async () => {
     try {
@@ -518,7 +520,15 @@ export function Dashboard({
           padding: "4px 4px 8px",
         }}
       >
-        <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr 1fr 1fr", gap: 12 }}>
+        {/* On mobile the hero takes the full width and the three counters sit
+            three-up underneath, so the strip stays one screenful. */}
+        <div
+          style={
+            isMobile
+              ? { display: "flex", flexDirection: "column", gap: 10 }
+              : { display: "grid", gridTemplateColumns: "1.4fr 1fr 1fr 1fr", gap: 12 }
+          }
+        >
           <StatCard
             hero
             label={`${PERIOD_TITLE[d.period.cadence]} ${formatPeriodRange(d.period.startYmd, d.period.endYmd)}`}
@@ -531,6 +541,10 @@ export function Dashboard({
             }}
             footer={<PayRunStrip pending={payPeriod?.pending ?? null} payRunYmd={d.period.payRunYmd} />}
           />
+          <div
+            className={isMobile ? "fx-grid-3" : "fx-contents"}
+            style={isMobile ? { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 } : { display: "contents" }}
+          >
           <StatCard
             label="Active jobs"
             value={d.active.length}
@@ -552,6 +566,7 @@ export function Dashboard({
             icon="circle-check"
             onClick={() => onNav("jobs")}
           />
+          </div>
         </div>
 
         {/* Gamified strip: month goal + live opportunities */}

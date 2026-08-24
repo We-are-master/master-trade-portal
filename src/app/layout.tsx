@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono, Inter } from "next/font/google";
 import "./globals.css";
 
@@ -8,7 +8,16 @@ const geistMono = Geist_Mono({ subsets: ["latin"], weight: ["400", "500"], displ
 
 export const metadata: Metadata = {
   title: "Fixfy — Trade portal",
-  description: "Fixfy Trade Portal — desktop app for trades to receive leads and manage work.",
+  description: "Fixfy Trade Portal — manage your leads, jobs and payouts on any device.",
+};
+
+// viewportFit: "cover" lets the bottom tab bar sit under the iPhone home
+// indicator and pad itself with env(safe-area-inset-bottom).
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  themeColor: "#020040",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
