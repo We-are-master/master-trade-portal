@@ -20,6 +20,8 @@ const ALIASES: Record<string, string> = {
   "check-square": "SquareCheckBig",
   "play-circle": "CirclePlay",
   "loader-2": "LoaderCircle",
+  "more-vertical": "EllipsisVertical",
+  "more-horizontal": "Ellipsis",
 };
 
 function toPascal(name: string): string {

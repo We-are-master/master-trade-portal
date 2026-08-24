@@ -22,6 +22,7 @@ import { DateRangeFilter } from "@/components/ui/date-range-filter";
 import { formatGBP } from "@/lib/format";
 import { jobMatchesDateFilter } from "@/lib/date-range-filter";
 import { useDateRangeFilter } from "@/hooks/use-date-range-filter";
+import { useIsMobile } from "@/hooks/use-media-query";
 import { OnHoldResponseForm } from "@/components/screens/on-hold-response-form";
 import { redactMyJob } from "@/lib/preview-redact";
 import { useMyJobs } from "@/components/jobs-context";
@@ -44,6 +45,7 @@ export function MyJobsView({
   const [view, setView] = useState(defaultView);
   const { jobs, loading, error } = useMyJobs();
   const { value: dateFilter, setValue: setDateFilter, label: dateFilterLabel } = useDateRangeFilter();
+  const isMobile = useIsMobile();
 
   const filteredJobs = useMemo(
     () => jobs.filter((j) => jobMatchesDateFilter(j, dateFilter)),
@@ -73,7 +75,17 @@ export function MyJobsView({
             : `${filteredJobs.length} of ${jobs.length} jobs · ${activeCount} active · ${dateFilterLabel.toLowerCase()}`
         }
         actions={
-          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
+          <div
+            style={{
+              display: "flex",
+              gap: 8,
+              alignItems: "center",
+              flexWrap: "wrap",
+              // Right-aligned beside the title on desktop; on mobile the header
+              // stacks, so the controls read left-to-right like the rest.
+              justifyContent: isMobile ? "flex-start" : "flex-end",
+            }}
+          >
             <DateRangeFilter value={dateFilter} onChange={setDateFilter} />
             <Tabs tabs={tabs} active={view} onChange={setView} variant="pills" />
             <Button variant="secondary" icon="download">Export</Button>

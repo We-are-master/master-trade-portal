@@ -7,6 +7,7 @@ import { T } from "@/lib/tokens";
 import { useToast } from "@/components/ui/toast";
 import { usePartner } from "@/components/partner-context";
 import { Sidebar } from "@/components/shell/sidebar";
+import { BottomNav, MoreSheet, BOTTOM_NAV_HEIGHT } from "@/components/shell/bottom-nav";
 import { TopBar } from "@/components/shell/topbar";
 import { Dashboard } from "@/components/screens/dashboard";
 import { AvailableJobsView, AvailableQuotesView } from "@/components/screens/opportunities";
@@ -16,10 +17,10 @@ import { ScheduleView } from "@/components/screens/schedule";
 import { SettingsView, settingsPageLabel } from "@/components/screens/settings";
 import { Icon } from "@/components/ui/primitives";
 import { partnerWorkUnlocked } from "@/lib/partner-work-access";
+import { useIsMobile } from "@/hooks/use-media-query";
 
 const TITLES: Record<string, string> = {
   dashboard: "Dashboard",
-  leads: "Leads",
   available: "Available jobs",
   quotes: "Available quotes",
   jobs: "My jobs",
@@ -32,8 +33,10 @@ export function TradePortalApp() {
   const [drawerJobId, setDrawerJobId] = useState<string | null>(null);
   /** True right after the /get-started wizard finishes — shows the "under review" banner. */
   const [showReviewBanner, setShowReviewBanner] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
   const partner = usePartner();
   const toast = useToast();
+  const isMobile = useIsMobile();
 
   // Onboarding lives entirely in the /get-started wizard now. The old in-portal
   // onboarding modal is gone — a partner who lands here has already finished
@@ -55,18 +58,36 @@ export function TradePortalApp() {
 
   const onNav = (id: string) => {
     setDrawerJobId(null);
+    setMoreOpen(false);
     setRoute(id);
+    // Each destination is its own screen on mobile — start it at the top.
+    document.querySelector("#app-root main [data-screen-scroll]")?.scrollTo({ top: 0 });
   };
   const handleOpenJob = (id: string) => setDrawerJobId(id);
 
   return (
-    <div id="app-root" style={{ display: "flex", background: T.paper }}>
-      <Sidebar active={page} onNav={onNav} />
+    <div
+      id="app-root"
+      className={isMobile ? "fx-mobile-shell" : undefined}
+      style={{ display: "flex", background: T.paper }}
+    >
+      {!isMobile && <Sidebar active={page} onNav={onNav} />}
 
-      <main style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0, overflow: "hidden" }}>
+      <main
+        style={{
+          flex: 1,
+          display: "flex",
+          flexDirection: "column",
+          minWidth: 0,
+          overflow: "hidden",
+          // Room for the fixed tab bar plus the home indicator.
+          paddingBottom: isMobile ? `calc(${BOTTOM_NAV_HEIGHT}px + env(safe-area-inset-bottom))` : 0,
+        }}
+      >
         <TopBar
           title={TITLES[page]}
           breadcrumb={page === "settings" && subpage ? ["Settings", settingsPageLabel(subpage)] : []}
+          onMore={() => setMoreOpen(true)}
         />
 
         {pendingApproval && <PendingApprovalBanner />}
@@ -74,7 +95,6 @@ export function TradePortalApp() {
         {page === "dashboard" && (
           <Dashboard previewMode={workLocked} redactSensitive={workLocked} onOpenJob={handleOpenJob} onNav={onNav} />
         )}
-        {page === "leads" && <HotLeadsComingSoon />}
         {page === "available" && (
           <AvailableJobsView previewMode={workLocked} redactSensitive={workLocked} onShowToast={toast} />
         )}
@@ -90,6 +110,11 @@ export function TradePortalApp() {
         {page === "settings" && <SettingsView initial={subpage || "profile"} />}
       </main>
 
+      {isMobile && <BottomNav active={page} onNav={onNav} />}
+      {isMobile && moreOpen && (
+        <MoreSheet active={page} onNav={onNav} onClose={() => setMoreOpen(false)} />
+      )}
+
       {drawerJobId && <JobDrawer jobId={drawerJobId} onClose={() => setDrawerJobId(null)} onShowToast={toast} />}
 
       {showReviewBanner && (
@@ -99,58 +124,6 @@ export function TradePortalApp() {
   );
 }
 
-function HotLeadsComingSoon() {
-  return (
-    <div
-      style={{
-        flex: 1,
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: 32,
-        fontFamily: T.sans,
-        textAlign: "center",
-      }}
-    >
-      <div
-        style={{
-          width: 56,
-          height: 56,
-          borderRadius: 16,
-          background: T.coralTint,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          marginBottom: 16,
-        }}
-      >
-        <Icon name="user-plus" size={24} color={T.coral} />
-      </div>
-      <div
-        style={{
-          fontSize: 11,
-          fontWeight: 700,
-          letterSpacing: 0.7,
-          textTransform: "uppercase",
-          color: T.coral,
-          marginBottom: 8,
-        }}
-      >
-        Soon
-      </div>
-      <h2 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: T.navy, letterSpacing: "-0.02em" }}>
-        Hot Leads
-      </h2>
-      <p style={{ margin: "10px 0 0", maxWidth: 360, fontSize: 14, color: T.slate, lineHeight: 1.55 }}>
-        Direct customer enquiries are on the way. For now, pick up work from Available Jobs and Available Quotes —
-        same access for every active partner.
-      </p>
-    </div>
-  );
-}
-
-/** Persistent, non-dismissible bar shown while the account is awaiting approval. */
 function PendingApprovalBanner() {
   return (
     <div

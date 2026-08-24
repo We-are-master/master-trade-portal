@@ -10,6 +10,7 @@ import {
   type CSSProperties,
   type ReactNode,
 } from "react";
+import { useIsMobile } from "@/hooks/use-media-query";
 import { T } from "@/lib/tokens";
 import {
   Badge,
@@ -54,6 +55,7 @@ export function JobDrawer({
   const job = jobs.find((j) => j.id === jobId); // real jobs only; unknown id → drawer closed
   const [tab, setTab] = useState("overview");
   const [closing, setClosing] = useState(false);
+  const isMobile = useIsMobile();
   const [starting, setStarting] = useState(false);
 
   const startJob = async () => {
@@ -123,8 +125,10 @@ export function JobDrawer({
           right: 0,
           top: 0,
           bottom: 0,
-          width: 720,
-          maxWidth: "94vw",
+          // Full-bleed on mobile: a 94vw sheet leaves a dead strip of backdrop
+          // and reads like a desktop drawer squeezed onto a phone.
+          width: isMobile ? "100vw" : 720,
+          maxWidth: isMobile ? "100vw" : "94vw",
           background: T.white,
           display: "flex",
           flexDirection: "column",
@@ -135,7 +139,15 @@ export function JobDrawer({
         }}
       >
         <div style={{ borderBottom: `1px solid ${T.line}`, background: T.white }}>
-          <div style={{ padding: "14px 20px", display: "flex", alignItems: "center", gap: 12 }}>
+          <div
+            style={{
+              padding: isMobile ? "12px 14px" : "14px 20px",
+              paddingTop: isMobile ? "max(12px, env(safe-area-inset-top))" : 14,
+              display: "flex",
+              alignItems: "center",
+              gap: 12,
+            }}
+          >
             <IconButton icon="x" size={32} tone="ghost" onClick={handleClose} />
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11.5, color: T.mute }}>
