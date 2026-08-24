@@ -28,7 +28,6 @@ const NAV: { section: string; items: NavItem[] }[] = [
   {
     section: "Opportunities",
     items: [
-      { id: "leads", label: "Hot Leads", icon: "user-plus", hot: true, soon: true },
       { id: "available", label: "Available Jobs", icon: "wrench" },
       { id: "quotes", label: "Available Quotes", icon: "file-text" },
     ],
