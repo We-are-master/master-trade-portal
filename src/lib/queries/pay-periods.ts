@@ -7,7 +7,9 @@
 // partner on a shifted cycle still sees their real dates.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { addDays, daysBetween, fortnightWindow, payRunDateFor, type PayPeriodWindow } from "@/lib/pay-period";
+import { FORTNIGHT_ANCHOR_YMD, daysBetween, fortnightWindow, payRunDateFor, type PayPeriodWindow } from "@/lib/pay-period";
+import { isDemoMode } from "@/lib/demo/demo-mode";
+import { demoPayPeriodRows } from "@/lib/demo/demo-data";
 import { londonYmd } from "@/lib/date-range-filter";
 
 export const PAY_PERIOD_SELECT = [
@@ -80,10 +82,21 @@ export interface PayPeriodSummary {
   pending: PendingPayRun | null;
 }
 
-function isFortnight(row: PayPeriodRow): boolean {
-  if (row.payment_cadence === "biweekly") return true;
+/**
+ * Is this row on the partner's real pay cycle?
+ *
+ * The OS carries off-grid duplicates: biweekly rows shifted by a week, with no
+ * `due_date`, usually cancelled or empty. Every genuine fortnight sits on the
+ * 14-day grid — corroborated by the OS's own due_dates, which step 21 Aug →
+ * 4 Sept → 18 Sept. Weekly and monthly partners legitimately sit off that grid,
+ * so the check only applies to biweekly rows.
+ */
+function isOnCycle(row: PayPeriodRow): boolean {
   if (!row.week_start || !row.week_end) return false;
-  return daysBetween(row.week_start, row.week_end) >= 13;
+  const span = daysBetween(row.week_start, row.week_end) + 1;
+  const biweekly = row.payment_cadence === "biweekly" || (span >= 13 && span <= 15);
+  if (!biweekly) return true;
+  return daysBetween(FORTNIGHT_ANCHOR_YMD, row.week_start) % 14 === 0;
 }
 
 /** Pay-run date for a row: the OS value when set, else derived from the window. */
@@ -126,40 +139,37 @@ export function buildPayPeriodSummary(rows: PayPeriodRow[], todayYmd: string = l
   const usable = rows.filter((r) => r.week_start && r.week_end);
 
   // ---- Running period -------------------------------------------------
-  // Prefer a self-bill whose window contains today; that is the OS's own idea
-  // of "the fortnight in progress", shifted cycles included.
+  // Only an `accumulating` row may describe the period the partner is earning
+  // into. A closed run also covers today, and adopting one made the card
+  // announce a window that has not started yet ("Day 2 of 14" mid-fortnight).
   const containingToday = usable
-    .filter((r) => r.week_start! <= todayYmd && todayYmd <= r.week_end! && !VOID.has(r.status ?? ""))
+    .filter(
+      (r) =>
+        r.week_start! <= todayYmd &&
+        todayYmd <= r.week_end! &&
+        !VOID.has(r.status ?? "") &&
+        OPEN.has(r.status ?? "") &&
+        isOnCycle(r),
+    )
     .sort(compareRunningCandidates)[0];
 
   let current: RunningPeriod;
   if (containingToday) {
     const startYmd = containingToday.week_start!;
     const endYmd = containingToday.week_end!;
-    // Only an accumulating bill still counts as "earning into". Once the OS has
-    // closed it, its value moves to the next pay run below.
-    const stillOpen = OPEN.has(containingToday.status ?? "");
     current = {
       startYmd,
       endYmd,
-      osNet: stillOpen ? (containingToday.net_payout ?? null) : null,
+      osNet: containingToday.net_payout ?? null,
       payRunYmd: rowPayRunYmd(containingToday) ?? payRunDateFor(endYmd),
       fromOs: true,
       cadence: cadenceFor(startYmd, endYmd),
     };
   } else {
-    // No self-bill yet (new partner). Fall back to the standard fortnight grid,
-    // but re-anchor on the partner's most recent known period when there is one
-    // so we don't fight a shifted cycle.
-    const latest = usable
-      .filter(isFortnight)
-      .sort((a, b) => b.week_start!.localeCompare(a.week_start!))[0];
-    let win = fortnightWindow(todayYmd);
-    if (latest) {
-      let startYmd = latest.week_start!;
-      while (addDays(startYmd, 13) < todayYmd) startYmd = addDays(startYmd, 14);
-      win = { startYmd, endYmd: addDays(startYmd, 13) };
-    }
+    // Nothing credible to anchor on — use the standard grid. Re-anchoring on the
+    // partner's latest row was worse than useless here: their history is often
+    // weekly, and stepping 14 days from a weekly start lands off-cycle.
+    const win = fortnightWindow(todayYmd);
     current = {
       ...win,
       osNet: null,
@@ -218,6 +228,7 @@ export async function fetchPayPeriodSummary(
   supabase: SupabaseClient,
   partnerId: string,
 ): Promise<PayPeriodSummary> {
+  if (isDemoMode()) return buildPayPeriodSummary(demoPayPeriodRows());
   const { data, error } = await supabase
     .from("self_bills")
     .select(PAY_PERIOD_SELECT)

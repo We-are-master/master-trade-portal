@@ -8,6 +8,8 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { AvailableJob, Trade } from "@/types";
+import { isDemoMode } from "@/lib/demo/demo-mode";
+import { DEMO_AVAILABLE_JOBS } from "@/lib/demo/demo-data";
 
 export const AVAILABLE_JOB_SELECT = [
   "id",
@@ -76,6 +78,7 @@ export function mapAvailableJob(row: AvailableJobRow): AvailableJob {
 }
 
 export async function fetchAvailableJobs(supabase: SupabaseClient, partnerId: string): Promise<AvailableJob[]> {
+  if (isDemoMode()) return DEMO_AVAILABLE_JOBS;
   const { data, error } = await supabase
     .from("jobs")
     .select(AVAILABLE_JOB_SELECT)
