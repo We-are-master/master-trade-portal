@@ -1,6 +1,8 @@
 // Maps real Fixfy OS `partner_documents` rows → the portal's document card UI type.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { isDemoMode } from "@/lib/demo/demo-mode";
+import { DEMO_DOCS } from "@/lib/demo/demo-data";
 
 export const PARTNER_DOC_SELECT = [
   "id",
@@ -132,6 +134,7 @@ function prettyType(t: string): string {
 }
 
 export async function fetchPartnerDocuments(supabase: SupabaseClient, partnerId: string): Promise<PartnerDoc[]> {
+  if (isDemoMode()) return DEMO_DOCS;
   const { data, error } = await supabase
     .from("partner_documents")
     .select(PARTNER_DOC_SELECT)
