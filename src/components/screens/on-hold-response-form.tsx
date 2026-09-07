@@ -36,6 +36,23 @@ function fmtWhen(iso: string | null | undefined): string {
   });
 }
 
+/** Hoje em YYYY-MM-DD, para o `min` do calendário não deixar escolher ontem. */
+function hojeYmd(): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/London" }).format(new Date());
+}
+
+const inputDataStyle: React.CSSProperties = {
+  flex: 1,
+  minWidth: 0,
+  padding: "9px 10px",
+  borderRadius: 10,
+  border: `1px solid ${T.line}`,
+  background: T.white,
+  color: T.ink,
+  fontSize: 13,
+  fontFamily: "inherit",
+};
+
 export function OnHoldResponseForm({
   job,
   compact = false,
@@ -48,6 +65,14 @@ export function OnHoldResponseForm({
   onSubmitted: () => void;
 }) {
   const [notes, setNotes] = useState("");
+  /**
+   * Quando ele pode voltar. Duas caixas, porque é o que o cliente vai receber:
+   * o escritório oferece DUAS datas, e pedir uma lista aberta devolve "qualquer
+   * dia" ou nada. A segunda é opcional; uma data já é melhor que nenhuma, que é
+   * o que a gente tem hoje.
+   */
+  const [data1, setData1] = useState("");
+  const [data2, setData2] = useState("");
   const [photos, setPhotos] = useState<File[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -98,6 +123,7 @@ export function OnHoldResponseForm({
       const form = new FormData();
       form.append("jobId", job.uuid);
       form.append("notes", notes.trim());
+      for (const d of [data1, data2]) if (d.trim()) form.append("dates[]", d.trim());
       photos.forEach((file, i) => form.append("photos[]", file, file.name || `photo-${i}.jpg`));
 
       const res = await fetch("/api/jobs/on-hold-response", { method: "POST", body: form });
@@ -108,6 +134,8 @@ export function OnHoldResponseForm({
       setAlreadySubmitted(true);
       setSubmittedAt(new Date().toISOString());
       setNotes("");
+      setData1("");
+      setData2("");
       setPhotos([]);
       onSubmitted();
     } catch (e) {
@@ -181,6 +209,33 @@ export function OnHoldResponseForm({
           placeholder="How you'll resolve this, next steps, timeline…"
           style={{ ...textareaStyle, minHeight: compact ? 70 : 90 }}
         />
+      </div>
+
+      <div>
+        <label style={{ display: "block", fontSize: 12, fontWeight: 500, color: T.ink, marginBottom: 6 }}>
+          When can you go back?
+        </label>
+        <div style={{ fontSize: 11, color: T.mute, marginBottom: 6 }}>
+          Give one or two days. We offer these to the customer, so only put days you can really do.
+        </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <input
+            type="date"
+            value={data1}
+            min={hojeYmd()}
+            onChange={(e) => setData1(e.target.value)}
+            aria-label="First day you can go back"
+            style={{ ...inputDataStyle }}
+          />
+          <input
+            type="date"
+            value={data2}
+            min={data1 || hojeYmd()}
+            onChange={(e) => setData2(e.target.value)}
+            aria-label="Second day you can go back (optional)"
+            style={{ ...inputDataStyle }}
+          />
+        </div>
       </div>
 
       <div>
