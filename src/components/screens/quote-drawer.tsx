@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState, type CSSProperties, type ReactNode } 
 import { T } from "@/lib/tokens";
 import { Badge, Button, Field, Icon, IconButton, Input } from "@/components/ui/primitives";
 import { QuoteAddressMap } from "@/components/ui/quote-address-map";
+import { SitePhotos } from "./site-photos";
 import { formatGBP, formatGBPdec } from "@/lib/format";
 import { createClient } from "@/lib/supabase/client";
 import { submitBid } from "@/lib/queries/quotes";
@@ -275,20 +276,7 @@ export function QuoteDrawer({
                 {detail.images.length > 0 ? (
                   <section>
                     <SectionLabel>Site photos</SectionLabel>
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: 10 }}>
-                      {detail.images.map((url, i) => (
-                        <a
-                          key={url}
-                          href={url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          style={{ display: "block", borderRadius: 10, overflow: "hidden", border: `1px solid ${T.line}` }}
-                        >
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={url} alt={`Site photo ${i + 1}`} style={{ width: "100%", height: 110, objectFit: "cover", display: "block" }} />
-                        </a>
-                      ))}
-                    </div>
+                    <SitePhotos images={detail.images} />
                   </section>
                 ) : null}
 
