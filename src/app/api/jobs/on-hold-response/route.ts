@@ -77,7 +77,7 @@ export async function GET(req: Request) {
   const { data, error } = await svc
     .from("jobs")
     .select(
-      "id, reference, title, status, partner_id, on_hold_reason, on_hold_reason_preset_id, on_hold_complaint_description, on_hold_submission_at",
+      "id, reference, title, status, partner_id, on_hold_reason, on_hold_reason_preset_id, on_hold_complaint_description, on_hold_submission_at, on_hold_submission",
     )
     .eq("id", jobId)
     .is("deleted_at", null)
@@ -99,6 +99,17 @@ export async function GET(req: Request) {
     isOnHold: job.status === "on_hold",
     alreadySubmitted: Boolean(job.on_hold_submission_at),
     submittedAt: job.on_hold_submission_at,
+    /**
+     * O que ele mandou volta para ele.
+     *
+     * Sem isto o parceiro via só "Response sent" e não lembrava que dias tinha
+     * prometido. São exatamente os dias pelos quais ele vai ser cobrado, então
+     * ele precisa conseguir reler.
+     */
+    submittedDates: Array.isArray(job.on_hold_submission?.available_dates)
+      ? job.on_hold_submission!.available_dates!
+      : [],
+    submittedNotes: job.on_hold_submission?.notes ?? null,
   });
 }
 
