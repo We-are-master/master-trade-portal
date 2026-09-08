@@ -36,6 +36,13 @@ function fmtWhen(iso: string | null | undefined): string {
   });
 }
 
+/** "2026-09-15" vira "Mon 15 Sep". O parceiro deu o DIA, não a janela. */
+function formatarDia(ymd: string): string {
+  const d = new Date(`${ymd}T12:00:00Z`);
+  if (Number.isNaN(d.getTime())) return ymd;
+  return d.toLocaleDateString("en-GB", { weekday: "short", day: "2-digit", month: "short" });
+}
+
 /** Hoje em YYYY-MM-DD, para o `min` do calendário não deixar escolher ontem. */
 function hojeYmd(): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/London" }).format(new Date());
@@ -71,6 +78,7 @@ export function OnHoldResponseForm({
    * dia" ou nada. A segunda é opcional; uma data já é melhor que nenhuma, que é
    * o que a gente tem hoje.
    */
+  const [datasEnviadas, setDatasEnviadas] = useState<string[]>([]);
   const [data1, setData1] = useState("");
   const [data2, setData2] = useState("");
   const [photos, setPhotos] = useState<File[]>([]);
@@ -91,6 +99,7 @@ export function OnHoldResponseForm({
           if (json.alreadySubmitted) {
             setAlreadySubmitted(true);
             setSubmittedAt(json.submittedAt ?? job.onHoldSubmissionAt);
+            setDatasEnviadas(Array.isArray(json.submittedDates) ? json.submittedDates : []);
           }
         }
       } catch {
@@ -133,6 +142,7 @@ export function OnHoldResponseForm({
       onShowToast({ icon: "send", text: "Response sent — Fixfy will review and get back to you." });
       setAlreadySubmitted(true);
       setSubmittedAt(new Date().toISOString());
+      setDatasEnviadas(Array.isArray(json.availableDates) ? json.availableDates : []);
       setNotes("");
       setData1("");
       setData2("");
@@ -174,6 +184,29 @@ export function OnHoldResponseForm({
           <Icon name="check-circle" size={14} /> Response sent
         </div>
         Awaiting Fixfy review{submittedAt ? ` · ${fmtWhen(submittedAt)}` : ""}. The job stays here until the office resumes it.
+        {datasEnviadas.length > 0 ? (
+          <div style={{ marginTop: 8, display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6 }}>
+            <span style={{ fontSize: 11, fontWeight: 700, color: T.mute, textTransform: "uppercase", letterSpacing: 0.4 }}>
+              You said you can return
+            </span>
+            {datasEnviadas.map((d) => (
+              <span
+                key={d}
+                style={{
+                  padding: "3px 8px",
+                  borderRadius: 999,
+                  border: `1px solid ${T.green}`,
+                  background: T.white,
+                  color: T.green,
+                  fontSize: 11.5,
+                  fontWeight: 600,
+                }}
+              >
+                {formatarDia(d)}
+              </span>
+            ))}
+          </div>
+        ) : null}
       </div>
     );
   }
