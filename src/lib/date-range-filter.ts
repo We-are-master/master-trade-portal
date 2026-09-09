@@ -107,6 +107,20 @@ export function jobFilterYmd(job: MyJob): string {
 
 export function jobMatchesDateFilter(job: MyJob, value: DateFilterValue): boolean {
   if (value.mode === "all") return true;
+  /**
+   * Job esperando o parceiro nunca some no filtro de data.
+   *
+   * A tela abre em "today" e o filtro só olha a data AGENDADA. Reclamação
+   * chega depois da visita, então o job está sempre no passado: o parceiro
+   * abria o portal e o complaint simplesmente não estava lá. Ele teria que
+   * adivinhar que precisa trocar o filtro para "all" para ver um trabalho que
+   * é dele resolver.
+   *
+   * Em 19 jobs que passaram por on hold, nenhum parceiro respondeu nem uma vez
+   * (09/09/2026). O link do e-mail sempre foi tratado como o culpado; esta
+   * linha é a outra metade da resposta.
+   */
+  if (job.needsAttention) return true;
   const bounds = resolveDateFilterYmd(value);
   if (!bounds) return false;
   const ymd = jobFilterYmd(job);
