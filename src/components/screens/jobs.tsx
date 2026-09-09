@@ -23,7 +23,6 @@ import { formatGBP } from "@/lib/format";
 import { jobMatchesDateFilter } from "@/lib/date-range-filter";
 import { useDateRangeFilter } from "@/hooks/use-date-range-filter";
 import { useIsMobile } from "@/hooks/use-media-query";
-import { OnHoldResponseForm } from "@/components/screens/on-hold-response-form";
 import { redactMyJob } from "@/lib/preview-redact";
 import { useMyJobs } from "@/components/jobs-context";
 import { useToast } from "@/components/ui/toast";
@@ -135,7 +134,7 @@ function JobsBoard({ onOpenJob, jobs }: { onOpenJob: OpenJob; jobs: MyJob[] }) {
 
   const columns = [
     ...(needsAttentionJobs.length > 0
-      ? [{ id: "needs_attention" as const, label: "Needs attention", accent: T.coral, highlight: true }]
+      ? [{ id: "needs_attention" as const, label: "Action required", accent: T.coral, highlight: true }]
       : []),
     ...BASE_BOARD_COLUMNS.map((c) => ({ ...c, highlight: false })),
   ];
@@ -217,8 +216,6 @@ function JobsBoard({ onOpenJob, jobs }: { onOpenJob: OpenJob; jobs: MyJob[] }) {
                       key={j.id}
                       job={j}
                       onOpen={() => onOpenJob(j.id)}
-                      onShowToast={toast}
-                      onSubmitted={refresh}
                     />
                   ) : (
                     <BoardCard key={j.id} job={j} onClick={() => onOpenJob(j.id)} />
@@ -247,18 +244,7 @@ function JobsBoard({ onOpenJob, jobs }: { onOpenJob: OpenJob; jobs: MyJob[] }) {
   );
 }
 
-function NeedsAttentionCard({
-  job,
-  onOpen,
-  onShowToast,
-  onSubmitted,
-}: {
-  job: MyJob;
-  onOpen: () => void;
-  onShowToast: (t: import("@/components/ui/toast").ToastInput) => void;
-  onSubmitted: () => void;
-}) {
-  const [expanded, setExpanded] = useState(false);
+function NeedsAttentionCard({ job, onOpen }: { job: MyJob; onOpen: () => void }) {
   const isComplaint = job.onHoldPresetId === "complaint";
   const reason = job.onHoldComplaintDescription || job.onHoldReason;
 
@@ -295,10 +281,6 @@ function NeedsAttentionCard({
               fontSize: 11.5,
               color: T.slate,
               lineHeight: 1.45,
-              display: "-webkit-box",
-              WebkitLineClamp: expanded ? undefined : 2,
-              WebkitBoxOrient: "vertical",
-              overflow: expanded ? "visible" : "hidden",
             }}
           >
             {reason}
@@ -306,25 +288,16 @@ function NeedsAttentionCard({
         ) : null}
       </div>
 
-      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-        <div onClick={(e) => e.stopPropagation()}>
-          <Button
-            variant={expanded ? "secondary" : "primary"}
-            size="sm"
-            icon={expanded ? "chevron-up" : "message-square"}
-            onClick={() => setExpanded((v) => !v)}
-          >
-            {expanded ? "Hide" : job.onHoldSubmissionAt ? "View response" : "Respond"}
-          </Button>
-        </div>
-        <Button variant="ghost" size="sm" iconRight="arrow-up-right" onClick={onOpen}>
-          Open
-        </Button>
-      </div>
-
-      {expanded ? (
-        <OnHoldResponseForm job={job} compact onShowToast={onShowToast} onSubmitted={onSubmitted} />
-      ) : null}
+      {/*
+        O formulário mora no drawer, não aqui dentro.
+        A coluna do quadro tem uns 260px: aberto no card, o par data + turno
+        quebrava em duas linhas por janela, o textarea virava uma tira e a
+        resposta a uma reclamação ficava mais difícil do que precisa. No drawer
+        cabe a largura inteira, e é o mesmo formulário.
+      */}
+      <Button variant="primary" size="sm" icon="message-square" onClick={onOpen} style={{ width: "100%" }}>
+        {job.onHoldSubmissionAt ? "View your response" : "Respond"}
+      </Button>
     </div>
   );
 }
@@ -522,7 +495,7 @@ function ListRow({ job, onClick, last }: { job: MyJob; onClick: () => void; last
       <td style={{ padding: "12px 14px", fontSize: 12.5, color: T.slate }}>{job.scheduled || job.completed}</td>
       <td style={{ padding: "12px 14px" }}>
         {job.needsAttention ? (
-          <Badge tone="coral" size="sm">{job.onHoldLabel || "Needs attention"}</Badge>
+          <Badge tone="coral" size="sm">{job.onHoldLabel || "Action required"}</Badge>
         ) : (
           <Badge tone={statusTone[job.status]}>{STATUS_LABELS[job.status]}</Badge>
         )}
