@@ -3,6 +3,8 @@
 // portal surfaces job value + net payout (net_payout) rather than a fabricated VAT line.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { isDemoMode } from "@/lib/demo/demo-mode";
+import { demoSelfBills } from "@/lib/demo/demo-data";
 
 export const SELF_BILL_SELECT = [
   "id",
@@ -108,6 +110,7 @@ export function mapSelfBill(row: SelfBillRow): SelfBill {
 }
 
 export async function fetchSelfBills(supabase: SupabaseClient, partnerId: string): Promise<SelfBill[]> {
+  if (isDemoMode()) return demoSelfBills();
   const { data, error } = await supabase
     .from("self_bills")
     .select(SELF_BILL_SELECT)

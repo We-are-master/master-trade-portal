@@ -110,3 +110,65 @@ export async function callMasterOsPartnerPortalAccept(
 
 /** @deprecated Use callMasterOsPartnerPortalAccept — kept for any stale imports. */
 export const notifyMasterOsPartnerPortalAccept = callMasterOsPartnerPortalAccept;
+
+export type MasterOsPartnerPortalDeclineResult =
+  | { ok: true; declined: true; jobReference: string }
+  | { ok: false; declined: false; status: number; error: string; message?: string };
+
+/** Decline an auto-assign offer in Master OS — hides the job from this partner's vitrine for good. */
+export async function callMasterOsPartnerPortalDecline(
+  jobId: string,
+  partnerId: string,
+): Promise<MasterOsPartnerPortalDeclineResult> {
+  const secret = process.env.INTERNAL_SYNC_SECRET?.trim();
+  const base =
+    process.env.MASTER_OS_BASE_URL?.trim().replace(/\/$/, "") ||
+    process.env.OS_BASE_URL?.trim().replace(/\/$/, "") ||
+    "https://app.getfixfy.com";
+
+  if (!secret) {
+    return {
+      ok: false,
+      declined: false,
+      status: 503,
+      error: "decline_not_configured",
+      message: "Decline is not configured on the portal (INTERNAL_SYNC_SECRET).",
+    };
+  }
+
+  let res: Response;
+  try {
+    res = await fetch(`${base}/api/internal/jobs/partner-portal-decline`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-internal-secret": secret },
+      body: JSON.stringify({ jobId, partnerId }),
+    });
+  } catch (err) {
+    console.error("[portal-decline] OS fetch failed:", err);
+    return {
+      ok: false,
+      declined: false,
+      status: 502,
+      error: "os_unreachable",
+      message: `Could not reach Master OS at ${base}. Try again.`,
+    };
+  }
+
+  const payload = (await res.json().catch(() => ({}))) as {
+    ok?: boolean;
+    declined?: boolean;
+    error?: string;
+    message?: string;
+    jobReference?: string;
+  };
+  if (!res.ok || !payload.ok || !payload.declined) {
+    return {
+      ok: false,
+      declined: false,
+      status: res.status,
+      error: payload.error ?? "decline_failed",
+      message: payload.message,
+    };
+  }
+  return { ok: true, declined: true, jobReference: payload.jobReference ?? "" };
+}

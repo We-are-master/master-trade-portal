@@ -8,6 +8,8 @@ import { createClient } from "@/lib/supabase/client";
 import { usePartner } from "./partner-context";
 import { JOB_SELECT, mapJob, type JobRow } from "@/lib/queries/map-job";
 import type { MyJob } from "@/types";
+import { isDemoMode } from "@/lib/demo/demo-mode";
+import { DEMO_JOBS } from "@/lib/demo/demo-data";
 
 interface JobsState {
   jobs: MyJob[];
@@ -27,6 +29,11 @@ export function JobsProvider({ children }: { children: ReactNode }) {
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
+    if (isDemoMode()) {
+      setJobs(DEMO_JOBS);
+      setLoading(false);
+      return;
+    }
     try {
       const supabase = createClient();
       const { data, error } = await supabase
@@ -34,7 +41,10 @@ export function JobsProvider({ children }: { children: ReactNode }) {
         .select(JOB_SELECT)
         .eq("partner_id", partner.id)
         .is("deleted_at", null)
-        .order("scheduled_date", { ascending: true });
+        // Mesma sequência do email das 17h: o dia lê do primeiro ao último —
+        // data e, DENTRO do dia, a janela de chegada.
+        .order("scheduled_date", { ascending: true })
+        .order("scheduled_start_at", { ascending: true, nullsFirst: false });
       if (error) throw error;
       setJobs((data as unknown as JobRow[]).map(mapJob));
     } catch (e) {

@@ -4,6 +4,7 @@
 
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { isDemoMode } from "@/lib/demo/demo-mode";
 
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request });
@@ -39,7 +40,7 @@ export async function middleware(request: NextRequest) {
   // never redirect them to /login.
   const isApi = path.startsWith("/api");
 
-  if (!user && !isAuthRoute && !isApi) {
+  if (!user && !isAuthRoute && !isApi && !isDemoMode()) {
     const redirectUrl = request.nextUrl.clone();
     redirectUrl.pathname = "/login";
     return NextResponse.redirect(redirectUrl);

@@ -20,6 +20,8 @@ import {
   type PartnerBidProposalPayload,
   serializeBidProposalNotes,
 } from "@/lib/quote-bid-payload";
+import { isDemoMode } from "@/lib/demo/demo-mode";
+import { DEMO_QUOTES } from "@/lib/demo/demo-data";
 
 interface InvitationRow {
   quote_id: string;
@@ -71,6 +73,7 @@ function deriveStatus(quoteStatus: string, myBidStatus: string | null): QuoteReq
 }
 
 export async function fetchAvailableQuotes(supabase: SupabaseClient, partnerId: string): Promise<QuoteRequest[]> {
+  if (isDemoMode()) return DEMO_QUOTES;
   // 1) Explicit invites — every row binds a quote to this partner.
   const { data: invites, error: invErr } = await supabase
     .from("quote_partner_invitations")

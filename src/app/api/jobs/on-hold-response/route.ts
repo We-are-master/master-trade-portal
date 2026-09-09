@@ -19,7 +19,7 @@ type JobOnHoldRow = {
   on_hold_reason_preset_id: string | null;
   on_hold_complaint_description: string | null;
   on_hold_submission_at: string | null;
-  on_hold_submission: { notes?: string | null; photos?: string[] } | null;
+  on_hold_submission: { notes?: string | null; photos?: string[]; available_dates?: string[] } | null;
 };
 
 function complaintReasonText(job: JobOnHoldRow): string | null {
@@ -28,6 +28,42 @@ function complaintReasonText(job: JobOnHoldRow): string | null {
   const reason = job.on_hold_reason?.trim();
   if (reason) return reason;
   return null;
+}
+
+
+/**
+ * Registra a resolução no Master OS e deixa ele avisar o Zendesk.
+ * Mesmo segredo que o accept e o decline do portal já usam.
+ */
+async function avisarMasterOs(
+  jobId: string,
+  partnerId: string,
+  notes: string,
+  escolha: { remedy: string; offers: Array<{ date: string; slot: string }>; discountGbp: number | null } | null,
+  dates: string[],
+): Promise<{ ok: true; availableDates: string[] } | { ok: false; error: string }> {
+  const secret = process.env.INTERNAL_SYNC_SECRET?.trim();
+  const base =
+    process.env.MASTER_OS_BASE_URL?.trim().replace(/\/$/, "") ||
+    process.env.OS_BASE_URL?.trim().replace(/\/$/, "") ||
+    "https://app.getfixfy.com";
+  if (!secret) return { ok: false, error: "INTERNAL_SYNC_SECRET not set" };
+  try {
+    const res = await fetch(`${base}/api/internal/jobs/on-hold-resolution`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-internal-secret": secret },
+      body: JSON.stringify(
+        escolha
+          ? { jobId, partnerId, notes, remedy: escolha.remedy, offers: escolha.offers, discount_gbp: escolha.discountGbp }
+          : { jobId, partnerId, notes, availableDates: dates },
+      ),
+    });
+    const json = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string; availableDates?: string[] };
+    if (!res.ok || !json.ok) return { ok: false, error: json.error ?? `HTTP ${res.status}` };
+    return { ok: true, availableDates: json.availableDates ?? [] };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "network error" };
+  }
 }
 
 /** GET /api/jobs/on-hold-response?jobId= — on-hold context for portal card/drawer. */
@@ -46,7 +82,7 @@ export async function GET(req: Request) {
   const { data, error } = await svc
     .from("jobs")
     .select(
-      "id, reference, title, status, partner_id, on_hold_reason, on_hold_reason_preset_id, on_hold_complaint_description, on_hold_submission_at",
+      "id, reference, title, status, partner_id, on_hold_reason, on_hold_reason_preset_id, on_hold_complaint_description, on_hold_submission_at, on_hold_submission",
     )
     .eq("id", jobId)
     .is("deleted_at", null)
@@ -68,6 +104,17 @@ export async function GET(req: Request) {
     isOnHold: job.status === "on_hold",
     alreadySubmitted: Boolean(job.on_hold_submission_at),
     submittedAt: job.on_hold_submission_at,
+    /**
+     * O que ele mandou volta para ele.
+     *
+     * Sem isto o parceiro via só "Response sent" e não lembrava que dias tinha
+     * prometido. São exatamente os dias pelos quais ele vai ser cobrado, então
+     * ele precisa conseguir reler.
+     */
+    submittedDates: Array.isArray(job.on_hold_submission?.available_dates)
+      ? job.on_hold_submission!.available_dates!
+      : [],
+    submittedNotes: job.on_hold_submission?.notes ?? null,
   });
 }
 
@@ -92,9 +139,24 @@ export async function POST(req: Request) {
   }
 
   const photoFiles: File[] = [];
+  const datasBrutas: string[] = [];
+  const ofertas: Array<{ date: string; slot: string }> = [];
+  const remedy = String(form.get("remedy") ?? "").trim();
+  const descontoBruto = form.get("discount_gbp");
   for (const [key, value] of form.entries()) {
     if ((key === "photos[]" || key === "photos") && value instanceof File && value.size > 0) {
       photoFiles.push(value);
+    }
+    if ((key === "offers[]" || key === "offers") && typeof value === "string") {
+      // "2026-09-12|morning" — o par vem junto para dia e turno não se separarem
+      // no caminho. Dois campos soltos casados por índice é o tipo de coisa que
+      // troca de par quando um deles vem vazio.
+      const [dia, turno] = value.split("|");
+      if (dia && turno) ofertas.push({ date: dia.trim(), slot: turno.trim() });
+      continue;
+    }
+    if ((key === "dates[]" || key === "dates") && typeof value === "string") {
+      datasBrutas.push(value);
     }
   }
   if (photoFiles.length > MAX_PHOTOS) {
@@ -122,7 +184,7 @@ export async function POST(req: Request) {
     reference: string;
     status: string;
     partner_id: string | null;
-    on_hold_submission: { notes?: string | null; photos?: string[] } | null;
+    on_hold_submission: { notes?: string | null; photos?: string[]; available_dates?: string[] } | null;
   };
 
   if (job.partner_id !== session.partnerId) {
@@ -151,9 +213,13 @@ export async function POST(req: Request) {
 
   const now = new Date().toISOString();
   const priorPhotos = Array.isArray(job.on_hold_submission?.photos) ? job.on_hold_submission!.photos! : [];
+  const priorDates = Array.isArray(job.on_hold_submission?.available_dates)
+    ? job.on_hold_submission!.available_dates!
+    : [];
   const submission = {
     notes,
     photos: [...priorPhotos, ...newPaths],
+    ...(priorDates.length ? { available_dates: priorDates } : {}),
     partner_id: session.partnerId,
     submitted_at: now,
   };
@@ -166,6 +232,27 @@ export async function POST(req: Request) {
   if (updErr) {
     console.error("[on-hold-response] job update failed:", updErr);
     return NextResponse.json({ error: "Could not save your update. Please try again." }, { status: 500 });
+  }
+
+  /**
+   * O texto e as datas são registrados pelo OS, não aqui.
+   *
+   * Esta rota grava as FOTOS porque é ela que faz o upload. O resto vai para
+   * `/api/internal/jobs/on-hold-resolution`, que valida as datas com a mesma
+   * regra do resto do sistema e — o ponto todo — põe a nota INTERNA no ticket
+   * do Zendesk. Sem essa chamada a resposta do parceiro ficava só no banco, e o
+   * escritório nunca ficava sabendo que ele respondeu.
+   */
+  const escolha = remedy
+    ? {
+        remedy,
+        offers: ofertas,
+        discountGbp: descontoBruto != null && String(descontoBruto).trim() !== "" ? Number(descontoBruto) : null,
+      }
+    : null;
+  const avisoOs = await avisarMasterOs(job.id, session.partnerId, notes, escolha, datasBrutas);
+  if (!avisoOs.ok) {
+    console.error("[on-hold-response] master-os notify failed:", avisoOs.error);
   }
 
   void svc
@@ -183,5 +270,10 @@ export async function POST(req: Request) {
       if (error) console.error("[on-hold-response] audit insert failed:", error);
     });
 
-  return NextResponse.json({ ok: true, jobReference: job.reference, photosUploaded: newPaths.length });
+  return NextResponse.json({
+    ok: true,
+    jobReference: job.reference,
+    photosUploaded: newPaths.length,
+    availableDates: avisoOs.ok ? avisoOs.availableDates : [],
+  });
 }

@@ -4,8 +4,12 @@
 // Screens load real data through this client via the query modules in src/lib/queries/*.
 
 import { createBrowserClient } from "@supabase/ssr";
+import { isDemoMode } from "@/lib/demo/demo-mode";
+import { createDemoSupabaseClient } from "@/lib/demo/demo-supabase";
 
 export function createClient() {
+  if (isDemoMode()) return createDemoSupabaseClient();
+
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 

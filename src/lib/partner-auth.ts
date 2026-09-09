@@ -7,6 +7,8 @@
 import { createClient } from "@/lib/supabase/server";
 import { mapPartner, type PartnerRow } from "@/lib/map-partner";
 import type { Partner } from "@/types";
+import { isDemoMode } from "@/lib/demo/demo-mode";
+import { DEMO_PARTNER } from "@/lib/demo/demo-data";
 
 // Only columns guaranteed to exist on every environment. Columns added by
 // recent migrations (wizard_completed_at, account_type, billing…) are pulled
@@ -22,6 +24,9 @@ export interface PartnerSession {
 }
 
 export async function getPartnerSession(): Promise<PartnerSession | null> {
+  if (isDemoMode()) {
+    return { userId: "demo-user", email: DEMO_PARTNER.email, partnerId: DEMO_PARTNER.id, partner: DEMO_PARTNER };
+  }
   const supabase = await createClient();
   const {
     data: { user },
