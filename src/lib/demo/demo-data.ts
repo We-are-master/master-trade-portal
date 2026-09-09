@@ -116,6 +116,7 @@ export const DEMO_JOBS: MyJob[] = [
     osStatus: "on_hold",
     trade: "Cleaning",
     needsAttention: true,
+    onHoldPresetId: "complaint",
     onHoldReason: "Complaint",
     onHoldLabel: "Complaint",
     onHoldComplaintDescription:

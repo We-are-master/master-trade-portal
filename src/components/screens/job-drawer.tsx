@@ -366,7 +366,7 @@ function OverviewTab({
           }}
         >
           <div style={{ fontSize: 14, fontWeight: 600, color: T.coral, marginBottom: 10, display: "flex", alignItems: "center", gap: 8 }}>
-            <Icon name="alert-triangle" size={16} /> Respond to on-hold job
+            <Icon name="alert-triangle" size={16} /> Resolve this job
           </div>
           <OnHoldResponseForm job={job} onShowToast={onShowToast} onSubmitted={onSubmitted} />
         </Card>

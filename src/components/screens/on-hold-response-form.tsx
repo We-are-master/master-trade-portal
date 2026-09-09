@@ -417,7 +417,7 @@ export function OnHoldResponseForm({
       </div>
 
       <Button variant="primary" size={compact ? "sm" : "md"} icon="send" onClick={submit} disabled={submitting} full>
-        {submitting ? "Sending…" : "Submit response"}
+        {submitting ? "Sending…" : "Submit resolution"}
       </Button>
     </div>
   );

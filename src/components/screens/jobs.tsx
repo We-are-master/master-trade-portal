@@ -245,27 +245,39 @@ function JobsBoard({ onOpenJob, jobs }: { onOpenJob: OpenJob; jobs: MyJob[] }) {
 }
 
 function NeedsAttentionCard({ job, onOpen }: { job: MyJob; onOpen: () => void }) {
-  const isComplaint = job.onHoldPresetId === "complaint";
+  /**
+   * Reclamação não se prova só pelo preset.
+   *
+   * Espelha o `jobOnHoldPorReclamacao` do OS, que olha três coisas. Um hold que
+   * chegue sem o preset (import antigo, escrita direta, integração nova) caía
+   * no âmbar de "espera comum", e reclamação não é espera comum.
+   */
+  const isComplaint =
+    job.onHoldPresetId === "complaint" ||
+    Boolean(job.onHoldComplaintDescription?.trim()) ||
+    /\bcomplaint\b/i.test(job.onHoldReason ?? "");
   const reason = job.onHoldComplaintDescription || job.onHoldReason;
 
   return (
     <div
       style={{
         background: T.white,
-        border: `1.5px solid ${isComplaint ? T.coral : T.amber}`,
+        border: `1.5px solid ${isComplaint ? T.red : T.amber}`,
         borderRadius: 10,
         padding: 12,
         display: "flex",
         flexDirection: "column",
         gap: 8,
-        boxShadow: "0 2px 8px rgba(237,75,0,0.08)",
+        boxShadow: isComplaint ? "0 2px 10px rgba(179,38,30,0.10)" : "0 2px 8px rgba(237,75,0,0.08)",
       }}
     >
-      <div style={{ cursor: "pointer" }} onClick={onOpen}>
-        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+      {/* Gap no container em vez de margem por elemento: o mapa e o título
+          encostavam um no outro porque o mapa não tinha margem nenhuma. */}
+      <div style={{ cursor: "pointer", display: "flex", flexDirection: "column", gap: 8 }} onClick={onOpen}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
           <span className="fx-mono" style={{ fontSize: 10.5, color: T.mute }}>{job.id}</span>
           <span style={{ flex: 1 }} />
-          <Badge tone={isComplaint ? "coral" : "warning"} size="sm">
+          <Badge tone={isComplaint ? "danger" : "warning"} size="sm">
             {job.onHoldLabel || "On hold"}
           </Badge>
         </div>
@@ -277,7 +289,7 @@ function NeedsAttentionCard({ job, onOpen }: { job: MyJob; onOpen: () => void })
         {reason ? (
           <p
             style={{
-              margin: "8px 0 0",
+              margin: 0,
               fontSize: 11.5,
               color: T.slate,
               lineHeight: 1.45,
@@ -296,7 +308,7 @@ function NeedsAttentionCard({ job, onOpen }: { job: MyJob; onOpen: () => void })
         cabe a largura inteira, e é o mesmo formulário.
       */}
       <Button variant="primary" size="sm" icon="message-square" onClick={onOpen} style={{ width: "100%" }}>
-        {job.onHoldSubmissionAt ? "View your response" : "Respond"}
+        {job.onHoldSubmissionAt ? "View your response" : "Resolve"}
       </Button>
     </div>
   );
