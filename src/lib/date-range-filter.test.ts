@@ -1,10 +1,18 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { jobMatchesDateFilter } from "./date-range-filter";
+import { jobMatchesDateFilter, londonYmd } from "./date-range-filter";
 import type { MyJob } from "@/types";
 
-const HOJE = new Date().toISOString().slice(0, 10);
-const SEMANA_PASSADA = new Date(Date.now() - 7 * 864e5).toISOString().slice(0, 10);
+/**
+ * "Hoje" pela MESMA régua do filtro, que é Londres, não UTC.
+ *
+ * A primeira versão deste teste usava `toISOString()` e passou a tarde inteira
+ * verde. Virou meia-noite em Londres (BST = UTC+1) e ele quebrou sozinho: às
+ * 00:30 de Londres o UTC ainda diz o dia anterior, e o job "de hoje" caía fora
+ * do próprio filtro de hoje.
+ */
+const HOJE = londonYmd();
+const SEMANA_PASSADA = londonYmd(new Date(Date.now() - 7 * 864e5));
 
 const job = (extra: Partial<MyJob>): MyJob =>
   ({ id: "JOB-1", title: "x", status: "scheduled", osStatus: "scheduled", total: 0,
