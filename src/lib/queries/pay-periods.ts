@@ -8,9 +8,9 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { FORTNIGHT_ANCHOR_YMD, daysBetween, fortnightWindow, payRunDateFor, type PayPeriodWindow } from "@/lib/pay-period";
-import { londonYmd } from "@/lib/date-range-filter";
 import { isDemoMode } from "@/lib/demo/demo-mode";
 import { demoPayPeriodRows } from "@/lib/demo/demo-data";
+import { londonYmd } from "@/lib/date-range-filter";
 
 export const PAY_PERIOD_SELECT = [
   "week_start",
@@ -82,6 +82,22 @@ export interface PayPeriodSummary {
   pending: PendingPayRun | null;
 }
 
+/**
+ * Is this row on the partner's real pay cycle?
+ *
+ * The OS carries off-grid duplicates: biweekly rows shifted by a week, with no
+ * `due_date`, usually cancelled or empty. Every genuine fortnight sits on the
+ * 14-day grid — corroborated by the OS's own due_dates, which step 21 Aug →
+ * 4 Sept → 18 Sept. Weekly and monthly partners legitimately sit off that grid,
+ * so the check only applies to biweekly rows.
+ */
+function isOnCycle(row: PayPeriodRow): boolean {
+  if (!row.week_start || !row.week_end) return false;
+  const span = daysBetween(row.week_start, row.week_end) + 1;
+  const biweekly = row.payment_cadence === "biweekly" || (span >= 13 && span <= 15);
+  if (!biweekly) return true;
+  return daysBetween(FORTNIGHT_ANCHOR_YMD, row.week_start) % 14 === 0;
+}
 
 /** Pay-run date for a row: the OS value when set, else derived from the window. */
 function rowPayRunYmd(row: PayPeriodRow): string | null {
@@ -90,44 +106,69 @@ function rowPayRunYmd(row: PayPeriodRow): string | null {
   return null;
 }
 
+/**
+ * Which self-bill is "the period I am earning into" when several cover today.
+ *
+ * The OS can leave more than one row open over the same days: an empty
+ * `accumulating` shell next to the row that actually holds the work. Preferring
+ * `accumulating` alone picked the empty one and the card read £0 while the
+ * partner was owed £950, so money comes first among open rows.
+ *
+ * The old comparator also returned a constant when two windows were the same
+ * length, which is not a valid ordering — the winner depended on the order rows
+ * came back from the database, so the same partner could see different totals
+ * between loads. Every step below is a total order, ending on `week_start` so
+ * the result is stable whatever the input order.
+ */
+export function compareRunningCandidates(a: PayPeriodRow, b: PayPeriodRow): number {
+  const openDiff = Number(OPEN.has(b.status ?? "")) - Number(OPEN.has(a.status ?? ""));
+  if (openDiff !== 0) return openDiff;
+
+  // Among rows in the same state, the one carrying work describes the period.
+  const moneyDiff = Number((b.net_payout ?? 0) > 0) - Number((a.net_payout ?? 0) > 0);
+  if (moneyDiff !== 0) return moneyDiff;
+
+  const spanDiff = daysBetween(b.week_start!, b.week_end!) - daysBetween(a.week_start!, a.week_end!);
+  if (spanDiff !== 0) return spanDiff;
+
+  // Last resort, so the order never depends on how the rows arrived.
+  return a.week_start!.localeCompare(b.week_start!);
+}
+
 export function buildPayPeriodSummary(rows: PayPeriodRow[], todayYmd: string = londonYmd()): PayPeriodSummary {
   const usable = rows.filter((r) => r.week_start && r.week_end);
 
   // ---- Running period -------------------------------------------------
-  // Only an `accumulating` row may define the period the partner is earning
-  // into. Anything else is a closed run, and adopting it as "running" makes the
-  // card announce a window the partner has not reached yet.
-  //
-  // The OS also carries off-grid duplicates: rows shifted by a week, with no
-  // due_date, usually cancelled or empty. Every genuine biweekly period sits on
-  // the 14-day grid (corroborated by the due_dates, which step 21 Aug → 4 Sept →
-  // 18 Sept), so a biweekly row that misses the grid is rejected. Weekly and
-  // monthly partners legitimately sit off it, and are taken at face value.
-  const openRow = usable.find(
-    (r) => OPEN.has(r.status ?? "") && r.week_start! <= todayYmd && todayYmd <= r.week_end!,
-  );
-
-  const acceptsOpenRow = (() => {
-    if (!openRow) return false;
-    const span = daysBetween(openRow.week_start!, openRow.week_end!) + 1;
-    const biweekly = openRow.payment_cadence === "biweekly" || (span >= 13 && span <= 15);
-    if (!biweekly) return true;
-    return daysBetween(FORTNIGHT_ANCHOR_YMD, openRow.week_start!) % 14 === 0;
-  })();
+  // Only an `accumulating` row may describe the period the partner is earning
+  // into. A closed run also covers today, and adopting one made the card
+  // announce a window that has not started yet ("Day 2 of 14" mid-fortnight).
+  const containingToday = usable
+    .filter(
+      (r) =>
+        r.week_start! <= todayYmd &&
+        todayYmd <= r.week_end! &&
+        !VOID.has(r.status ?? "") &&
+        OPEN.has(r.status ?? "") &&
+        isOnCycle(r),
+    )
+    .sort(compareRunningCandidates)[0];
 
   let current: RunningPeriod;
-  if (openRow && acceptsOpenRow) {
-    const startYmd = openRow.week_start!;
-    const endYmd = openRow.week_end!;
+  if (containingToday) {
+    const startYmd = containingToday.week_start!;
+    const endYmd = containingToday.week_end!;
     current = {
       startYmd,
       endYmd,
-      osNet: openRow.net_payout ?? null,
-      payRunYmd: rowPayRunYmd(openRow) ?? payRunDateFor(endYmd),
+      osNet: containingToday.net_payout ?? null,
+      payRunYmd: rowPayRunYmd(containingToday) ?? payRunDateFor(endYmd),
       fromOs: true,
       cadence: cadenceFor(startYmd, endYmd),
     };
   } else {
+    // Nothing credible to anchor on — use the standard grid. Re-anchoring on the
+    // partner's latest row was worse than useless here: their history is often
+    // weekly, and stepping 14 days from a weekly start lands off-cycle.
     const win = fortnightWindow(todayYmd);
     current = {
       ...win,

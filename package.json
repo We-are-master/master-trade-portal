@@ -2,7 +2,7 @@
   "name": "fixfy-trade-portal",
   "version": "0.1.0",
   "private": true,
-  "description": "Fixfy Trade Portal — desktop web app for trades (partners) to receive distributed leads and work. Shares the Fixfy OS (master-os) database structure.",
+  "description": "Fixfy Trade Portal \u2014 desktop web app for trades (partners) to receive distributed leads and work. Shares the Fixfy OS (master-os) database structure.",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -12,7 +12,8 @@
     "apply:partner-contracts": "tsx scripts/apply-partner-contracts-migration.mts",
     "seed:partner-contracts": "tsx scripts/seed-partner-contracts.mts",
     "validate:partner-contracts": "tsx scripts/validate-partner-contracts.mts",
-    "apply:lead-pipeline": "tsx scripts/apply-lead-pipeline-migration.mts"
+    "apply:lead-pipeline": "tsx scripts/apply-lead-pipeline-migration.mts",
+    "test": "npx tsx --test src/lib/pay-period.test.ts src/lib/queries/pay-periods.test.ts"
   },
   "dependencies": {
     "@react-pdf/renderer": "^4.5.1",

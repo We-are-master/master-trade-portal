@@ -16,8 +16,14 @@
 
 import { LONDON_TZ, londonYmd } from "@/lib/date-range-filter";
 
-/** Days between a period's last day (Sunday) and its pay run (Friday). */
+/** Days between a period's last day (Sunday) and the earliest Friday it can pay. */
 export const PAY_RUN_LAG_DAYS = 5;
+
+/**
+ * A real pay-run Friday. Pay runs land every 14 days from here, which is the
+ * same rhythm the OS uses, so 03–16 Aug pays 21 Aug and 17–30 Aug pays 4 Sep.
+ */
+export const PAY_RUN_ANCHOR_YMD = "2026-08-21";
 
 /**
  * A real fortnight start observed in the OS. Every other Monday from here is a
@@ -55,9 +61,21 @@ export function fortnightWindow(ymd: string = londonYmd()): PayPeriodWindow {
   return { startYmd, endYmd: addDays(startYmd, 13) };
 }
 
-/** Pay-run date for a period that ends on `endYmd` — the Friday 5 days later. */
+/**
+ * Pay-run date for a period ending on `endYmd`: the first pay Friday that is at
+ * least {@link PAY_RUN_LAG_DAYS} days after it.
+ *
+ * Not simply `endYmd + 5`. Pay runs are every other Friday, so a period that
+ * does not end on the Sunday before one waits for the next. A weekly window
+ * closing Sun 23 Aug pays Fri 4 Sep (12 days), not Fri 28 Aug — which is what
+ * production `self_bills` show. Only a fallback: a row's own `due_date` wins.
+ */
 export function payRunDateFor(endYmd: string): string {
-  return addDays(endYmd, PAY_RUN_LAG_DAYS);
+  const earliest = addDays(endYmd, PAY_RUN_LAG_DAYS);
+  const offset = daysBetween(PAY_RUN_ANCHOR_YMD, earliest);
+  // Ceil towards +infinity so a date between two runs waits for the later one.
+  const periods = Math.ceil(offset / 14);
+  return addDays(PAY_RUN_ANCHOR_YMD, periods * 14);
 }
 
 /** "17–30 Aug" / "31 Aug – 13 Sep" — compact period label. */

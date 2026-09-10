@@ -365,6 +365,33 @@ export function OnHoldResponseForm({
 
       <div>
         <label style={{ display: "block", fontSize: 12, fontWeight: 500, color: T.ink, marginBottom: 6 }}>
+          When can you go back?
+        </label>
+        <div style={{ fontSize: 11, color: T.mute, marginBottom: 6 }}>
+          Give one or two days. We offer these to the customer, so only put days you can really do.
+        </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <input
+            type="date"
+            value={data1}
+            min={hojeYmd()}
+            onChange={(e) => setData1(e.target.value)}
+            aria-label="First day you can go back"
+            style={{ ...inputDataStyle }}
+          />
+          <input
+            type="date"
+            value={data2}
+            min={data1 || hojeYmd()}
+            onChange={(e) => setData2(e.target.value)}
+            aria-label="Second day you can go back (optional)"
+            style={{ ...inputDataStyle }}
+          />
+        </div>
+      </div>
+
+      <div>
+        <label style={{ display: "block", fontSize: 12, fontWeight: 500, color: T.ink, marginBottom: 6 }}>
           Photos (optional)
         </label>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
