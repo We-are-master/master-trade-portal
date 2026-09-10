@@ -92,6 +92,8 @@ export interface AvailableJob {
   distance: number;
   duration: string;
   total: number;
+  /** "Day rate" / "Half day" when the fixed price was agreed on that basis (jobs.rate_basis). */
+  rateBasisLabel?: string | null;
   timing: string;
 }
 

@@ -930,6 +930,7 @@ export function AvailableJobsView({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [acceptingId, setAcceptingId] = useState<string | null>(null);
+  const [decliningId, setDecliningId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -946,6 +947,33 @@ export function AvailableJobsView({
   useEffect(() => {
     void load();
   }, [load]);
+
+  const decline = async (job: AvailableJob) => {
+    if (previewMode) return;
+    setDecliningId(job.id);
+    try {
+      const res = await fetch("/api/jobs/decline", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ jobId: job.id }),
+      });
+      const json = (await res.json().catch(() => ({}))) as { declined?: boolean; message?: string; error?: string };
+      if (res.ok && json.declined) {
+        onShowToast({ icon: "check-circle-2", text: `Passed on ${job.reference ?? "this job"}. It won't show again.` });
+        setJobs((prev) => prev.filter((j) => j.id !== job.id));
+      } else {
+        onShowToast({
+          icon: "alert-triangle",
+          tone: "coral",
+          text: json.message || json.error || "Couldn't pass on this job",
+        });
+      }
+    } catch (e) {
+      onShowToast({ icon: "alert-triangle", tone: "coral", text: e instanceof Error ? e.message : "Couldn't pass on this job" });
+    } finally {
+      setDecliningId(null);
+    }
+  };
 
   const accept = async (job: AvailableJob) => {
     if (previewMode) return;
@@ -1022,7 +1050,9 @@ export function AvailableJobsView({
                 key={j.id}
                 job={redactSensitive ? redactAvailableJob(j) : j}
                 accepting={acceptingId === j.id}
+                declining={decliningId === j.id}
                 onAccept={() => accept(j)}
+                onDecline={() => decline(j)}
                 locked={redactSensitive}
               />
             ))}
@@ -1036,12 +1066,16 @@ export function AvailableJobsView({
 function AvailableJobCard({
   job,
   accepting,
+  declining = false,
   onAccept,
+  onDecline,
   locked = false,
 }: {
   job: AvailableJob;
   accepting: boolean;
+  declining?: boolean;
   onAccept: () => void;
+  onDecline?: () => void;
   locked?: boolean;
 }) {
   return (
@@ -1103,7 +1137,7 @@ function AvailableJobCard({
               {locked ? "£•••" : formatGBP(job.total)}
             </div>
             <div style={{ fontSize: 10.5, color: T.coral, marginTop: 4, letterSpacing: 0.3, fontWeight: 600 }}>
-              inc VAT
+              {job.rateBasisLabel ? `${job.rateBasisLabel} · inc VAT` : "inc VAT"}
             </div>
           </div>
         </div>
@@ -1125,7 +1159,12 @@ function AvailableJobCard({
 
         <div style={{ marginTop: 14, display: "flex", alignItems: "center", gap: 10 }}>
           <span style={{ flex: 1 }} />
-          <Button variant="dark" size="sm" icon="check" onClick={onAccept} disabled={accepting || locked}>
+          {onDecline && !locked ? (
+            <Button variant="secondary" size="sm" icon="x" onClick={onDecline} disabled={accepting || declining}>
+              {declining ? "Passing…" : "Pass"}
+            </Button>
+          ) : null}
+          <Button variant="dark" size="sm" icon="check" onClick={onAccept} disabled={accepting || declining || locked}>
             {locked ? "Available when approved" : accepting ? "Accepting…" : "Accept job"}
           </Button>
         </div>

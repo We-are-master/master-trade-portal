@@ -79,8 +79,17 @@ export function OnHoldResponseForm({
    * o que a gente tem hoje.
    */
   const [datasEnviadas, setDatasEnviadas] = useState<string[]>([]);
+  /**
+   * O que ele oferece. Nasce vazio de propósito: a escolha é a primeira
+   * pergunta, e sem ela o resto do formulário não faz sentido. Desconto não
+   * pede data (ninguém volta) e voltar não pede valor.
+   */
+  const [remedy, setRemedy] = useState<"revisit" | "discount" | null>(null);
   const [data1, setData1] = useState("");
+  const [slot1, setSlot1] = useState<"morning" | "afternoon">("morning");
   const [data2, setData2] = useState("");
+  const [slot2, setSlot2] = useState<"morning" | "afternoon">("afternoon");
+  const [desconto, setDesconto] = useState("");
   const [photos, setPhotos] = useState<File[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -123,8 +132,20 @@ export function OnHoldResponseForm({
   const removePhoto = (idx: number) => setPhotos((prev) => prev.filter((_, i) => i !== idx));
 
   const submit = async () => {
+    if (!remedy) {
+      onShowToast({ icon: "alert-triangle", tone: "coral", text: "Choose whether you'll go back or offer a discount." });
+      return;
+    }
     if (!notes.trim()) {
-      onShowToast({ icon: "alert-triangle", tone: "coral", text: "Please describe how you'll resolve this." });
+      onShowToast({ icon: "alert-triangle", tone: "coral", text: "Please describe what happened." });
+      return;
+    }
+    if (remedy === "revisit" && !(data1.trim() && data2.trim())) {
+      onShowToast({ icon: "alert-triangle", tone: "coral", text: "Give two windows: one option is not a choice for the customer." });
+      return;
+    }
+    if (remedy === "discount" && !(Number(desconto) > 0)) {
+      onShowToast({ icon: "alert-triangle", tone: "coral", text: "Enter the discount amount in pounds." });
       return;
     }
     setSubmitting(true);
@@ -132,7 +153,14 @@ export function OnHoldResponseForm({
       const form = new FormData();
       form.append("jobId", job.uuid);
       form.append("notes", notes.trim());
-      for (const d of [data1, data2]) if (d.trim()) form.append("dates[]", d.trim());
+      form.append("remedy", remedy);
+      if (remedy === "revisit") {
+        for (const [d, sl] of [[data1, slot1], [data2, slot2]] as const) {
+          if (d.trim()) form.append("offers[]", `${d.trim()}|${sl}`);
+        }
+      } else {
+        form.append("discount_gbp", String(Number(desconto)));
+      }
       photos.forEach((file, i) => form.append("photos[]", file, file.name || `photo-${i}.jpg`));
 
       const res = await fetch("/api/jobs/on-hold-response", { method: "POST", body: form });
@@ -144,8 +172,10 @@ export function OnHoldResponseForm({
       setSubmittedAt(new Date().toISOString());
       setDatasEnviadas(Array.isArray(json.availableDates) ? json.availableDates : []);
       setNotes("");
+      setRemedy(null);
       setData1("");
       setData2("");
+      setDesconto("");
       setPhotos([]);
       onSubmitted();
     } catch (e) {
@@ -234,15 +264,104 @@ export function OnHoldResponseForm({
 
       <div>
         <label style={{ display: "block", fontSize: 12, fontWeight: 500, color: T.ink, marginBottom: 6 }}>
-          Your response *
+          What are you offering? *
+        </label>
+        <div style={{ display: "grid", gap: 8, gridTemplateColumns: "1fr 1fr" }}>
+          {([
+            ["revisit", "Go back and put it right", "No extra cost to the customer"],
+            ["discount", "Offer a discount", "We reduce the invoice instead"],
+          ] as const).map(([valor, titulo, ajuda]) => (
+            <button
+              key={valor}
+              type="button"
+              onClick={() => setRemedy(valor)}
+              aria-pressed={remedy === valor}
+              style={{
+                textAlign: "left",
+                padding: "10px 12px",
+                borderRadius: 10,
+                cursor: "pointer",
+                background: remedy === valor ? T.paper : T.white,
+                border: `1.5px solid ${remedy === valor ? T.coral : T.line}`,
+                color: T.ink,
+                font: "inherit",
+              }}
+            >
+              <span style={{ display: "block", fontSize: 13, fontWeight: 600 }}>{titulo}</span>
+              <span style={{ display: "block", fontSize: 11, color: T.mute, marginTop: 2 }}>{ajuda}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div>
+        <label style={{ display: "block", fontSize: 12, fontWeight: 500, color: T.ink, marginBottom: 6 }}>
+          What happened? *
         </label>
         <textarea
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
-          placeholder="How you'll resolve this, next steps, timeline…"
+          placeholder="What went wrong and what you'll do about it…"
           style={{ ...textareaStyle, minHeight: compact ? 70 : 90 }}
         />
       </div>
+
+      {remedy === "revisit" ? (
+        <div>
+          <label style={{ display: "block", fontSize: 12, fontWeight: 500, color: T.ink, marginBottom: 6 }}>
+            When can you go back? *
+          </label>
+          <div style={{ fontSize: 11, color: T.mute, marginBottom: 6 }}>
+            Two windows, both required. The customer picks one, so only put times you can really do.
+          </div>
+          {([
+            [1, data1, setData1, slot1, setSlot1],
+            [2, data2, setData2, slot2, setSlot2],
+          ] as const).map(([n, dia, setDia, turno, setTurno]) => (
+            <div key={n} style={{ display: "flex", gap: 8, marginBottom: n === 1 ? 8 : 0 }}>
+              <input
+                type="date"
+                value={dia}
+                min={n === 2 ? data1 || hojeYmd() : hojeYmd()}
+                onChange={(e) => setDia(e.target.value)}
+                aria-label={`Day for window ${n}`}
+                style={{ ...inputDataStyle }}
+              />
+              <select
+                value={turno}
+                onChange={(e) => setTurno(e.target.value as "morning" | "afternoon")}
+                aria-label={`Time for window ${n}`}
+                style={{ ...inputDataStyle, flex: "0 0 42%" }}
+              >
+                <option value="morning">Morning · 8am to 1pm</option>
+                <option value="afternoon">Afternoon · 1pm to 6pm</option>
+              </select>
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      {remedy === "discount" ? (
+        <div>
+          <label style={{ display: "block", fontSize: 12, fontWeight: 500, color: T.ink, marginBottom: 6 }}>
+            How much off? *
+          </label>
+          <div style={{ fontSize: 11, color: T.mute, marginBottom: 6 }}>
+            In pounds. This comes off what we pay you for this job.
+          </div>
+          <input
+            type="number"
+            inputMode="decimal"
+            min="0"
+            step="0.01"
+            value={desconto}
+            onChange={(e) => setDesconto(e.target.value)}
+            placeholder="40.00"
+            aria-label="Discount amount in pounds"
+            style={{ ...inputDataStyle, flex: "0 0 auto", width: 140 }}
+          />
+        </div>
+      ) : null}
 
       <div>
         <label style={{ display: "block", fontSize: 12, fontWeight: 500, color: T.ink, marginBottom: 6 }}>
@@ -325,7 +444,7 @@ export function OnHoldResponseForm({
       </div>
 
       <Button variant="primary" size={compact ? "sm" : "md"} icon="send" onClick={submit} disabled={submitting} full>
-        {submitting ? "Sending…" : "Submit response"}
+        {submitting ? "Sending…" : "Submit resolution"}
       </Button>
     </div>
   );

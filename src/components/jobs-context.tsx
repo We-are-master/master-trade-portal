@@ -41,7 +41,10 @@ export function JobsProvider({ children }: { children: ReactNode }) {
         .select(JOB_SELECT)
         .eq("partner_id", partner.id)
         .is("deleted_at", null)
-        .order("scheduled_date", { ascending: true });
+        // Mesma sequência do email das 17h: o dia lê do primeiro ao último —
+        // data e, DENTRO do dia, a janela de chegada.
+        .order("scheduled_date", { ascending: true })
+        .order("scheduled_start_at", { ascending: true, nullsFirst: false });
       if (error) throw error;
       setJobs((data as unknown as JobRow[]).map(mapJob));
     } catch (e) {

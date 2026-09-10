@@ -100,6 +100,35 @@ function job(partial: Partial<MyJob> & Pick<MyJob, "id" | "title" | "status" | "
 }
 
 export const DEMO_JOBS: MyJob[] = [
+  /**
+   * Um job em reclamação, para o demo mostrar o fluxo que fecha o ciclo com o
+   * cliente. Sem ele o formulário de resolução não aparecia em lugar nenhum
+   * fora de produção, e era o único passo do portal que ninguém conseguia ver
+   * antes de subir.
+   */
+  job({
+    id: "JOB-4830",
+    title: "End of tenancy clean — 2 bed flat",
+    desc: "Full clean before check-out. Carpets included.",
+    // Igual ao `map-job`: job em on hold aparece no quadro como "scheduled"
+    // com `needsAttention`. O status cru fica no `osStatus`.
+    status: "scheduled",
+    osStatus: "on_hold",
+    trade: "Cleaning",
+    needsAttention: true,
+    onHoldPresetId: "complaint",
+    onHoldReason: "Complaint",
+    onHoldLabel: "Complaint",
+    onHoldComplaintDescription:
+      "Customer says the skirting behind the door was missed and one window frame is still marked. Asking us to put it right.",
+    onHoldAt: at(-1, "16:20"),
+    customer: customer("Priya Raman", "124 City Road, London", "EC1V 2NX", 2),
+    postcode: "EC1V 2NX",
+    distance: 2.4,
+    total: 240,
+    scheduled: `${dayLabel(-2)} · 09:00`,
+    scheduledDate: ymd(-2),
+  }),
   job({
     id: "JOB-4821",
     title: "Leaking mixer tap — kitchen",

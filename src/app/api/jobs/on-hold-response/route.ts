@@ -39,6 +39,7 @@ async function avisarMasterOs(
   jobId: string,
   partnerId: string,
   notes: string,
+  escolha: { remedy: string; offers: Array<{ date: string; slot: string }>; discountGbp: number | null } | null,
   dates: string[],
 ): Promise<{ ok: true; availableDates: string[] } | { ok: false; error: string }> {
   const secret = process.env.INTERNAL_SYNC_SECRET?.trim();
@@ -51,7 +52,11 @@ async function avisarMasterOs(
     const res = await fetch(`${base}/api/internal/jobs/on-hold-resolution`, {
       method: "POST",
       headers: { "content-type": "application/json", "x-internal-secret": secret },
-      body: JSON.stringify({ jobId, partnerId, notes, availableDates: dates }),
+      body: JSON.stringify(
+        escolha
+          ? { jobId, partnerId, notes, remedy: escolha.remedy, offers: escolha.offers, discount_gbp: escolha.discountGbp }
+          : { jobId, partnerId, notes, availableDates: dates },
+      ),
     });
     const json = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string; availableDates?: string[] };
     if (!res.ok || !json.ok) return { ok: false, error: json.error ?? `HTTP ${res.status}` };
@@ -135,9 +140,20 @@ export async function POST(req: Request) {
 
   const photoFiles: File[] = [];
   const datasBrutas: string[] = [];
+  const ofertas: Array<{ date: string; slot: string }> = [];
+  const remedy = String(form.get("remedy") ?? "").trim();
+  const descontoBruto = form.get("discount_gbp");
   for (const [key, value] of form.entries()) {
     if ((key === "photos[]" || key === "photos") && value instanceof File && value.size > 0) {
       photoFiles.push(value);
+    }
+    if ((key === "offers[]" || key === "offers") && typeof value === "string") {
+      // "2026-09-12|morning" — o par vem junto para dia e turno não se separarem
+      // no caminho. Dois campos soltos casados por índice é o tipo de coisa que
+      // troca de par quando um deles vem vazio.
+      const [dia, turno] = value.split("|");
+      if (dia && turno) ofertas.push({ date: dia.trim(), slot: turno.trim() });
+      continue;
     }
     if ((key === "dates[]" || key === "dates") && typeof value === "string") {
       datasBrutas.push(value);
@@ -227,7 +243,14 @@ export async function POST(req: Request) {
    * do Zendesk. Sem essa chamada a resposta do parceiro ficava só no banco, e o
    * escritório nunca ficava sabendo que ele respondeu.
    */
-  const avisoOs = await avisarMasterOs(job.id, session.partnerId, notes, datasBrutas);
+  const escolha = remedy
+    ? {
+        remedy,
+        offers: ofertas,
+        discountGbp: descontoBruto != null && String(descontoBruto).trim() !== "" ? Number(descontoBruto) : null,
+      }
+    : null;
+  const avisoOs = await avisarMasterOs(job.id, session.partnerId, notes, escolha, datasBrutas);
   if (!avisoOs.ok) {
     console.error("[on-hold-response] master-os notify failed:", avisoOs.error);
   }
