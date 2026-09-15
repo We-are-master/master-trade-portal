@@ -129,8 +129,10 @@ export type GetStartedStepId =
   | "coverage"
   | "documents"
   | "agreements"
-  /** Gamified "we're getting you ready" full-screen animation shown after agreements, then straight into the portal. */
-  | "getting_ready";
+  /** Short animation after agreements — then the waiting screen (no portal yet). */
+  | "getting_ready"
+  /** Final screen: application under review (48–72h). No platform access until activated. */
+  | "pending_review";
 
 export const GET_STARTED_STEP_DEFS: { id: GetStartedStepId; ruleIds: string[] }[] = [
   { id: "trades", ruleIds: ["trades"] },
@@ -141,9 +143,10 @@ export const GET_STARTED_STEP_DEFS: { id: GetStartedStepId; ruleIds: string[] }[
   { id: "coverage", ruleIds: ["coverage"] },
   { id: "documents", ruleIds: ["documents"] },
   { id: "agreements", ruleIds: ["agreements"] },
-  // Closing animation piggybacks on the `account` rule (locked-visible) so it
-  // always runs last, then redirects into the portal.
+  // Closing animation + waiting screen piggyback on `account` (locked-visible)
+  // so they always run last. Portal access waits for staff activation.
   { id: "getting_ready", ruleIds: ["account"] },
+  { id: "pending_review", ruleIds: ["account"] },
 ];
 
 export function filterGetStartedSteps(rules?: PartnerRegistrationRuleRow[] | null): GetStartedStepId[] {

@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { getPartnerSession } from "@/lib/partner-auth";
+import { partnerWorkUnlocked } from "@/lib/partner-work-access";
 import { Providers } from "@/components/providers";
 import { TradePortalApp } from "@/components/app";
 
@@ -39,6 +40,18 @@ export default async function Page({
     if (invite) params.set("invite", invite);
     const qs = params.toString();
     redirect(qs ? `/login?${qs}` : "/login");
+  }
+
+  // No platform access until staff activates the partner. Finished wizard →
+  // waiting screen; incomplete wizard → resume /get-started.
+  const unlocked = partnerWorkUnlocked(session.partner);
+  const paused =
+    session.partner.status === "inactive" || session.partner.status === "on_break";
+  if (!unlocked && !paused) {
+    if (session.partner.wizardCompletedAt) {
+      redirect("/get-started?waiting=1");
+    }
+    redirect("/get-started");
   }
 
   return (
