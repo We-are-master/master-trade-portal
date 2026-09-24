@@ -63,6 +63,20 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "This email isn't registered as a Fixfy trade." }, { status: 403 });
       }
 
+      // The code proves the email: drop the flag that kept this signup out of
+      // the OS Onboarding tab.
+      const currentReasons = Array.isArray(partner.partner_status_reasons)
+        ? (partner.partner_status_reasons as string[])
+        : [];
+      if (currentReasons.includes("email_unverified")) {
+        const { error: verifyErr } = await admin
+          .from("partners")
+          .update({ partner_status_reasons: currentReasons.filter((r) => r !== "email_unverified") })
+          .eq("id", partner.id);
+        if (verifyErr) console.error("[auth/verify-otp] clear email_unverified error:", verifyErr);
+        partner = { ...partner, partner_status_reasons: currentReasons.filter((r) => r !== "email_unverified") };
+      }
+
       // Resume: reactivate the partner if the account was set inactive. We
       // strip only reactivation-blocking reason codes so any doc/compliance
       // flags stay visible to the office.

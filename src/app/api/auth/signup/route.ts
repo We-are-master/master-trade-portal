@@ -12,6 +12,9 @@ import { PARTNER_TRIAL_DAYS } from "@/lib/trial-config";
 import { createServiceClient } from "@/lib/supabase/service";
 import { sendOtpEmail, sendNewPartnerAdminNotification } from "@/lib/email";
 
+/** Same code the OS reads (src/lib/partner-status.ts in master-os). */
+const EMAIL_UNVERIFIED_REASON = "email_unverified";
+
 export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
@@ -164,6 +167,9 @@ export async function POST(req: NextRequest) {
     trades: [],
     location: "",
     status: "onboarding",
+    // Hidden from the OS Onboarding tab until the 6-digit email code is confirmed
+    // (verify-otp removes it). Abandoned signups never reach the office list.
+    partner_status_reasons: [EMAIL_UNVERIFIED_REASON],
     verified: false,
     subscription_status: "trialing",
     plan,
