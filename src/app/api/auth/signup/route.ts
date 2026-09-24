@@ -11,6 +11,8 @@ import { DEFAULT_PLAN_ID, parsePlanId, PARTNERS_LP_URL } from "@/lib/plan-catalo
 import { PARTNER_TRIAL_DAYS } from "@/lib/trial-config";
 import { createServiceClient } from "@/lib/supabase/service";
 import { sendOtpEmail, sendNewPartnerAdminNotification } from "@/lib/email";
+import { NEW_PORTAL_PARTNER_REASONS } from "@/lib/partner-onboarding-flags";
+
 
 export const dynamic = "force-dynamic";
 
@@ -164,6 +166,9 @@ export async function POST(req: NextRequest) {
     trades: [],
     location: "",
     status: "onboarding",
+    // Hidden from the OS Onboarding tab until the email code is confirmed and the
+    // partner saves rates or uploads a document (see partner-onboarding-flags).
+    partner_status_reasons: NEW_PORTAL_PARTNER_REASONS,
     verified: false,
     subscription_status: "trialing",
     plan,

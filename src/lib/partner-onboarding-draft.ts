@@ -6,6 +6,7 @@ import {
 } from "@/lib/partner-portal-crypto";
 import { resolvePartnerJoinInvite } from "@/lib/partner-join-invite";
 import { resolvePartnerPortalCredential } from "@/lib/partner-portal-session";
+import { NEW_PORTAL_PARTNER_REASONS } from "@/lib/partner-onboarding-flags";
 
 export type OnboardingDraftInput = {
   inviteCode?: string;
@@ -178,6 +179,9 @@ export async function upsertOnboardingDraft(
         trades: orderedTrades,
         catalog_service_ids: catalogServiceIds,
         status: "onboarding",
+        // Hidden from the OS Onboarding tab until the email code is confirmed and the
+        // partner saves rates or uploads a document (see partner-onboarding-flags).
+        partner_status_reasons: NEW_PORTAL_PARTNER_REASONS,
         verified: false,
         partner_legal_type: "self_employed",
         location: "",

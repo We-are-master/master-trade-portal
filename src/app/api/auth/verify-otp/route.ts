@@ -5,6 +5,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
+import { EMAIL_UNVERIFIED_REASON } from "@/lib/partner-onboarding-flags";
 
 export const dynamic = "force-dynamic";
 
@@ -61,6 +62,20 @@ export async function POST(req: NextRequest) {
       if (!partner) {
         await supabase.auth.signOut();
         return NextResponse.json({ error: "This email isn't registered as a Fixfy trade." }, { status: 403 });
+      }
+
+      // The code proves the email: drop the flag that kept this signup out of
+      // the OS Onboarding tab.
+      const currentReasons = Array.isArray(partner.partner_status_reasons)
+        ? (partner.partner_status_reasons as string[])
+        : [];
+      if (currentReasons.includes(EMAIL_UNVERIFIED_REASON)) {
+        const { error: verifyErr } = await admin
+          .from("partners")
+          .update({ partner_status_reasons: currentReasons.filter((r) => r !== EMAIL_UNVERIFIED_REASON) })
+          .eq("id", partner.id);
+        if (verifyErr) console.error("[auth/verify-otp] clear email_unverified error:", verifyErr);
+        partner = { ...partner, partner_status_reasons: currentReasons.filter((r) => r !== EMAIL_UNVERIFIED_REASON) };
       }
 
       // Resume: reactivate the partner if the account was set inactive. We

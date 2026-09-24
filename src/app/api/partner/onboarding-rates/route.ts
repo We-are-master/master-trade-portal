@@ -12,6 +12,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { resolvePartnerId } from "@/lib/partner-onboarding-draft";
 import { clampRateCard, fetchRateCard, saveRateCard, type ServicePrice } from "@/lib/queries/rate-card";
+import { ONBOARDING_NOT_STARTED_REASON, clearPartnerReason } from "@/lib/partner-onboarding-flags";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -87,6 +88,8 @@ export async function POST(req: NextRequest) {
     });
     const clamped = clampRateCard(merged);
     await saveRateCard(loaded.svc, loaded.partnerId, clamped);
+    // Saving rates counts as having started onboarding: the office can see the partner now.
+    await clearPartnerReason(loaded.svc, loaded.partnerId, ONBOARDING_NOT_STARTED_REASON);
     return NextResponse.json({ ok: true, rows: clamped });
   } catch (e) {
     console.error("[partner/onboarding-rates] POST failed:", e);
