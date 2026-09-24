@@ -9,6 +9,7 @@ import {
 } from "@/lib/partner-required-docs";
 import { createServiceClient } from "@/lib/supabase/service";
 import { resolvePartnerPortalCredential } from "@/lib/partner-portal-session";
+import { ONBOARDING_NOT_STARTED_REASON, clearPartnerReason } from "@/lib/partner-onboarding-flags";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -97,6 +98,9 @@ export async function POST(req: Request) {
       { status: 500 },
     );
   }
+
+  // The first document counts as having started onboarding.
+  await clearPartnerReason(svc, partnerId, ONBOARDING_NOT_STARTED_REASON);
 
   return NextResponse.json({ ok: true, id: row.id });
 }
