@@ -15,6 +15,7 @@ import { useSearchParams } from "next/navigation";
 import { T } from "@/lib/tokens";
 import { Button, Icon } from "@/components/ui/primitives";
 import { DEFAULT_PLAN_ID, getPlan, PARTNERS_LP_URL } from "@/lib/plan-catalog";
+import { serviceCategory, type ServiceCategory } from "@/lib/service-category";
 import { createClient } from "@/lib/supabase/client";
 import { fetchContracts, type PartnerContract } from "@/lib/queries/contracts";
 import { COMPLIANCE_CONTRACT_TYPES } from "@/lib/partner-funnel-complete";
@@ -27,8 +28,10 @@ import {
 } from "@/lib/partner-registration-fields";
 import { useRegistrationConfig } from "@/hooks/use-registration-config";
 import { GetStartedAddressAutocomplete } from "@/components/get-started/address-autocomplete";
+import { RateCardEditor } from "@/components/rate-card-editor";
+import type { ServicePrice } from "@/lib/queries/rate-card";
 
-type CatalogTrade = { id: string; name: string };
+type CatalogTrade = { id: string; name: string; category?: ServiceCategory };
 type LegalType = "self_employed" | "limited_company";
 
 type RequiredDoc = {
@@ -99,6 +102,10 @@ function GetStartedFunnel() {
   const [catalogLoading, setCatalogLoading] = useState(true);
   const [enabledIds, setEnabledIds] = useState<Set<string>>(new Set());
   const [primaryId, setPrimaryId] = useState<string | null>(null);
+  /** Step 3: rate card for the services ticked in step 1 (standard or own). */
+  const [rateRows, setRateRows] = useState<ServicePrice[]>([]);
+  const [ratesLoading, setRatesLoading] = useState(false);
+  const [ratesError, setRatesError] = useState<string | null>(null);
 
   const [legalType, setLegalType] = useState<LegalType | null>(null);
   const [regNumber, setRegNumber] = useState("");
@@ -123,12 +130,33 @@ function GetStartedFunnel() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [draftCode, setDraftCode] = useState("");
+  // Autosave (debounced while typing) and Continue can both fire before the
+  // first save returns its draft code, and each would then create its own
+  // partner row for the same email. Saves run one at a time and read the
+  // latest code from this ref, so only the first one ever creates.
+  const draftCodeRef = useRef("");
+  const saveChainRef = useRef<Promise<unknown>>(Promise.resolve());
   const draftTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const { fields: registrationFields, loading: configLoading } = useRegistrationConfig({ public: true });
   const activeSteps = useMemo(() => filterGetStartedSteps(registrationFields), [registrationFields]);
   const totalSteps = Math.max(activeSteps.length, 1);
   const currentStepId: GetStartedStepId = activeSteps[step] ?? activeSteps[0] ?? "account";
+
+  // Trades and Cleaning are different lines of work, and a single alphabetical
+  // list put "After Builders Clean" above "Builder". Same order within each
+  // group — just split, so a plumber is not scanning past cleaning services.
+  const catalogGroups = useMemo(() => {
+    const groups: { label: string; items: CatalogTrade[] }[] = [
+      { label: "Trades", items: [] },
+      { label: "Cleaning", items: [] },
+    ];
+    for (const c of catalog) {
+      const category = c.category ?? serviceCategory(c.name);
+      (category === "Cleaning" ? groups[1] : groups[0]).items.push(c);
+    }
+    return groups.filter((g) => g.items.length > 0);
+  }, [catalog]);
 
   // Once we know which steps are active, restore the last-visited step from
   // localStorage — but only for steps that are safe to hit WITHOUT an
@@ -140,7 +168,7 @@ function GetStartedFunnel() {
   // then walk through coverage / documents / agreements with a fresh
   // session.
   const SAFE_RESTORE_STEP_IDS = useMemo(
-    () => new Set<GetStartedStepId>(["trades", "lead", "business", "contact"]),
+    () => new Set<GetStartedStepId>(["trades", "lead", "rates", "business", "contact"]),
     [],
   );
   const stepRestoredRef = useRef(false);
@@ -211,6 +239,7 @@ function GetStartedFunnel() {
     if (inviteCode) return;
     const stored = typeof window !== "undefined" ? window.localStorage.getItem(DRAFT_STORAGE_KEY)?.trim() : "";
     if (!stored) return;
+    draftCodeRef.current = stored;
     setDraftCode(stored);
     let alive = true;
     void (async () => {
@@ -345,52 +374,58 @@ function GetStartedFunnel() {
     (!showPhone || !isPartnerRegistrationFieldMandatory("phone", registrationFields) || phone.trim().length > 0);
 
   const saveDraft = useCallback(
-    async (opts?: { requireEmail?: boolean }) => {
-      const { names, primaryName, ids } = selectedTradeNames;
-      const trimmedEmail = email.trim().toLowerCase();
-      const hasInvite = Boolean(inviteCode.trim());
-      const hasDraft = Boolean(draftCode.trim());
-      if (opts?.requireEmail && !trimmedEmail.includes("@") && !hasInvite && !hasDraft) {
-        return null;
-      }
-      if (!hasInvite && !hasDraft && !trimmedEmail.includes("@")) {
-        return null;
-      }
+    (opts?: { requireEmail?: boolean }) => {
+      const run = async () => {
+        const draftCode = draftCodeRef.current;
+        const { names, primaryName, ids } = selectedTradeNames;
+        const trimmedEmail = email.trim().toLowerCase();
+        const hasInvite = Boolean(inviteCode.trim());
+        const hasDraft = Boolean(draftCode.trim());
+        if (opts?.requireEmail && !trimmedEmail.includes("@") && !hasInvite && !hasDraft) {
+          return null;
+        }
+        if (!hasInvite && !hasDraft && !trimmedEmail.includes("@")) {
+          return null;
+        }
 
-      const res = await fetch("/api/partner/onboarding-draft", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          inviteCode: inviteCode || undefined,
-          draftCode: draftCode || undefined,
-          email: trimmedEmail || undefined,
-          fullName: fullName.trim() || undefined,
-          company: company.trim() || undefined,
-          phone: phone.trim() || undefined,
-          partnerAddress: partnerAddress.trim() || undefined,
-          trades: names.length ? names : undefined,
-          primaryTrade: primaryName || undefined,
-          catalogServiceIds: ids.length ? ids : undefined,
-          legalType: legalType ?? undefined,
-          regNumber: regNumber.trim() || undefined,
-          vatRegistered: vatRegistered ?? undefined,
-          vatNumber: vatNumber.trim() || undefined,
-          coveragePostcode: coveragePostcode.trim() || undefined,
-          coverageRadius: coverageRadius,
-        }),
-      });
-      const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string; draftCode?: string };
-      if (!res.ok || !data.ok) throw new Error(data.error || "Couldn't save your progress.");
-      if (data.draftCode && data.draftCode !== draftCode) {
-        setDraftCode(data.draftCode);
-        window.localStorage.setItem(DRAFT_STORAGE_KEY, data.draftCode);
-      }
-      return data;
+        const res = await fetch("/api/partner/onboarding-draft", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            inviteCode: inviteCode || undefined,
+            draftCode: draftCode || undefined,
+            email: trimmedEmail || undefined,
+            fullName: fullName.trim() || undefined,
+            company: company.trim() || undefined,
+            phone: phone.trim() || undefined,
+            partnerAddress: partnerAddress.trim() || undefined,
+            trades: names.length ? names : undefined,
+            primaryTrade: primaryName || undefined,
+            catalogServiceIds: ids.length ? ids : undefined,
+            legalType: legalType ?? undefined,
+            regNumber: regNumber.trim() || undefined,
+            vatRegistered: vatRegistered ?? undefined,
+            vatNumber: vatNumber.trim() || undefined,
+            coveragePostcode: coveragePostcode.trim() || undefined,
+            coverageRadius: coverageRadius,
+          }),
+        });
+        const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string; draftCode?: string };
+        if (!res.ok || !data.ok) throw new Error(data.error || "Couldn't save your progress.");
+        if (data.draftCode && data.draftCode !== draftCode) {
+          draftCodeRef.current = data.draftCode;
+          setDraftCode(data.draftCode);
+          window.localStorage.setItem(DRAFT_STORAGE_KEY, data.draftCode);
+        }
+        return data;
+      };
+      const next = saveChainRef.current.catch(() => undefined).then(run);
+      saveChainRef.current = next;
+      return next;
     },
     [
       selectedTradeNames,
       inviteCode,
-      draftCode,
       email,
       fullName,
       company,
@@ -444,6 +479,40 @@ function GetStartedFunnel() {
     coveragePostcode,
     coverageRadius,
   ]);
+
+  // Load the rate card when the partner reaches it. Services come from the ones
+  // they ticked in step 1, already saved on the draft by the details step.
+  useEffect(() => {
+    if (currentStepId !== "rates") return;
+    const code = draftCode || inviteCode;
+    if (!code) return;
+    let alive = true;
+    setRatesLoading(true);
+    setRatesError(null);
+    const q = draftCode ? `draftCode=${encodeURIComponent(draftCode)}` : `inviteCode=${encodeURIComponent(inviteCode)}`;
+    void fetch(`/api/partner/onboarding-rates?${q}`)
+      .then((r) => r.json())
+      .then((d: { ok?: boolean; rows?: ServicePrice[]; error?: string }) => {
+        if (!alive) return;
+        if (!d.ok) throw new Error(d.error || "Couldn't load your rates.");
+        setRateRows(d.rows ?? []);
+      })
+      .catch((e) => alive && setRatesError(e instanceof Error ? e.message : "Couldn't load your rates."))
+      .finally(() => alive && setRatesLoading(false));
+    return () => {
+      alive = false;
+    };
+  }, [currentStepId, draftCode, inviteCode, selectedTradeNames]);
+
+  const saveRates = async () => {
+    const res = await fetch("/api/partner/onboarding-rates", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ draftCode: draftCode || undefined, inviteCode: inviteCode || undefined, rows: rateRows }),
+    });
+    const d = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
+    if (!res.ok || !d.ok) throw new Error(d.error || "Couldn't save your rates.");
+  };
 
   const regLabel = legalType === "limited_company" ? "Company number (CRN)" : "UTR (Unique Taxpayer Reference)";
   const detailsValid = leadValid;
@@ -615,6 +684,12 @@ function GetStartedFunnel() {
         .then(() => goNext())
         .catch((e) => setError(e instanceof Error ? e.message : "Couldn't save your details."))
         .finally(() => setBusy(false));
+    } else if (currentStepId === "rates") {
+      setBusy(true);
+      void saveRates()
+        .then(() => goNext())
+        .catch((e) => setError(e instanceof Error ? e.message : "Couldn't save your rates."))
+        .finally(() => setBusy(false));
     } else if (currentStepId === "business") {
       if (showLegalType && isPartnerRegistrationFieldMandatory("legal_type", registrationFields) && !legalType) return;
       if (showTaxId && isPartnerRegistrationFieldMandatory("tax_id", registrationFields) && !regNumber.trim()) return;
@@ -645,6 +720,7 @@ function GetStartedFunnel() {
   const primaryLabel = (() => {
     if (currentStepId === "trades") return "Continue";
     if (currentStepId === "lead") return "Continue";
+    if (currentStepId === "rates") return "Continue";
     if (currentStepId === "business") return "Continue";
     if (currentStepId === "contact") return "Continue";
     if (currentStepId === "account") return accountPhase === "details" ? "Send my code" : "Verify & continue";
@@ -656,6 +732,7 @@ function GetStartedFunnel() {
     if (busy || configLoading) return true;
     if (currentStepId === "trades") return enabledIds.size === 0 || !primaryId || catalogLoading;
     if (currentStepId === "lead") return !leadValid;
+    if (currentStepId === "rates") return ratesLoading || !!ratesError;
     if (currentStepId === "business") {
       if (showLegalType && isPartnerRegistrationFieldMandatory("legal_type", registrationFields) && !legalType) return true;
       if (showTaxId && isPartnerRegistrationFieldMandatory("tax_id", registrationFields) && !regNumber.trim()) return true;
@@ -762,8 +839,27 @@ function GetStartedFunnel() {
               ) : catalog.length === 0 ? (
                 <p style={{ color: T.mute, fontSize: 14 }}>No trades available right now.</p>
               ) : (
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 12, maxWidth: 560, margin: "0 auto", textAlign: "left" }}>
-                  {catalog.map((c) => {
+                <div style={{ maxWidth: 560, margin: "0 auto", textAlign: "left", display: "grid", gap: 26 }}>
+                  {catalogGroups.map((group) => (
+                    <div key={group.label}>
+                      <div
+                        style={{
+                          fontSize: 11,
+                          fontWeight: 600,
+                          letterSpacing: "0.1em",
+                          textTransform: "uppercase",
+                          color: T.mute,
+                          marginBottom: 10,
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 10,
+                        }}
+                      >
+                        {group.label}
+                        <span style={{ flex: 1, height: 1, background: T.line }} />
+                      </div>
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 12 }}>
+                  {group.items.map((c) => {
                     const on = enabledIds.has(c.id);
                     const isPrimary = on && c.id === primaryId;
                     return (
@@ -829,6 +925,9 @@ function GetStartedFunnel() {
                       </button>
                     );
                   })}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
             </StepShell>
@@ -859,9 +958,29 @@ function GetStartedFunnel() {
             </StepShell>
           )}
 
+          {currentStepId === "rates" && (
+            <StepShell
+              eyebrow="Step 3 · Your rates"
+              title="What you get paid"
+              subtitle="Fixed pay per job, you see the amount before you accept. Keep our standard rates or set your own for each size, time and add-on."
+            >
+              <div style={{ maxWidth: 620, margin: "0 auto" }}>
+                {ratesLoading ? (
+                  <p style={{ color: T.mute, fontSize: 14 }}>Loading your rates…</p>
+                ) : ratesError ? (
+                  <p style={{ color: T.coral, fontSize: 14 }}>{ratesError}</p>
+                ) : rateRows.length === 0 ? (
+                  <p style={{ color: T.mute, fontSize: 14 }}>No rates to set for the trades you picked. Carry on.</p>
+                ) : (
+                  <RateCardEditor rows={rateRows} onChange={setRateRows} />
+                )}
+              </div>
+            </StepShell>
+          )}
+
           {currentStepId === "business" && (
             <StepShell
-              eyebrow="Step 3 · Your business"
+              eyebrow="Step 4 · Your business"
               title="How do you trade?"
               subtitle="This sets which tax and compliance documents you'll need."
             >
@@ -915,7 +1034,7 @@ function GetStartedFunnel() {
 
           {currentStepId === "contact" && (
             <StepShell
-              eyebrow="Step 4 · Contact & address"
+              eyebrow="Step 5 · Contact & address"
               title="How can we reach you?"
               subtitle="Your business address helps us verify your profile and match local work."
             >
@@ -938,10 +1057,10 @@ function GetStartedFunnel() {
             <StepShell
               eyebrow={
                 resumeKind === "reactivate"
-                  ? "Step 5 · Welcome back"
+                  ? "Step 6 · Welcome back"
                   : resumeKind === "onboarding"
-                    ? "Step 5 · Continue where you stopped"
-                    : "Step 5 · Create your account"
+                    ? "Step 6 · Continue where you stopped"
+                    : "Step 6 · Create your account"
               }
               title={
                 accountPhase === "details"
@@ -1015,7 +1134,7 @@ function GetStartedFunnel() {
 
           {currentStepId === "coverage" && (
             <StepShell
-              eyebrow="Step 6 · Service area"
+              eyebrow="Step 7 · Service area"
               title="Where do you work?"
               subtitle="Set your base postcode and how far you're willing to travel for jobs."
             >
@@ -1160,7 +1279,7 @@ function DocumentsStep({ mandatory, onContinue }: { mandatory: boolean; onContin
     <>
       <div style={{ fontFamily: T.mono, fontSize: 12.5, letterSpacing: "0.16em", textTransform: "uppercase", color: T.coralPress, marginBottom: 14, display: "inline-flex", alignItems: "center", gap: 7 }}>
         <span style={{ width: 6, height: 6, borderRadius: 9999, background: T.coral }} />
-        Step 6 · Your documents
+        Step 8 · Your documents
       </div>
       <h1 style={{ fontSize: 40, fontWeight: 600, letterSpacing: "-0.03em", margin: "0 0 12px", color: T.navy }}>Upload what&apos;s required</h1>
       <p style={{ fontSize: 16, color: T.slate, maxWidth: 460, margin: "0 auto", lineHeight: 1.5 }}>
@@ -1335,7 +1454,7 @@ function AgreementsStep({ mandatory, signerDefault, onFinish }: { mandatory: boo
     <>
       <div style={{ fontFamily: T.mono, fontSize: 12.5, letterSpacing: "0.16em", textTransform: "uppercase", color: T.coralPress, marginBottom: 14, display: "inline-flex", alignItems: "center", gap: 7 }}>
         <span style={{ width: 6, height: 6, borderRadius: 9999, background: T.coral }} />
-        Step 7 · Agreements
+        Step 9 · Agreements
       </div>
       <h1 style={{ fontSize: 40, fontWeight: 600, letterSpacing: "-0.03em", margin: "0 0 12px", color: T.navy }}>Sign your agreements</h1>
       <p style={{ fontSize: 16, color: T.slate, maxWidth: 460, margin: "0 auto", lineHeight: 1.5 }}>

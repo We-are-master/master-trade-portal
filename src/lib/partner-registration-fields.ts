@@ -123,6 +123,8 @@ export const SETTINGS_PAGE_RULE_ID: Record<string, string> = {
 export type GetStartedStepId =
   | "trades"
   | "lead"
+  /** Rate card: our standard pay per service, or the partner's own. Right after their details. */
+  | "rates"
   | "business"
   | "contact"
   | "account"
@@ -135,6 +137,7 @@ export type GetStartedStepId =
 export const GET_STARTED_STEP_DEFS: { id: GetStartedStepId; ruleIds: string[] }[] = [
   { id: "trades", ruleIds: ["trades"] },
   { id: "lead", ruleIds: ["account", "phone"] },
+  { id: "rates", ruleIds: ["rate_card"] },
   { id: "business", ruleIds: ["legal_type", "tax_id", "vat"] },
   { id: "contact", ruleIds: ["address"] },
   { id: "account", ruleIds: ["account"] },

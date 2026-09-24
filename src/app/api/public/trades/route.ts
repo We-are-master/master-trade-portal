@@ -28,9 +28,14 @@ export async function GET() {
     return NextResponse.json({ error: "Couldn't load trades." }, { status: 500 });
   }
 
+  // The category rides along so the picker can group Trades and Cleaning into
+  // separate sections instead of one mixed alphabetical list.
   const trades = ((data ?? []) as { id: string; name: string | null }[])
-    .map((r) => ({ id: r.id, name: (r.name || "Service").trim() }))
-    .filter((r) => PARTNER_PICKABLE.has(serviceCategory(r.name) as "Trades" | "Cleaning"));
+    .map((r) => {
+      const name = (r.name || "Service").trim();
+      return { id: r.id, name, category: serviceCategory(name) };
+    })
+    .filter((r) => PARTNER_PICKABLE.has(r.category as "Trades" | "Cleaning"));
 
   return NextResponse.json({ trades });
 }
