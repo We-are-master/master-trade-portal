@@ -514,6 +514,14 @@ function GetStartedFunnel() {
     if (!res.ok || !d.ok) throw new Error(d.error || "Couldn't save your rates.");
   };
 
+  // Service area starts from the postcode in the address they gave in step 5,
+  // so most partners only need to set the radius. Never overwrites a value.
+  useEffect(() => {
+    if (currentStepId !== "coverage" || coveragePostcode.trim()) return;
+    const found = partnerAddress.toUpperCase().match(/\b([A-Z]{1,2}\d[A-Z\d]?)\s*(\d[A-Z]{2})\b/);
+    if (found) setCoveragePostcode(`${found[1]} ${found[2]}`);
+  }, [currentStepId, partnerAddress, coveragePostcode]);
+
   const regLabel = legalType === "limited_company" ? "Company number (CRN)" : "UTR (Unique Taxpayer Reference)";
   const detailsValid = leadValid;
 
