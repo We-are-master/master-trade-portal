@@ -18,6 +18,7 @@ import { SettingsView, settingsPageLabel } from "@/components/screens/settings";
 import { Icon } from "@/components/ui/primitives";
 import { partnerWorkUnlocked } from "@/lib/partner-work-access";
 import { useIsMobile } from "@/hooks/use-media-query";
+import { UnderReviewGate } from "@/components/under-review-gate";
 
 const TITLES: Record<string, string> = {
   dashboard: "Dashboard",
@@ -31,21 +32,17 @@ const TITLES: Record<string, string> = {
 export function TradePortalApp() {
   const [route, setRoute] = useState("dashboard");
   const [drawerJobId, setDrawerJobId] = useState<string | null>(null);
-  /** True right after the /get-started wizard finishes — shows the "under review" banner. */
-  const [showReviewBanner, setShowReviewBanner] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   const partner = usePartner();
   const toast = useToast();
   const isMobile = useIsMobile();
 
-  // Onboarding lives entirely in the /get-started wizard now. The old in-portal
-  // onboarding modal is gone — a partner who lands here has already finished
-  // (or is browsing while under review). We only surface the review banner
-  // when they arrive from the wizard's success redirect.
+  // Onboarding lives entirely in the /get-started wizard. Its success redirect
+  // lands here with ?submitted=1; a partner still under review gets the
+  // UnderReviewGate below, so the flag only needs clearing from the URL.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get("submitted") === "1" || params.get("welcome") === "1") {
-      setShowReviewBanner(true);
       window.history.replaceState(null, "", window.location.pathname);
     }
   }, []);
@@ -64,6 +61,9 @@ export function TradePortalApp() {
     document.querySelector("#app-root main [data-screen-scroll]")?.scrollTo({ top: 0 });
   };
   const handleOpenJob = (id: string) => setDrawerJobId(id);
+
+  // New partners don't get into the platform until the OS activates them.
+  if (pendingApproval) return <UnderReviewGate partnerId={partner.id} />;
 
   return (
     <div
@@ -90,8 +90,6 @@ export function TradePortalApp() {
           onMore={() => setMoreOpen(true)}
         />
 
-        {pendingApproval && <PendingApprovalBanner />}
-
         {page === "dashboard" && (
           <Dashboard previewMode={workLocked} redactSensitive={workLocked} onOpenJob={handleOpenJob} onNav={onNav} />
         )}
@@ -117,112 +115,6 @@ export function TradePortalApp() {
 
       {drawerJobId && <JobDrawer jobId={drawerJobId} onClose={() => setDrawerJobId(null)} onShowToast={toast} />}
 
-      {showReviewBanner && (
-        <ReviewBanner onClose={() => setShowReviewBanner(false)} />
-      )}
-    </div>
-  );
-}
-
-function PendingApprovalBanner() {
-  return (
-    <div
-      role="status"
-      style={{
-        display: "flex",
-        alignItems: "flex-start",
-        gap: 12,
-        background: T.coralTint,
-        borderBottom: "1px solid rgba(237,75,0,0.18)",
-        padding: "12px 20px",
-        fontFamily: T.sans,
-      }}
-    >
-      <span style={{ fontSize: 18, lineHeight: "20px", flex: "none" }} aria-hidden>
-        ⏳
-      </span>
-      <div style={{ minWidth: 0 }}>
-        <div style={{ fontSize: 13.5, fontWeight: 700, color: T.navy, letterSpacing: "-0.01em" }}>
-          Account under review — usually approved within 24–48 hours
-        </div>
-        <div style={{ fontSize: 12.5, color: T.slate, lineHeight: 1.5, marginTop: 2 }}>
-          You can explore the portal now. Jobs &amp; quotes open the moment we activate you — we&apos;ll
-          email you as soon as you&apos;re live.
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function ReviewBanner({ onClose }: { onClose: () => void }) {
-  return (
-    <div
-      onClick={onClose}
-      style={{
-        position: "fixed",
-        inset: 0,
-        background: "rgba(2,0,64,0.55)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: 16,
-        zIndex: 950,
-      }}
-    >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        style={{
-          width: "min(460px, 100%)",
-          background: T.white,
-          borderRadius: 20,
-          boxShadow: "0 30px 80px -20px rgba(2,0,64,0.6)",
-          padding: "36px 32px 28px",
-          textAlign: "center",
-          fontFamily: T.sans,
-        }}
-      >
-        <div
-          style={{
-            width: 60,
-            height: 60,
-            borderRadius: "50%",
-            background: T.coralTint,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            margin: "0 auto 18px",
-            fontSize: 28,
-          }}
-          aria-hidden
-        >
-          🎉
-        </div>
-        <h2 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: T.navy, letterSpacing: "-0.02em" }}>
-          Application submitted
-        </h2>
-        <p style={{ margin: "12px 0 20px", fontSize: 14, color: T.slate, lineHeight: 1.55 }}>
-          Thanks — we&apos;re reviewing your onboarding now. You can explore the portal in the meantime; leads,
-          quotes and jobs unlock as soon as our team activates your account (new accounts are usually approved
-          within 24–48 hours). We&apos;ll email you the moment you&apos;re live.
-        </p>
-        <button
-          type="button"
-          onClick={onClose}
-          style={{
-            border: "none",
-            background: T.coral,
-            color: T.white,
-            fontFamily: T.sans,
-            fontSize: 14,
-            fontWeight: 600,
-            padding: "12px 22px",
-            borderRadius: 12,
-            cursor: "pointer",
-          }}
-        >
-          Explore the portal
-        </button>
-      </div>
     </div>
   );
 }

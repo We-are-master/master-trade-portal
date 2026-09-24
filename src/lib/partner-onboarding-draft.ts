@@ -78,7 +78,7 @@ async function insertPortalToken(
   throw new Error(lastError?.message ?? "Couldn't create onboarding draft token.");
 }
 
-async function resolvePartnerId(
+export async function resolvePartnerId(
   supabase: SupabaseClient,
   input: OnboardingDraftInput,
 ): Promise<{ partnerId: string; draftCode: string | null } | null> {

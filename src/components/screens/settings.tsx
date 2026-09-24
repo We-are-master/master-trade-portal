@@ -33,9 +33,8 @@ import { fetchPartnerDocuments, type PartnerDoc } from "@/lib/queries/partner-do
 import { missingFromChecklist, pickRequiredDocMatch, type RequiredDocDef } from "@/lib/partner-required-docs";
 import { hydrateContractHtml } from "@/lib/contract-branding";
 import { fetchContracts, type PartnerContract } from "@/lib/queries/contracts";
-import { fetchRateCard, saveRateCard, type ServicePrice } from "@/lib/queries/rate-card";
-import { formatCatalogPartnerPay } from "@/lib/catalog-partner-pay";
-import { servicePricingLabel } from "@/lib/pricing-mode-labels";
+import { clampRateCard, fetchRateCard, saveRateCard, type ServicePrice } from "@/lib/queries/rate-card";
+import { RateCardEditor } from "@/components/rate-card-editor";
 import { useRegisterOnboardingSave, useIsOnboarding } from "@/components/onboarding-save";
 import {
   fetchPartnerSettings,
@@ -515,16 +514,6 @@ export function RatesPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [extrasOpen, setExtrasOpen] = useState<Set<string>>(new Set());
-
-  const toggleExtras = (catalogServiceId: string) => {
-    setExtrasOpen((prev) => {
-      const next = new Set(prev);
-      if (next.has(catalogServiceId)) next.delete(catalogServiceId);
-      else next.add(catalogServiceId);
-      return next;
-    });
-  };
 
   useEffect(() => {
     let cancelled = false;
@@ -557,20 +546,11 @@ export function RatesPage() {
   }, [partner.id, partner.trades, inOnboarding]);
 
   const dirty = JSON.stringify(rows) !== JSON.stringify(initial);
-  const update = (catalogServiceId: string, patch: Partial<ServicePrice>) =>
-    setRows((prev) => prev.map((r) => (r.catalogServiceId === catalogServiceId ? { ...r, ...patch } : r)));
-  const num = (v: string): number | null => (v.trim() === "" ? null : Number(v.replace(/[^0-9.]/g, "")) || 0);
-  // Partner can undercut catalog pay but never exceed the catalog ceiling.
-  const clampTo = (v: number | null, ceiling: number): number | null => (v == null ? null : Math.min(Math.max(0, v), ceiling));
 
   const save = async () => {
     setSaving(true);
     try {
-      const clamped = rows.map((r) => ({
-        ...r,
-        fixedPartnerCost: clampTo(r.fixedPartnerCost, r.standardPayFixed),
-        hourlyPartnerRate: clampTo(r.hourlyPartnerRate, r.standardPayHourly),
-      }));
+      const clamped = clampRateCard(rows);
       await saveRateCard(createClient(), partner.id, clamped);
       setInitial(clamped);
       setRows(clamped);
@@ -584,116 +564,9 @@ export function RatesPage() {
 
   useRegisterOnboardingSave(save); // Continue saves the rate card automatically
 
-  const renderServiceRow = (r: ServicePrice) => {
-    const pay = formatCatalogPartnerPay(r.mode, r.standardPayFixed, r.standardHours, r.name, formatGBPdec);
-    const payCeiling = r.mode === "hourly" ? r.standardPayHourly : r.standardPayFixed;
-    const current = r.mode === "hourly" ? r.hourlyPartnerRate : r.fixedPartnerCost;
-    const aboveStandard = !r.useStandard && current != null && current > payCeiling;
-
-    return (
-      <div key={r.catalogServiceId} style={{ padding: 12, border: `1px solid ${T.line}`, borderRadius: 10, display: "flex", flexDirection: "column", gap: 10 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 13.5, fontWeight: 500, color: T.ink }}>{r.name}</div>
-            <div style={{ fontSize: 11.5, color: T.mute, marginTop: 2 }}>
-              {servicePricingLabel(r.mode, r.name)} · <span className="fx-mono">{pay}</span>
-            </div>
-          </div>
-          <span style={{ fontSize: 12, color: T.slate }}>Use standard</span>
-          <Toggle on={r.useStandard} onChange={(v) => update(r.catalogServiceId, { useStandard: v })} />
-        </div>
-        {!r.useStandard && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 6, paddingLeft: 2 }}>
-            <div style={{ display: "flex", gap: 8 }}>
-              {r.mode === "hourly" ? (
-                <>
-                  <Input
-                    value={r.hourlyPartnerRate != null ? String(r.hourlyPartnerRate) : ""}
-                    onChange={(v) => update(r.catalogServiceId, { hourlyPartnerRate: num(v) })}
-                    prefix="£"
-                    suffix="/hr"
-                    placeholder={String(r.standardPayHourly)}
-                    style={{ width: 160 }}
-                  />
-                  <Input
-                    value={r.defaultHours != null ? String(r.defaultHours) : ""}
-                    onChange={(v) => update(r.catalogServiceId, { defaultHours: num(v) })}
-                    suffix="hrs"
-                    placeholder={String(r.standardHours)}
-                    style={{ width: 120 }}
-                  />
-                </>
-              ) : (
-                <Input
-                  value={r.fixedPartnerCost != null ? String(r.fixedPartnerCost) : ""}
-                  onChange={(v) => update(r.catalogServiceId, { fixedPartnerCost: num(v) })}
-                  prefix="£"
-                  placeholder={String(r.standardPayFixed)}
-                  style={{ width: 180 }}
-                />
-              )}
-            </div>
-            {aboveStandard && (
-              <div style={{ fontSize: 11, color: T.coral, lineHeight: 1.45 }}>
-                That&apos;s above the catalog standard pay of{" "}
-                <span className="fx-mono">{r.mode === "hourly" ? `${formatGBPdec(r.standardPayHourly)}/hr` : formatGBPdec(r.standardPayFixed)}</span>
-                {" "}— we can&apos;t match pre-paid jobs at that rate right now.
-              </div>
-            )}
-          </div>
-        )}
-        {(r.bands.length > 0 || r.addons.length > 0) && (
-          <div style={{ paddingTop: 8, borderTop: `1px dashed ${T.line}` }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <span style={{ fontSize: 11.5, fontWeight: 500, color: T.slate, fontFamily: T.mono, letterSpacing: 0.3 }}>+ EXTRAS</span>
-              <button
-                type="button"
-                onClick={() => toggleExtras(r.catalogServiceId)}
-                title={extrasOpen.has(r.catalogServiceId) ? "Hide standard prices" : "View standard band and add-on prices"}
-                aria-expanded={extrasOpen.has(r.catalogServiceId)}
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  width: 22,
-                  height: 22,
-                  padding: 0,
-                  border: `1px solid ${T.line}`,
-                  borderRadius: 9999,
-                  background: extrasOpen.has(r.catalogServiceId) ? T.coralTint : T.white,
-                  cursor: "pointer",
-                }}
-              >
-                <Icon name="info" size={13} color={extrasOpen.has(r.catalogServiceId) ? T.coral : T.mute} />
-              </button>
-            </div>
-            {extrasOpen.has(r.catalogServiceId) && (
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
-                {r.bands.map((b) => (
-                  <span key={`b-${b.id}`} style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "3px 8px", background: T.paper2, color: T.slate, borderRadius: 6, fontSize: 11 }}>
-                    <Icon name="layers" size={11} color={T.mute} />
-                    {b.label}
-                    {b.partner_cost != null && <span className="fx-mono">· {formatGBPdec(b.partner_cost)}</span>}
-                  </span>
-                ))}
-                {r.addons.map((a) => (
-                  <span key={`a-${a.id}`} style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "3px 8px", background: T.paper2, color: T.slate, borderRadius: 6, fontSize: 11 }}>
-                    <Icon name="plus" size={11} color={T.mute} />
-                    {a.label}
-                    {a.partner_cost != null && <span className="fx-mono">· {formatGBPdec(a.partner_cost)}</span>}
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-    );
-  };
-
   return (
     <>
-      {!inOnboarding && <SettingsHeader title="Rate card" subtitle="What Fixfy pays you per service — from the catalog standard or your own rate below the ceiling." />}
+      {!inOnboarding && <SettingsHeader title="Rate card" subtitle="What Fixfy pays you per service. Our standard, or your own rate below it." />}
       {loading ? (
         <div style={{ padding: 8, color: T.mute, fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}>
           <Icon name="loader" size={14} color={T.mute} /> Loading rate card…
@@ -710,65 +583,8 @@ export function RatesPage() {
         </PageCard>
       ) : (
         <>
-          <PageCard title="Your services" subtitle="Standard pay comes from the Fixfy catalog. Toggle off to set your own rate — it can't go above the catalog ceiling.">
-            <div
-              style={{
-                marginBottom: 16,
-                padding: "12px 14px",
-                borderRadius: 10,
-                background: T.green50,
-                border: `1px solid rgba(14, 138, 95, 0.22)`,
-                display: "flex",
-                alignItems: "flex-start",
-                gap: 12,
-              }}
-            >
-              <div style={{ width: 32, height: 32, borderRadius: 8, background: T.white, color: T.green, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                <Icon name="trending-up" size={16} />
-              </div>
-              <div>
-                <div style={{ fontSize: 13.5, fontWeight: 600, color: T.green }}>Using our standard price</div>
-                <div style={{ fontSize: 12.5, color: T.slate, marginTop: 3, lineHeight: 1.45 }}>
-                  Your chance of being chosen for pre-paid jobs is <b style={{ color: T.ink }}>76% higher</b>.
-                </div>
-              </div>
-            </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-              {SERVICE_CATEGORY_ORDER.map((cat) => {
-                const catRows = rows.filter((r) => serviceCategory(r.name) === cat);
-                if (catRows.length === 0) return null;
-                return (
-                  <div key={cat}>
-                    <div style={{ fontSize: 11.5, fontWeight: 600, color: T.navy, letterSpacing: 0.4, textTransform: "uppercase", marginBottom: 8 }}>{cat}</div>
-                    {cat === "Trades" && (
-                      <div
-                        style={{
-                          marginBottom: 10,
-                          padding: "12px 14px",
-                          borderRadius: 10,
-                          background: T.paper2,
-                          border: `1px solid ${T.line}`,
-                          display: "flex",
-                          alignItems: "flex-start",
-                          gap: 12,
-                        }}
-                      >
-                        <div style={{ width: 32, height: 32, borderRadius: 8, background: T.white, color: T.navy, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                          <Icon name="clock" size={16} />
-                        </div>
-                        <div>
-                          <div style={{ fontSize: 13.5, fontWeight: 600, color: T.ink }}>Call Out = 1-3 Hour Visit</div>
-                          <div style={{ fontSize: 12.5, color: T.slate, marginTop: 3, lineHeight: 1.45 }}>
-                            If you can finish the job within 1-3 hours, good. If it needs longer, put together a quote and send it to us and we will get it approved as soon as possible.
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>{catRows.map(renderServiceRow)}</div>
-                  </div>
-                );
-              })}
-            </div>
+          <PageCard title="Your services" subtitle="Standard pay comes from the Fixfy catalog. Turn off Use standard to set your own rate per size, time and add-on.">
+            <RateCardEditor rows={rows} onChange={setRows} />
           </PageCard>
           {!inOnboarding && (
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
