@@ -27,6 +27,8 @@ import {
   type GetStartedStepId,
 } from "@/lib/partner-registration-fields";
 import { useRegistrationConfig } from "@/hooks/use-registration-config";
+import { MarketingConsent } from "@/components/consent/marketing-consent";
+import { rememberClickId, trackOnce } from "@/lib/meta-pixel";
 import { GetStartedAddressAutocomplete } from "@/components/get-started/address-autocomplete";
 import { RateCardEditor } from "@/components/rate-card-editor";
 import type { ServicePrice } from "@/lib/queries/rate-card";
@@ -53,6 +55,9 @@ export default function GetStartedPage() {
   // First-party visit tracking (one hit per browser session) for the Master OS
   // partner funnel. Fire-and-forget — never blocks or errors the page.
   useEffect(() => {
+    // Clique do anúncio (fbclid) guardado na chegada: o pixel só carrega depois
+    // do "Accept", quando a URL pode já não ter o parâmetro.
+    rememberClickId();
     try {
       if (sessionStorage.getItem("fx_gs_hit")) return;
       sessionStorage.setItem("fx_gs_hit", "1");
@@ -73,6 +78,7 @@ export default function GetStartedPage() {
   return (
     <Suspense fallback={null}>
       <GetStartedFunnel />
+      <MarketingConsent />
     </Suspense>
   );
 }
@@ -681,7 +687,11 @@ function GetStartedFunnel() {
       if (!leadValid) return;
       setBusy(true);
       void saveDraft({ requireEmail: true })
-        .then(() => goNext())
+        .then(() => {
+          // Meta: começou o cadastro (só com o sim de cookies).
+          trackOnce("Lead");
+          goNext();
+        })
         .catch((e) => setError(e instanceof Error ? e.message : "Couldn't save your details."))
         .finally(() => setBusy(false));
     } else if (currentStepId === "rates") {
@@ -1168,6 +1178,8 @@ function GetStartedFunnel() {
               mandatory={agreementsMandatory}
               signerDefault={fullName.trim()}
               onFinish={() => {
+                // Meta: cadastro completo, contratos assinados (só com o sim de cookies).
+                trackOnce("CompleteRegistration");
                 // Instead of going straight to the portal we advance to the
                 // gamified "getting ready" step which auto-transitions into
                 // the "how it works" summary before dropping the partner in.
