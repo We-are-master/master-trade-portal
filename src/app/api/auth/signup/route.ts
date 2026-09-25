@@ -41,6 +41,8 @@ export async function POST(req: NextRequest) {
     .from("partners")
     .select("id, auth_user_id, status")
     .ilike("email", email)
+    // Older duplicates (a draft next to the real account): the one with a login wins.
+    .order("auth_user_id", { ascending: true, nullsFirst: false })
     .limit(1);
   const existingPartner = existingPartnerRows?.[0] as {
     id: string;

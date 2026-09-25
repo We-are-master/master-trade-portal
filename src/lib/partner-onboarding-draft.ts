@@ -115,6 +115,32 @@ export async function resolvePartnerId(
   return null;
 }
 
+/** What the funnel should do when the email already belongs to someone who can sign in. */
+export type ExistingAccountKind = "onboarding" | "reactivate" | "active";
+
+/**
+ * The partner with a login on this email, if any. The draft never creates a second
+ * partner next to it, and never writes into it: whoever types the email still has
+ * to prove they own it with the 6-digit code.
+ */
+async function findPartnerWithLogin(
+  supabase: SupabaseClient,
+  email: string,
+): Promise<{ id: string; kind: ExistingAccountKind } | null> {
+  const { data } = await supabase
+    .from("partners")
+    .select("id, status")
+    .ilike("email", email)
+    .not("auth_user_id", "is", null)
+    .limit(1);
+  const row = data?.[0] as { id?: string; status?: string | null } | undefined;
+  if (!row?.id) return null;
+  const status = String(row.status ?? "").trim();
+  const kind: ExistingAccountKind =
+    status === "onboarding" ? "onboarding" : status === "inactive" || status === "on_break" ? "reactivate" : "active";
+  return { id: row.id, kind };
+}
+
 /** Create or update an onboarding partner row before account verification. */
 export async function upsertOnboardingDraft(
   supabase: SupabaseClient,
@@ -154,6 +180,21 @@ export async function upsertOnboardingDraft(
     : null;
 
   const resolved = await resolvePartnerId(supabase, input);
+
+  if (email && email.includes("@")) {
+    const account = await findPartnerWithLogin(supabase, email);
+    if (account && account.id !== resolved?.partnerId) {
+      throw Object.assign(
+        new Error(
+          account.kind === "active"
+            ? "This email already has a Fixfy account. Sign in instead."
+            : "This email already has a Fixfy account. We'll send you a code to continue.",
+        ),
+        { status: 409, accountExists: account.kind },
+      );
+    }
+  }
+
   let partnerId = resolved?.partnerId;
   let draftCode = resolved?.draftCode ?? input.draftCode?.trim() ?? "";
   let created = false;

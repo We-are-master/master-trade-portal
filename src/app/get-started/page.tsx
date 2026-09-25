@@ -20,6 +20,7 @@ import { createClient } from "@/lib/supabase/client";
 import { fetchContracts, type PartnerContract } from "@/lib/queries/contracts";
 import { COMPLIANCE_CONTRACT_TYPES } from "@/lib/partner-funnel-complete";
 import { PARTNER_CONTRACT_TITLES } from "@/lib/partner-contract-types";
+import type { ExistingAccountKind } from "@/lib/partner-onboarding-draft";
 import {
   filterGetStartedSteps,
   isPartnerRegistrationFieldMandatory,
@@ -129,6 +130,8 @@ function GetStartedFunnel() {
   /** Fix a mistyped email from the account step without going back to step 2. */
   const [emailFix, setEmailFix] = useState<{ value: string; error: string | null; busy: boolean } | null>(null);
   const [devCode, setDevCode] = useState<string | null>(null);
+  /** Email that already belongs to an active partner: offer sign in instead of a second profile. */
+  const [accountExistsEmail, setAccountExistsEmail] = useState<string | null>(null);
   /** When the email already belongs to a partner and they can pick up where they stopped. */
   const [resumeKind, setResumeKind] = useState<"onboarding" | "reactivate" | null>(null);
 
@@ -421,8 +424,17 @@ function GetStartedFunnel() {
             coverageRadius: coverageRadius,
           }),
         });
-        const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string; draftCode?: string };
-        if (!res.ok || !data.ok) throw new Error(data.error || "Couldn't save your progress.");
+        const data = (await res.json().catch(() => ({}))) as {
+          ok?: boolean;
+          error?: string;
+          draftCode?: string;
+          accountExists?: ExistingAccountKind;
+        };
+        if (!res.ok || !data.ok) {
+          throw Object.assign(new Error(data.error || "Couldn't save your progress."), {
+            accountExists: data.accountExists,
+          });
+        }
         if (data.draftCode && data.draftCode !== draftCode) {
           draftCodeRef.current = data.draftCode;
           setDraftCode(data.draftCode);
@@ -650,8 +662,15 @@ function GetStartedFunnel() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ draftCode: code || undefined, inviteCode: inviteCode || undefined, email: next }),
         });
-        const d = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
-        if (!res.ok || !d.ok) throw new Error(d.error || "Couldn't update your email.");
+        const d = (await res.json().catch(() => ({}))) as {
+          ok?: boolean;
+          error?: string;
+          accountExists?: ExistingAccountKind;
+        };
+        // An active account can't be taken over from here; onboarding / inactive
+        // ones go through the signup resume below, which asks for the code.
+        if (d.accountExists === "active") throw new Error(d.error || "This email already has a Fixfy account.");
+        if ((!res.ok || !d.ok) && !d.accountExists) throw new Error(d.error || "Couldn't update your email.");
       }
       setEmail(next);
       setOtp("");
@@ -734,6 +753,22 @@ function GetStartedFunnel() {
     }
   };
 
+  // The email already has a login. Nothing was saved on the draft side; the
+  // signup route knows this partner and sends the code to pick up where they
+  // stopped (onboarding / inactive). Active partners just sign in.
+  const resumeExistingAccount = async (e: unknown): Promise<boolean> => {
+    const kind = (e as { accountExists?: ExistingAccountKind } | null)?.accountExists;
+    if (!kind) return false;
+    if (kind === "active") {
+      setAccountExistsEmail(email.trim().toLowerCase());
+      return true;
+    }
+    const accountIdx = activeSteps.indexOf("account");
+    if (accountIdx >= 0) setStep(accountIdx);
+    await createAccount();
+    return true;
+  };
+
   const onPrimary = () => {
     if (currentStepId === "trades") {
       if (enabledIds.size === 0 || !primaryId) return;
@@ -755,7 +790,10 @@ function GetStartedFunnel() {
           trackOnce("Lead");
           goNext();
         })
-        .catch((e) => setError(e instanceof Error ? e.message : "Couldn't save your details."))
+        .catch(async (e) => {
+          if (await resumeExistingAccount(e)) return;
+          setError(e instanceof Error ? e.message : "Couldn't save your details.");
+        })
         .finally(() => setBusy(false));
     } else if (currentStepId === "rates") {
       setBusy(true);
@@ -1034,6 +1072,19 @@ function GetStartedFunnel() {
                       placeholder="Start typing your address or postcode…"
                     />
                   </LightField>
+                )}
+                {accountExistsEmail && accountExistsEmail === email.trim().toLowerCase() && (
+                  <div style={{ padding: 14, borderRadius: 12, background: T.paper, border: `1px solid ${T.line}`, display: "grid", gap: 8 }}>
+                    <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: T.ink }}>You already have a Fixfy account</p>
+                    <p style={{ margin: 0, fontSize: 13, color: T.slate, lineHeight: 1.5 }}>
+                      {accountExistsEmail} is already signed up. Sign in to see your jobs, or use a different email for a new profile.
+                    </p>
+                    <div>
+                      <Button variant="primary" onClick={() => (window.location.href = `/login?email=${encodeURIComponent(accountExistsEmail)}`)}>
+                        Sign in
+                      </Button>
+                    </div>
+                  </div>
                 )}
               </div>
             </StepShell>
