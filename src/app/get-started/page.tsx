@@ -126,6 +126,8 @@ function GetStartedFunnel() {
 
   const [coveragePostcode, setCoveragePostcode] = useState("");
   const [coverageRadius, setCoverageRadius] = useState(15);
+  const [hasOwnTools, setHasOwnTools] = useState<boolean | null>(null);
+  const [canSupplyMaterials, setCanSupplyMaterials] = useState<boolean | null>(null);
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -514,6 +516,34 @@ function GetStartedFunnel() {
     if (!res.ok || !d.ok) throw new Error(d.error || "Couldn't save your rates.");
   };
 
+  // Service area starts from the postcode in the address they gave in step 5,
+  // so most partners only need to set the radius. Never overwrites a value.
+  useEffect(() => {
+    if (currentStepId !== "coverage" || coveragePostcode.trim()) return;
+    const found = partnerAddress.toUpperCase().match(/\b([A-Z]{1,2}\d[A-Z\d]?)\s*(\d[A-Z]{2})\b/);
+    if (found) setCoveragePostcode(`${found[1]} ${found[2]}`);
+  }, [currentStepId, partnerAddress, coveragePostcode]);
+
+  const saveEquipmentAndContinue = async () => {
+    setError(null);
+    setBusy(true);
+    try {
+      const res = await fetch("/api/partner/onboarding-equipment", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ hasOwnTools, canSupplyMaterials }),
+      });
+      const d = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
+      if (!res.ok || !d.ok) throw new Error(d.error || "Couldn't save your answers.");
+      goNext();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Couldn't save your answers.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const regLabel = legalType === "limited_company" ? "Company number (CRN)" : "UTR (Unique Taxpayer Reference)";
   const detailsValid = leadValid;
 
@@ -711,6 +741,9 @@ function GetStartedFunnel() {
       } else if (otp.trim().length === 6) {
         void verifyAndContinue();
       }
+    } else if (currentStepId === "equipment") {
+      if (hasOwnTools !== true || canSupplyMaterials !== true) return;
+      void saveEquipmentAndContinue();
     } else if (currentStepId === "coverage") {
       if (!coveragePostcode.trim() && isPartnerRegistrationFieldMandatory("coverage", registrationFields)) return;
       void saveCoverageAndContinue();
@@ -725,6 +758,7 @@ function GetStartedFunnel() {
     if (currentStepId === "contact") return "Continue";
     if (currentStepId === "account") return accountPhase === "details" ? "Send my code" : "Verify & continue";
     if (currentStepId === "coverage") return "Continue";
+    if (currentStepId === "equipment") return "Continue";
     return "";
   })();
 
@@ -746,6 +780,7 @@ function GetStartedFunnel() {
       return isPartnerRegistrationFieldMandatory("address", registrationFields) && !partnerAddress.trim();
     }
     if (currentStepId === "account") return accountPhase === "details" ? !detailsValid : otp.trim().length !== 6;
+    if (currentStepId === "equipment") return hasOwnTools !== true || canSupplyMaterials !== true;
     if (currentStepId === "coverage") {
       return isPartnerRegistrationFieldMandatory("coverage", registrationFields) && !coveragePostcode.trim();
     }
@@ -1160,6 +1195,34 @@ function GetStartedFunnel() {
             </StepShell>
           )}
 
+          {currentStepId === "equipment" && (
+            <StepShell
+              eyebrow="Step 8 · Tools & materials"
+              title="Ready for the job?"
+              subtitle="Every Fixfy partner turns up with their own kit and can pick up what the job needs."
+            >
+              <div style={{ maxWidth: 520, margin: "0 auto", display: "grid", gap: 14, textAlign: "left" }}>
+                <YesNoQuestion
+                  question="Do you have all the tools and equipment for the work you do?"
+                  hint="Power tools, ladders, hoover, mop, whatever your trade needs."
+                  value={hasOwnTools}
+                  onChange={setHasOwnTools}
+                />
+                <YesNoQuestion
+                  question="Can you supply the materials a job needs?"
+                  hint="Paint, fixings, fittings, cleaning products. Agreed with you on each job."
+                  value={canSupplyMaterials}
+                  onChange={setCanSupplyMaterials}
+                />
+                {(hasOwnTools === false || canSupplyMaterials === false) && (
+                  <p style={{ margin: 0, padding: "12px 14px", borderRadius: 10, background: T.coralTint, color: T.coralPress, fontSize: 13, lineHeight: 1.5 }}>
+                    Your own tools and being able to supply materials are essential to work with Fixfy. If that changes, come back and pick up where you left off.
+                  </p>
+                )}
+              </div>
+            </StepShell>
+          )}
+
           {currentStepId === "documents" && (
             <DocumentsStep mandatory={documentsMandatory} onContinue={goNext} />
           )}
@@ -1279,7 +1342,7 @@ function DocumentsStep({ mandatory, onContinue }: { mandatory: boolean; onContin
     <>
       <div style={{ fontFamily: T.mono, fontSize: 12.5, letterSpacing: "0.16em", textTransform: "uppercase", color: T.coralPress, marginBottom: 14, display: "inline-flex", alignItems: "center", gap: 7 }}>
         <span style={{ width: 6, height: 6, borderRadius: 9999, background: T.coral }} />
-        Step 8 · Your documents
+        Step 9 · Your documents
       </div>
       <h1 style={{ fontSize: 40, fontWeight: 600, letterSpacing: "-0.03em", margin: "0 0 12px", color: T.navy }}>Upload what&apos;s required</h1>
       <p style={{ fontSize: 16, color: T.slate, maxWidth: 460, margin: "0 auto", lineHeight: 1.5 }}>
@@ -1454,7 +1517,7 @@ function AgreementsStep({ mandatory, signerDefault, onFinish }: { mandatory: boo
     <>
       <div style={{ fontFamily: T.mono, fontSize: 12.5, letterSpacing: "0.16em", textTransform: "uppercase", color: T.coralPress, marginBottom: 14, display: "inline-flex", alignItems: "center", gap: 7 }}>
         <span style={{ width: 6, height: 6, borderRadius: 9999, background: T.coral }} />
-        Step 9 · Agreements
+        Step 10 · Agreements
       </div>
       <h1 style={{ fontSize: 40, fontWeight: 600, letterSpacing: "-0.03em", margin: "0 0 12px", color: T.navy }}>Sign your agreements</h1>
       <p style={{ fontSize: 16, color: T.slate, maxWidth: 460, margin: "0 auto", lineHeight: 1.5 }}>
@@ -2154,6 +2217,53 @@ function GettingReadyStep({ onDone }: { onDone: () => void }) {
         @keyframes gs-pop  { from { transform: scale(0.86); opacity: 0.4; } 60% { transform: scale(1.04); opacity: 1; } to { transform: scale(1); opacity: 1; } }
         @keyframes gs-spin { to { transform: rotate(360deg); } }
       `}</style>
+    </div>
+  );
+}
+
+function YesNoQuestion({
+  question,
+  hint,
+  value,
+  onChange,
+}: {
+  question: string;
+  hint: string;
+  value: boolean | null;
+  onChange: (v: boolean) => void;
+}) {
+  const option = (v: boolean, label: string) => {
+    const on = value === v;
+    return (
+      <button
+        type="button"
+        aria-pressed={on}
+        onClick={() => onChange(v)}
+        style={{
+          flex: 1,
+          padding: "10px 12px",
+          borderRadius: 10,
+          border: `1.5px solid ${on ? (v ? T.coral : T.lineStrong) : T.line}`,
+          background: on ? (v ? T.coralTint : T.paper2) : T.white,
+          color: on ? (v ? T.coral : T.slate) : T.slate,
+          fontFamily: T.sans,
+          fontSize: 14,
+          fontWeight: 600,
+          cursor: "pointer",
+        }}
+      >
+        {label}
+      </button>
+    );
+  };
+  return (
+    <div style={{ padding: 16, borderRadius: 14, border: `1px solid ${T.line}`, background: T.white }}>
+      <div style={{ fontSize: 15, fontWeight: 600, color: T.ink, lineHeight: 1.35 }}>{question}</div>
+      <div style={{ fontSize: 12.5, color: T.mute, marginTop: 4, lineHeight: 1.45 }}>{hint}</div>
+      <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+        {option(true, "Yes")}
+        {option(false, "No")}
+      </div>
     </div>
   );
 }

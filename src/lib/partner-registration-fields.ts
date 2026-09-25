@@ -129,6 +129,8 @@ export type GetStartedStepId =
   | "contact"
   | "account"
   | "coverage"
+  /** Own tools + able to supply materials: both essential, asked after the service area. */
+  | "equipment"
   | "documents"
   | "agreements"
   /** Gamified "we're getting you ready" full-screen animation shown after agreements, then straight into the portal. */
@@ -142,6 +144,8 @@ export const GET_STARTED_STEP_DEFS: { id: GetStartedStepId; ruleIds: string[] }[
   { id: "contact", ruleIds: ["address"] },
   { id: "account", ruleIds: ["account"] },
   { id: "coverage", ruleIds: ["coverage"] },
+  // Always asked, so it rides on the locked `account` rule like getting_ready.
+  { id: "equipment", ruleIds: ["account"] },
   { id: "documents", ruleIds: ["documents"] },
   { id: "agreements", ruleIds: ["agreements"] },
   // Closing animation piggybacks on the `account` rule (locked-visible) so it
