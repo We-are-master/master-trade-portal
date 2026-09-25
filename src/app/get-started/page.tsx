@@ -13,7 +13,7 @@
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { useSearchParams } from "next/navigation";
 import { T } from "@/lib/tokens";
-import { Button, Icon } from "@/components/ui/primitives";
+import { Button, Icon, Modal } from "@/components/ui/primitives";
 import { DEFAULT_PLAN_ID, getPlan, PARTNERS_LP_URL } from "@/lib/plan-catalog";
 import { serviceCategory, type ServiceCategory } from "@/lib/service-category";
 import { createClient } from "@/lib/supabase/client";
@@ -126,6 +126,8 @@ function GetStartedFunnel() {
   const [email, setEmail] = useState(sp.get("email")?.trim() ?? "");
   const [otp, setOtp] = useState("");
   const [accountPhase, setAccountPhase] = useState<"details" | "code">("details");
+  /** Fix a mistyped email from the account step without going back to step 2. */
+  const [emailFix, setEmailFix] = useState<{ value: string; error: string | null; busy: boolean } | null>(null);
   const [devCode, setDevCode] = useState<string | null>(null);
   /** When the email already belongs to a partner and they can pick up where they stopped. */
   const [resumeKind, setResumeKind] = useState<"onboarding" | "reactivate" | null>(null);
@@ -176,7 +178,7 @@ function GetStartedFunnel() {
   // then walk through coverage / documents / agreements with a fresh
   // session.
   const SAFE_RESTORE_STEP_IDS = useMemo(
-    () => new Set<GetStartedStepId>(["trades", "lead", "rates", "business", "contact"]),
+    () => new Set<GetStartedStepId>(["trades", "lead", "rates", "business"]),
     [],
   );
   const stepRestoredRef = useRef(false);
@@ -379,7 +381,8 @@ function GetStartedFunnel() {
     fullName.trim().length > 0 &&
     company.trim().length > 0 &&
     email.includes("@") &&
-    (!showPhone || !isPartnerRegistrationFieldMandatory("phone", registrationFields) || phone.trim().length > 0);
+    (!showPhone || !isPartnerRegistrationFieldMandatory("phone", registrationFields) || phone.trim().length > 0) &&
+    (!showAddress || !isPartnerRegistrationFieldMandatory("address", registrationFields) || partnerAddress.trim().length > 0);
 
   const saveDraft = useCallback(
     (opts?: { requireEmail?: boolean }) => {
@@ -456,7 +459,6 @@ function GetStartedFunnel() {
       currentStepId === "trades" ||
       currentStepId === "lead" ||
       currentStepId === "business" ||
-      currentStepId === "contact" ||
       currentStepId === "coverage";
     if (!drafty) return;
     if (!email.includes("@") && !inviteCode && !draftCode) return;
@@ -597,7 +599,7 @@ function GetStartedFunnel() {
     if (!profRes.ok || !prof.ok) throw new Error(prof.error || "Couldn't save your details.");
   };
 
-  const createAccount = async () => {
+  const createAccount = async (emailOverride?: string) => {
     setError(null);
     setBusy(true);
     try {
@@ -605,7 +607,7 @@ function GetStartedFunnel() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          email: email.trim(),
+          email: (emailOverride ?? email).trim(),
           fullName: fullName.trim(),
           company: company.trim(),
           plan: DEFAULT_PLAN_ID,
@@ -627,6 +629,37 @@ function GetStartedFunnel() {
       setError(e instanceof Error ? e.message : "Couldn't create your account.");
     } finally {
       setBusy(false);
+    }
+  };
+
+  // Wrong email on the account step: move the draft to the new address and send
+  // the code there, all from a modal, instead of walking back to step 2.
+  const applyEmailFix = async () => {
+    if (!emailFix) return;
+    const next = emailFix.value.trim().toLowerCase();
+    if (!next.includes("@") || !next.includes(".")) {
+      setEmailFix({ ...emailFix, error: "Enter a valid email." });
+      return;
+    }
+    setEmailFix({ ...emailFix, busy: true, error: null });
+    try {
+      const code = draftCodeRef.current;
+      if (code || inviteCode) {
+        const res = await fetch("/api/partner/onboarding-draft", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ draftCode: code || undefined, inviteCode: inviteCode || undefined, email: next }),
+        });
+        const d = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
+        if (!res.ok || !d.ok) throw new Error(d.error || "Couldn't update your email.");
+      }
+      setEmail(next);
+      setOtp("");
+      setResumeKind(null);
+      setEmailFix(null);
+      await createAccount(next);
+    } catch (e) {
+      setEmailFix((f) => (f ? { ...f, busy: false, error: e instanceof Error ? e.message : "Couldn't update your email." } : f));
     }
   };
 
@@ -737,13 +770,11 @@ function GetStartedFunnel() {
         if (isPartnerRegistrationFieldMandatory("vat", registrationFields) && vatRegistered === null) return;
         if (vatRegistered === true && !vatNumber.trim()) return;
       }
-      goNext();
-    } else if (currentStepId === "contact") {
-      if (showAddress && isPartnerRegistrationFieldMandatory("address", registrationFields) && !partnerAddress.trim()) return;
+      // Last step before the account: make sure everything so far is on the draft.
       setBusy(true);
       void saveDraft({ requireEmail: true })
         .then(() => goNext())
-        .catch((e) => setError(e instanceof Error ? e.message : "Couldn't save your address."))
+        .catch((e) => setError(e instanceof Error ? e.message : "Couldn't save your details."))
         .finally(() => setBusy(false));
     } else if (currentStepId === "account") {
       if (accountPhase === "details") {
@@ -765,7 +796,6 @@ function GetStartedFunnel() {
     if (currentStepId === "lead") return "Continue";
     if (currentStepId === "rates") return "Continue";
     if (currentStepId === "business") return "Continue";
-    if (currentStepId === "contact") return "Continue";
     if (currentStepId === "account") return accountPhase === "details" ? "Send my code" : "Verify & continue";
     if (currentStepId === "coverage") return "Continue";
     if (currentStepId === "equipment") return "Continue";
@@ -785,9 +815,6 @@ function GetStartedFunnel() {
         if (vatRegistered === true && !vatNumber.trim()) return true;
       }
       return false;
-    }
-    if (currentStepId === "contact") {
-      return isPartnerRegistrationFieldMandatory("address", registrationFields) && !partnerAddress.trim();
     }
     if (currentStepId === "account") return accountPhase === "details" ? !detailsValid : otp.trim().length !== 6;
     if (currentStepId === "equipment") return hasOwnTools !== true || canSupplyMaterials !== true;
@@ -982,7 +1009,7 @@ function GetStartedFunnel() {
             <StepShell
               eyebrow="Step 2 · Your details"
               title="Your details"
-              subtitle="Name, email, and phone — the basics to get you set up."
+              subtitle="Name, email, phone and business address. The basics to get you set up."
             >
               <div style={{ maxWidth: 420, margin: "6px auto 0", textAlign: "left", display: "grid", gap: 12 }}>
                 <LightField label="Your name">
@@ -997,6 +1024,15 @@ function GetStartedFunnel() {
                 {showPhone && (
                   <LightField label="Mobile number">
                     <LightInput value={phone} onChange={setPhone} placeholder="07XXX XXXXXX" type="tel" />
+                  </LightField>
+                )}
+                {showAddress && (
+                  <LightField label="Business address">
+                    <GetStartedAddressAutocomplete
+                      value={partnerAddress}
+                      onChange={setPartnerAddress}
+                      placeholder="Start typing your address or postcode…"
+                    />
                   </LightField>
                 )}
               </div>
@@ -1077,35 +1113,14 @@ function GetStartedFunnel() {
             </StepShell>
           )}
 
-          {currentStepId === "contact" && (
-            <StepShell
-              eyebrow="Step 5 · Contact & address"
-              title="How can we reach you?"
-              subtitle="Your business address helps us verify your profile and match local work."
-            >
-              <div style={{ maxWidth: 420, margin: "6px auto 0", textAlign: "left", display: "grid", gap: 12 }}>
-                {showAddress && (
-                  <LightField label="Business address">
-                    <GetStartedAddressAutocomplete
-                      value={partnerAddress}
-                      onChange={setPartnerAddress}
-                      placeholder="Start typing your address or postcode…"
-                      autoFocus
-                    />
-                  </LightField>
-                )}
-              </div>
-            </StepShell>
-          )}
-
           {currentStepId === "account" && (
             <StepShell
               eyebrow={
                 resumeKind === "reactivate"
-                  ? "Step 6 · Welcome back"
+                  ? "Step 5 · Welcome back"
                   : resumeKind === "onboarding"
-                    ? "Step 6 · Continue where you stopped"
-                    : "Step 6 · Create your account"
+                    ? "Step 5 · Continue where you stopped"
+                    : "Step 5 · Create your account"
               }
               title={
                 accountPhase === "details"
@@ -1139,7 +1154,16 @@ function GetStartedFunnel() {
                       <p style={{ margin: 0, fontSize: 13, color: T.mute }}>Signing up as</p>
                       <p style={{ margin: "6px 0 0", fontSize: 15, fontWeight: 600, color: T.ink }}>{fullName || "—"}</p>
                       <p style={{ margin: "4px 0 0", fontSize: 13, color: T.slate }}>{company || "—"}</p>
-                      <p style={{ margin: "4px 0 0", fontSize: 13, color: T.slate }}>{email || "—"}</p>
+                      <p style={{ margin: "4px 0 0", fontSize: 13, color: T.slate, display: "flex", alignItems: "center", gap: 8 }}>
+                        <span style={{ minWidth: 0, overflowWrap: "anywhere" }}>{email || "—"}</span>
+                        <button
+                          type="button"
+                          onClick={() => setEmailFix({ value: email, error: null, busy: false })}
+                          style={{ background: "transparent", border: "none", padding: 0, color: T.coral, fontFamily: T.sans, fontSize: 13, fontWeight: 600, cursor: "pointer" }}
+                        >
+                          Change
+                        </button>
+                      </p>
                       {phone.trim() ? <p style={{ margin: "4px 0 0", fontSize: 13, color: T.slate }}>{phone}</p> : null}
                     </div>
                   </div>
@@ -1161,15 +1185,10 @@ function GetStartedFunnel() {
                     )}
                     <button
                       type="button"
-                      onClick={() => {
-                        setAccountPhase("details");
-                        setOtp("");
-                        setResumeKind(null);
-                        setError(null);
-                      }}
+                      onClick={() => setEmailFix({ value: email, error: null, busy: false })}
                       style={{ background: "transparent", border: "none", color: T.slate, fontFamily: T.sans, fontSize: 13, cursor: "pointer", textAlign: "left", padding: 0 }}
                     >
-                      ← Use a different email
+                      Wrong email? <span style={{ color: T.coral, fontWeight: 600 }}>Change it</span>
                     </button>
                   </div>
                 )}
@@ -1177,9 +1196,37 @@ function GetStartedFunnel() {
             </StepShell>
           )}
 
+          {emailFix && (
+            <Modal title="Change your email" width={420} onClose={() => !emailFix.busy && setEmailFix(null)}>
+              <div style={{ padding: 20, display: "grid", gap: 12, textAlign: "left" }}>
+                <p style={{ margin: 0, fontSize: 13.5, color: T.slate, lineHeight: 1.5 }}>
+                  We&apos;ll send a new 6-digit code to this address. Everything else you filled in stays as it is.
+                </p>
+                <LightField label="Email">
+                  <LightInput
+                    value={emailFix.value}
+                    onChange={(v) => setEmailFix({ ...emailFix, value: v, error: null })}
+                    placeholder="you@company.co.uk"
+                    type="email"
+                    autoFocus
+                  />
+                </LightField>
+                {emailFix.error && <p style={{ margin: 0, fontSize: 13, color: T.coral }}>{emailFix.error}</p>}
+                <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+                  <Button variant="ghost" onClick={() => setEmailFix(null)} disabled={emailFix.busy}>
+                    Cancel
+                  </Button>
+                  <Button variant="primary" onClick={() => void applyEmailFix()} disabled={emailFix.busy}>
+                    {emailFix.busy ? "Sending…" : "Send code"}
+                  </Button>
+                </div>
+              </div>
+            </Modal>
+          )}
+
           {currentStepId === "coverage" && (
             <StepShell
-              eyebrow="Step 7 · Service area"
+              eyebrow="Step 6 · Service area"
               title="Where do you work?"
               subtitle="Set your base postcode and how far you're willing to travel for jobs."
             >
@@ -1207,7 +1254,7 @@ function GetStartedFunnel() {
 
           {currentStepId === "equipment" && (
             <StepShell
-              eyebrow="Step 8 · Tools & materials"
+              eyebrow="Step 7 · Tools & materials"
               title="Ready for the job?"
               subtitle="Every Fixfy partner turns up with their own kit and can pick up what the job needs."
             >
@@ -1354,7 +1401,7 @@ function DocumentsStep({ mandatory, onContinue }: { mandatory: boolean; onContin
     <>
       <div style={{ fontFamily: T.mono, fontSize: 12.5, letterSpacing: "0.16em", textTransform: "uppercase", color: T.coralPress, marginBottom: 14, display: "inline-flex", alignItems: "center", gap: 7 }}>
         <span style={{ width: 6, height: 6, borderRadius: 9999, background: T.coral }} />
-        Step 9 · Your documents
+        Step 8 · Your documents
       </div>
       <h1 style={{ fontSize: 40, fontWeight: 600, letterSpacing: "-0.03em", margin: "0 0 12px", color: T.navy }}>Upload what&apos;s required</h1>
       <p style={{ fontSize: 16, color: T.slate, maxWidth: 460, margin: "0 auto", lineHeight: 1.5 }}>
@@ -1529,7 +1576,7 @@ function AgreementsStep({ mandatory, signerDefault, onFinish }: { mandatory: boo
     <>
       <div style={{ fontFamily: T.mono, fontSize: 12.5, letterSpacing: "0.16em", textTransform: "uppercase", color: T.coralPress, marginBottom: 14, display: "inline-flex", alignItems: "center", gap: 7 }}>
         <span style={{ width: 6, height: 6, borderRadius: 9999, background: T.coral }} />
-        Step 10 · Agreements
+        Step 9 · Agreements
       </div>
       <h1 style={{ fontSize: 40, fontWeight: 600, letterSpacing: "-0.03em", margin: "0 0 12px", color: T.navy }}>Sign your agreements</h1>
       <p style={{ fontSize: 16, color: T.slate, maxWidth: 460, margin: "0 auto", lineHeight: 1.5 }}>
