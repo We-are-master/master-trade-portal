@@ -6,7 +6,7 @@
 import { useEffect, useState } from "react";
 import { loadPixel, readConsent, saveConsent } from "@/lib/meta-pixel";
 
-export function MarketingConsent() {
+export function MarketingConsent({ onAccept }: { onAccept?: () => void } = {}) {
   const [aberta, setAberta] = useState(false);
 
   useEffect(() => {
@@ -25,6 +25,7 @@ export function MarketingConsent() {
   const escolher = (v: "yes" | "no") => {
     saveConsent(v);
     setAberta(false);
+    if (v === "yes") onAccept?.();
   };
 
   return (

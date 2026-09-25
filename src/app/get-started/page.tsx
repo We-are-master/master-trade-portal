@@ -1196,7 +1196,8 @@ function GetStartedFunnel() {
                   // into the portal (which shows the "under review" banner).
                   window.localStorage.removeItem(DRAFT_STEP_STORAGE_KEY);
                   window.localStorage.removeItem(DRAFT_STORAGE_KEY);
-                  window.location.href = "/?submitted=1";
+                  // Endereço próprio do fim do cadastro: é o que a Meta conta como "cadastro completo".
+                  window.location.href = "/application-sent";
                 }
               }}
             />
