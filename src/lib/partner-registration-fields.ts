@@ -126,7 +126,6 @@ export type GetStartedStepId =
   /** Rate card: our standard pay per service, or the partner's own. Right after their details. */
   | "rates"
   | "business"
-  | "contact"
   | "account"
   | "coverage"
   /** Own tools + able to supply materials: both essential, asked after the service area. */
@@ -138,10 +137,10 @@ export type GetStartedStepId =
 
 export const GET_STARTED_STEP_DEFS: { id: GetStartedStepId; ruleIds: string[] }[] = [
   { id: "trades", ruleIds: ["trades"] },
-  { id: "lead", ruleIds: ["account", "phone"] },
+  // Details carry the business address too (it used to be its own step).
+  { id: "lead", ruleIds: ["account", "phone", "address"] },
   { id: "rates", ruleIds: ["rate_card"] },
   { id: "business", ruleIds: ["legal_type", "tax_id", "vat"] },
-  { id: "contact", ruleIds: ["address"] },
   { id: "account", ruleIds: ["account"] },
   { id: "coverage", ruleIds: ["coverage"] },
   // Always asked, so it rides on the locked `account` rule like getting_ready.
