@@ -33,6 +33,7 @@ import { MarketingConsent } from "@/components/consent/marketing-consent";
 import { rememberClickId, trackOnce } from "@/lib/meta-pixel";
 import { GetStartedAddressAutocomplete } from "@/components/get-started/address-autocomplete";
 import { RateCardEditor } from "@/components/rate-card-editor";
+import { emailProblem, phoneProblem, suggestedEmail } from "@/lib/contact-validation";
 import { ONBOARDING_DRAFT_STORAGE_KEY, RequiredDocsList, useRequiredDocs } from "@/components/required-docs";
 import type { ServicePrice } from "@/lib/queries/rate-card";
 
@@ -123,6 +124,11 @@ function GetStartedFunnel() {
   const [accountExistsEmail, setAccountExistsEmail] = useState<string | null>(null);
   /** When the email already belongs to a partner and they can pick up where they stopped. */
   const [resumeKind, setResumeKind] = useState<"onboarding" | "reactivate" | null>(null);
+
+  /** Details step: show a field's problem once they've left it or pressed Continue. */
+  const [touched, setTouched] = useState<{ email?: boolean; phone?: boolean }>({});
+  /** The server's verdict on the email / phone (e.g. no such email domain). */
+  const [leadFieldError, setLeadFieldError] = useState<{ field: "email" | "phone"; message: string } | null>(null);
 
   const [coveragePostcode, setCoveragePostcode] = useState("");
   const [coverageRadius, setCoverageRadius] = useState(15);
@@ -362,6 +368,15 @@ function GetStartedFunnel() {
     return { names, primaryName, ids, primary };
   }, [enabledIds, primaryId, catalog]);
 
+  const phoneMandatory = showPhone && isPartnerRegistrationFieldMandatory("phone", registrationFields);
+  const emailIssue = emailProblem(email);
+  const phoneIssue = showPhone && (phone.trim() || phoneMandatory) ? phoneProblem(phone) : null;
+  const emailSuggestion = suggestedEmail(email);
+  const emailMessage =
+    leadFieldError?.field === "email" ? leadFieldError.message : touched.email ? emailIssue : null;
+  const phoneMessage =
+    leadFieldError?.field === "phone" ? leadFieldError.message : touched.phone ? phoneIssue : null;
+
   const leadValid =
     fullName.trim().length > 0 &&
     company.trim().length > 0 &&
@@ -412,10 +427,12 @@ function GetStartedFunnel() {
           error?: string;
           draftCode?: string;
           accountExists?: ExistingAccountKind;
+          field?: "email" | "phone";
         };
         if (!res.ok || !data.ok) {
           throw Object.assign(new Error(data.error || "Couldn't save your progress."), {
             accountExists: data.accountExists,
+            field: data.field,
           });
         }
         if (data.draftCode && data.draftCode !== draftCode) {
@@ -791,6 +808,11 @@ function GetStartedFunnel() {
       goNext();
     } else if (currentStepId === "lead") {
       if (!leadValid) return;
+      // Made-up email / phone never reach the OS: say what's wrong under the field.
+      if (emailIssue || phoneIssue) {
+        setTouched({ email: true, phone: true });
+        return;
+      }
       setBusy(true);
       // From here the partner shows in the OS Onboarding tab with their contact info.
       void saveDraft({ requireEmail: true, leadComplete: true })
@@ -801,6 +823,11 @@ function GetStartedFunnel() {
         })
         .catch(async (e) => {
           if (await resumeExistingAccount(e)) return;
+          const field = (e as { field?: "email" | "phone" } | null)?.field;
+          if (field && e instanceof Error) {
+            setLeadFieldError({ field, message: e.message });
+            return;
+          }
           setError(e instanceof Error ? e.message : "Couldn't save your details.");
         })
         .finally(() => setBusy(false));
@@ -1065,12 +1092,53 @@ function GetStartedFunnel() {
                 <LightField label="Company / trading name">
                   <LightInput value={company} onChange={setCompany} placeholder="Smith Maintenance Ltd" />
                 </LightField>
-                <LightField label="Work email">
-                  <LightInput value={email} onChange={setEmail} placeholder="you@company.co.uk" type="email" />
+                <LightField
+                  label="Work email"
+                  error={
+                    emailMessage && (
+                      <>
+                        {emailMessage}
+                        {emailSuggestion && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEmail(emailSuggestion);
+                              setLeadFieldError(null);
+                            }}
+                            style={{ marginLeft: 8, padding: 0, border: "none", background: "transparent", color: T.coral, fontFamily: T.sans, fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}
+                          >
+                            Use it
+                          </button>
+                        )}
+                      </>
+                    )
+                  }
+                >
+                  <LightInput
+                    value={email}
+                    onChange={(v) => {
+                      setEmail(v);
+                      if (leadFieldError?.field === "email") setLeadFieldError(null);
+                    }}
+                    onBlur={() => email.trim() && setTouched((t) => ({ ...t, email: true }))}
+                    invalid={Boolean(emailMessage)}
+                    placeholder="you@company.co.uk"
+                    type="email"
+                  />
                 </LightField>
                 {showPhone && (
-                  <LightField label="Mobile number">
-                    <LightInput value={phone} onChange={setPhone} placeholder="07XXX XXXXXX" type="tel" />
+                  <LightField label="Mobile number" error={phoneMessage}>
+                    <LightInput
+                      value={phone}
+                      onChange={(v) => {
+                        setPhone(v);
+                        if (leadFieldError?.field === "phone") setLeadFieldError(null);
+                      }}
+                      onBlur={() => phone.trim() && setTouched((t) => ({ ...t, phone: true }))}
+                      invalid={Boolean(phoneMessage)}
+                      placeholder="07XXX XXXXXX"
+                      type="tel"
+                    />
                   </LightField>
                 )}
                 {showAddress && (
@@ -1919,12 +1987,15 @@ function SelectCard({
   );
 }
 
-function LightField({ label, children }: { label: string; children: ReactNode }) {
+function LightField({ label, error, children }: { label: string; error?: ReactNode; children: ReactNode }) {
   return (
-    <label style={{ display: "block" }}>
-      <span style={{ display: "block", fontFamily: T.mono, fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: T.mute, marginBottom: 7 }}>{label}</span>
-      {children}
-    </label>
+    <div style={{ display: "block" }}>
+      <label style={{ display: "block" }}>
+        <span style={{ display: "block", fontFamily: T.mono, fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: T.mute, marginBottom: 7 }}>{label}</span>
+        {children}
+      </label>
+      {error ? <p style={{ margin: "6px 0 0", fontSize: 12.5, lineHeight: 1.4, color: T.red }}>{error}</p> : null}
+    </div>
   );
 }
 
@@ -1935,6 +2006,8 @@ function LightInput({
   type = "text",
   autoFocus,
   style,
+  onBlur,
+  invalid,
 }: {
   value: string;
   onChange: (v: string) => void;
@@ -1942,6 +2015,8 @@ function LightInput({
   type?: string;
   autoFocus?: boolean;
   style?: CSSProperties;
+  onBlur?: () => void;
+  invalid?: boolean;
 }) {
   const [focus, setFocus] = useState(false);
   return (
@@ -1953,13 +2028,16 @@ function LightInput({
       placeholder={placeholder}
       onChange={(e) => onChange(e.target.value)}
       onFocus={() => setFocus(true)}
-      onBlur={() => setFocus(false)}
+      onBlur={() => {
+        setFocus(false);
+        onBlur?.();
+      }}
       style={{
         width: "100%",
         height: 46,
         padding: "0 14px",
         borderRadius: 10,
-        border: `1px solid ${focus ? T.coral : T.lineStrong}`,
+        border: `1px solid ${invalid ? T.red : focus ? T.coral : T.lineStrong}`,
         background: T.white,
         color: T.ink,
         fontFamily: T.sans,
