@@ -14,7 +14,7 @@ import { DEFAULT_PLAN_ID, parsePlanId, PARTNERS_LP_URL } from "@/lib/plan-catalo
 import { PARTNER_TRIAL_DAYS } from "@/lib/trial-config";
 import { createServiceClient } from "@/lib/supabase/service";
 import { sendOtpEmail, sendNewPartnerAdminNotification } from "@/lib/email";
-import { EMAIL_UNVERIFIED_REASON, NEW_PORTAL_PARTNER_REASONS } from "@/lib/partner-onboarding-flags";
+import { EMAIL_UNVERIFIED_REASON } from "@/lib/partner-onboarding-flags";
 import { signInWithoutCode } from "@/lib/partner-signin-without-code";
 
 
@@ -201,9 +201,9 @@ export async function POST(req: NextRequest) {
     trades: [],
     location: "",
     status: "onboarding",
-    // Hidden from the OS Onboarding tab until the email code is confirmed and the
-    // partner saves rates or uploads a document (see partner-onboarding-flags).
-    partner_status_reasons: NEW_PORTAL_PARTNER_REASONS,
+    // Got here past the details step, so the office sees them in Onboarding
+    // right away (see partner-onboarding-flags).
+    partner_status_reasons: [],
     verified: false,
     subscription_status: "trialing",
     plan,

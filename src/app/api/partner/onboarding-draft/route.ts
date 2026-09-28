@@ -70,6 +70,7 @@ export async function POST(req: NextRequest) {
           : typeof body.coverageRadius === "string"
             ? Number(body.coverageRadius)
             : undefined,
+      leadComplete: body.leadComplete === true,
     });
     return NextResponse.json({ ok: true, ...result });
   } catch (e) {
