@@ -4,6 +4,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { loadOnboardingDraft, upsertOnboardingDraft } from "@/lib/partner-onboarding-draft";
 import { createServiceClient } from "@/lib/supabase/service";
+import { emailProblem, phoneProblem } from "@/lib/contact-validation";
+import { emailDomainReceivesMail } from "@/lib/email-domain-check";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -29,6 +31,23 @@ export async function POST(req: NextRequest) {
     body = (await req.json()) as Record<string, unknown>;
   } catch {
     return NextResponse.json({ error: "Invalid request body." }, { status: 400 });
+  }
+
+  // Finishing the details step puts the partner in the OS Onboarding tab, so
+  // the contact has to be real: same checks as the form, plus the MX lookup.
+  if (body.leadComplete === true) {
+    const email = typeof body.email === "string" ? body.email : "";
+    const phone = typeof body.phone === "string" ? body.phone : "";
+    const emailIssue = emailProblem(email);
+    if (emailIssue) return NextResponse.json({ error: emailIssue, field: "email" }, { status: 422 });
+    const phoneIssue = phone.trim() ? phoneProblem(phone) : null;
+    if (phoneIssue) return NextResponse.json({ error: phoneIssue, field: "phone" }, { status: 422 });
+    if (email && !(await emailDomainReceivesMail(email))) {
+      return NextResponse.json(
+        { error: "We can't find that email address. Check it for typos.", field: "email" },
+        { status: 422 },
+      );
+    }
   }
 
   try {
@@ -70,6 +89,7 @@ export async function POST(req: NextRequest) {
           : typeof body.coverageRadius === "string"
             ? Number(body.coverageRadius)
             : undefined,
+      leadComplete: body.leadComplete === true,
     });
     return NextResponse.json({ ok: true, ...result });
   } catch (e) {
