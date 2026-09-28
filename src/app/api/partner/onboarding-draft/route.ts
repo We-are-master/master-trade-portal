@@ -73,7 +73,10 @@ export async function POST(req: NextRequest) {
     });
     return NextResponse.json({ ok: true, ...result });
   } catch (e) {
-    const err = e as Error & { status?: number };
+    const err = e as Error & { status?: number; accountExists?: string };
+    if (err.accountExists) {
+      return NextResponse.json({ error: err.message, accountExists: err.accountExists }, { status: 409 });
+    }
     console.error("[partner/onboarding-draft] POST failed:", e);
     return NextResponse.json(
       { error: err.message || "Couldn't save your progress." },

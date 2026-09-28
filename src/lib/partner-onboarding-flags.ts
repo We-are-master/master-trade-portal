@@ -1,6 +1,8 @@
 // Reason codes on partners.partner_status_reasons that keep a portal signup out of
 // the OS Onboarding tab (same codes in master-os src/lib/partner-status.ts).
-//   email_unverified        — set when the partner row is born; cleared by /api/auth/verify-otp.
+//   email_unverified        — set when the partner row is born; cleared when the funnel creates
+//                             the account (/api/auth/signup signs new partners in without a
+//                             code) or by /api/auth/verify-otp.
 //   onboarding_not_started  — set when the partner row is born; cleared on the first
 //                             rate card save or the first document upload.
 // The office only sees partners who confirmed their email AND actually started.

@@ -3,13 +3,17 @@
 // Shown instead of the portal while a new partner waits for approval in the OS
 // (status still `onboarding`). They can't browse the platform yet: the card
 // plays the "Working with Fixfy" explainer, and the portal opens by itself the
-// moment the OS flips them to `active`.
+// moment the OS flips them to `active`. Anyone who skipped the documents step
+// gets a strip here to upload what's missing.
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { T } from "@/lib/tokens";
 import { createClient } from "@/lib/supabase/client";
 import { AuthWordmark } from "@/components/brand/auth-wordmark";
 import { useMediaQuery } from "@/hooks/use-media-query";
+import { Button } from "@/components/ui/primitives";
+import { ExplainerVideo } from "@/components/explainer-video";
+import { RequiredDocsList, useRequiredDocs } from "@/components/required-docs";
 
 const POLL_MS = 60_000;
 
@@ -34,8 +38,14 @@ export function UnderReviewGate({ partnerId }: { partnerId: string }) {
     };
   }, [partnerId]);
 
+  const docs = useRequiredDocs();
+  const docsMissing = docs.missingMandatory.length;
+  const [docsOpen, setDocsOpen] = useState(false);
+
   // Phones get the 9:16 cut of the explainer, everything wider the 16:9 one.
   const phone = useMediaQuery("(max-width: 700px)");
+  // Room the card takes besides the video: text, progress bar, missing-docs strip.
+  const reserved = (phone ? 388 : 438) + (docsMissing > 0 ? 62 : 0);
   const video = phone
     ? { src: "/videos/working-with-fixfy-vertical.mp4", poster: "/videos/working-with-fixfy-vertical.jpg", ratio: "9 / 16" }
     : { src: "/videos/working-with-fixfy.mp4", poster: "/videos/working-with-fixfy.jpg", ratio: "16 / 9" };
@@ -148,34 +158,42 @@ export function UnderReviewGate({ partnerId }: { partnerId: string }) {
             While you wait, here&apos;s how working with Fixfy works.
           </p>
 
-          <video
+          {docsMissing > 0 && (
+            <div
+              style={{
+                width: "100%",
+                display: "flex",
+                alignItems: "center",
+                gap: 12,
+                padding: "10px 12px",
+                marginBottom: 12,
+                borderRadius: 12,
+                background: T.coralTint,
+                textAlign: "left",
+              }}
+            >
+              <p style={{ margin: 0, flex: 1, fontSize: 13, lineHeight: 1.4, color: T.coralPress }}>
+                <strong>
+                  {docsMissing} document{docsMissing === 1 ? "" : "s"} still needed.
+                </strong>{" "}
+                We can approve you once they&apos;re in.
+              </p>
+              <Button variant="primary" size="sm" onClick={() => setDocsOpen(true)}>
+                Upload
+              </Button>
+            </div>
+          )}
+
+          <ExplainerVideo
             key={video.src}
             src={video.src}
             poster={video.poster}
-            controls
-            autoPlay
-            muted
-            playsInline
-            preload="metadata"
-            style={
+            ratio={video.ratio}
+            width={
               phone
-                ? {
-                    // Whatever height is left on screen, never wider than the card.
-                    height: "min(calc(100dvh - 370px), calc((100vw - 56px) * 16 / 9))",
-                    width: "auto",
-                    aspectRatio: "9 / 16",
-                    display: "block",
-                    borderRadius: 12,
-                    background: T.navy,
-                  }
-                : {
-                    width: "min(100%, calc((100dvh - 420px) * 16 / 9))",
-                    height: "auto",
-                    aspectRatio: "16 / 9",
-                    display: "block",
-                    borderRadius: 12,
-                    background: T.navy,
-                  }
+                ? // Whatever height is left on screen, never wider than the card.
+                  `min(calc((100dvh - ${reserved}px) * 9 / 16), calc(100vw - 56px))`
+                : `min(100%, calc((100dvh - ${reserved}px) * 16 / 9))`
             }
           />
 
@@ -184,6 +202,56 @@ export function UnderReviewGate({ partnerId }: { partnerId: string }) {
           </p>
         </div>
       </main>
+
+      {docsOpen && (
+        <div
+          onClick={() => setDocsOpen(false)}
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 960,
+            background: "rgba(2,0,64,0.55)",
+            display: "flex",
+            alignItems: phone ? "flex-end" : "center",
+            justifyContent: "center",
+            padding: phone ? 0 : 24,
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: "min(600px, 100%)",
+              maxHeight: phone ? "88dvh" : "85dvh",
+              background: T.white,
+              borderRadius: phone ? "20px 20px 0 0" : 20,
+              display: "flex",
+              flexDirection: "column",
+              overflow: "hidden",
+            }}
+          >
+            <div style={{ padding: "18px 20px 6px" }}>
+              <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: T.navy }}>Your documents</h3>
+              <p style={{ margin: "6px 0 0", fontSize: 13, color: T.slate, lineHeight: 1.45 }}>
+                PDF or photo, up to 10 MB each.{" "}
+                {docsMissing > 0 ? `${docsMissing} still needed.` : "All in. Thanks!"}
+              </p>
+            </div>
+            <div style={{ padding: "14px 20px 4px", overflowY: "auto", textAlign: "left" }}>
+              <RequiredDocsList
+                required={docs.required}
+                loadError={docs.loadError}
+                uploaded={docs.uploaded}
+                onUploaded={docs.markUploaded}
+              />
+            </div>
+            <div style={{ padding: "12px 20px 18px", borderTop: `1px solid ${T.line}` }}>
+              <Button variant="primary" size="lg" full onClick={() => setDocsOpen(false)}>
+                Done
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <footer
         style={{

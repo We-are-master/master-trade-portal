@@ -126,7 +126,6 @@ export type GetStartedStepId =
   /** Rate card: our standard pay per service, or the partner's own. Right after their details. */
   | "rates"
   | "business"
-  | "account"
   | "coverage"
   /** Own tools + able to supply materials: both essential, asked after the service area. */
   | "equipment"
@@ -141,7 +140,7 @@ export const GET_STARTED_STEP_DEFS: { id: GetStartedStepId; ruleIds: string[] }[
   { id: "lead", ruleIds: ["account", "phone", "address"] },
   { id: "rates", ruleIds: ["rate_card"] },
   { id: "business", ruleIds: ["legal_type", "tax_id", "vat"] },
-  { id: "account", ruleIds: ["account"] },
+  // No account step: leaving `business` creates the login without an email code.
   { id: "coverage", ruleIds: ["coverage"] },
   // Always asked, so it rides on the locked `account` rule like getting_ready.
   { id: "equipment", ruleIds: ["account"] },

@@ -1,25 +1,27 @@
 "use client";
 
 // Partner acquisition funnel — collects everything the OS marks mandatory before staff review:
-//   0. Trades (service_catalog)
-//   1. Contact details (name, email, phone) — saved progressively to OS
-//   2. Business type + tax
-//   3. Business address
-//   4. Account + OTP
+//   1. Trades (service_catalog)
+//   2. Contact details + address — saved progressively to OS as a draft
+//   3. Rates
+//   4. Business type + tax. Continue creates the login and signs in, no email
+//      code (only an email that already has a login is asked for the code)
 //   5. Service area (postcode + radius)
-//   6. Documents
-//   7. Agreements (e-sign)
+//   6. Tools & materials
+//   7. Documents (can be skipped and uploaded from the review screen)
+//   8. Agreements (e-sign)
 
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { useSearchParams } from "next/navigation";
 import { T } from "@/lib/tokens";
 import { Button, Icon, Modal } from "@/components/ui/primitives";
-import { DEFAULT_PLAN_ID, getPlan, PARTNERS_LP_URL } from "@/lib/plan-catalog";
+import { DEFAULT_PLAN_ID, PARTNERS_LP_URL } from "@/lib/plan-catalog";
 import { serviceCategory, type ServiceCategory } from "@/lib/service-category";
 import { createClient } from "@/lib/supabase/client";
 import { fetchContracts, type PartnerContract } from "@/lib/queries/contracts";
 import { COMPLIANCE_CONTRACT_TYPES } from "@/lib/partner-funnel-complete";
 import { PARTNER_CONTRACT_TITLES } from "@/lib/partner-contract-types";
+import type { ExistingAccountKind } from "@/lib/partner-onboarding-draft";
 import {
   filterGetStartedSteps,
   isPartnerRegistrationFieldMandatory,
@@ -31,25 +33,11 @@ import { MarketingConsent } from "@/components/consent/marketing-consent";
 import { rememberClickId, trackOnce } from "@/lib/meta-pixel";
 import { GetStartedAddressAutocomplete } from "@/components/get-started/address-autocomplete";
 import { RateCardEditor } from "@/components/rate-card-editor";
+import { ONBOARDING_DRAFT_STORAGE_KEY, RequiredDocsList, useRequiredDocs } from "@/components/required-docs";
 import type { ServicePrice } from "@/lib/queries/rate-card";
 
 type CatalogTrade = { id: string; name: string; category?: ServiceCategory };
 type LegalType = "self_employed" | "limited_company";
-
-type RequiredDoc = {
-  id: string;
-  docType: string;
-  name: string;
-  description: string;
-  group: "core" | "legal" | "trade_cert";
-  mandatory?: boolean;
-};
-
-const GROUP_LABELS: Record<RequiredDoc["group"], string> = {
-  core: "Identity & compliance",
-  legal: "Business proof",
-  trade_cert: "Trade certificates",
-};
 
 export default function GetStartedPage() {
   // First-party visit tracking (one hit per browser session) for the Master OS
@@ -83,8 +71,10 @@ export default function GetStartedPage() {
   );
 }
 
-const DRAFT_STORAGE_KEY = "fixfy_onboarding_draft_code";
+const DRAFT_STORAGE_KEY = ONBOARDING_DRAFT_STORAGE_KEY;
 const DRAFT_STEP_STORAGE_KEY = "fixfy_onboarding_step_id";
+/** Steps before the login exists. Everything after them needs the session. */
+const PRE_ACCOUNT_STEP_IDS = new Set<GetStartedStepId>(["trades", "lead", "rates", "business"]);
 
 function GetStartedFunnel() {
   const sp = useSearchParams();
@@ -129,6 +119,8 @@ function GetStartedFunnel() {
   /** Fix a mistyped email from the account step without going back to step 2. */
   const [emailFix, setEmailFix] = useState<{ value: string; error: string | null; busy: boolean } | null>(null);
   const [devCode, setDevCode] = useState<string | null>(null);
+  /** Email that already belongs to an active partner: offer sign in instead of a second profile. */
+  const [accountExistsEmail, setAccountExistsEmail] = useState<string | null>(null);
   /** When the email already belongs to a partner and they can pick up where they stopped. */
   const [resumeKind, setResumeKind] = useState<"onboarding" | "reactivate" | null>(null);
 
@@ -151,7 +143,7 @@ function GetStartedFunnel() {
   const { fields: registrationFields, loading: configLoading } = useRegistrationConfig({ public: true });
   const activeSteps = useMemo(() => filterGetStartedSteps(registrationFields), [registrationFields]);
   const totalSteps = Math.max(activeSteps.length, 1);
-  const currentStepId: GetStartedStepId = activeSteps[step] ?? activeSteps[0] ?? "account";
+  const currentStepId: GetStartedStepId = activeSteps[step] ?? activeSteps[0] ?? "trades";
 
   // Trades and Cleaning are different lines of work, and a single alphabetical
   // list put "After Builders Clean" above "Builder". Same order within each
@@ -170,17 +162,12 @@ function GetStartedFunnel() {
 
   // Once we know which steps are active, restore the last-visited step from
   // localStorage — but only for steps that are safe to hit WITHOUT an
-  // authenticated session. Any step at or past `account` requires OTP-backed
-  // auth cookies which a returning tab may not have; landing there straight
-  // from a refresh causes "Not signed in" errors on save-and-continue. When
-  // that happens we start them at the account step so they naturally
-  // re-verify (the resume flow re-sends an OTP for existing partners) and
-  // then walk through coverage / documents / agreements with a fresh
-  // session.
-  const SAFE_RESTORE_STEP_IDS = useMemo(
-    () => new Set<GetStartedStepId>(["trades", "lead", "rates", "business"]),
-    [],
-  );
+  // authenticated session. Every step after `business` needs the login's
+  // cookies, which a returning tab may not have; landing there straight from
+  // a refresh causes "Not signed in" errors on save-and-continue. Those start
+  // over, and leaving `business` signs them back in (same browser) or asks
+  // for the code (the email already has a login).
+  const SAFE_RESTORE_STEP_IDS = PRE_ACCOUNT_STEP_IDS;
   const stepRestoredRef = useRef(false);
   useEffect(() => {
     if (stepRestoredRef.current) return;
@@ -338,8 +325,6 @@ function GetStartedFunnel() {
     };
   }, [tradePrefillNames]);
 
-  const plan = getPlan(DEFAULT_PLAN_ID);
-
   useEffect(() => {
     if (step >= activeSteps.length && activeSteps.length > 0) {
       setStep(activeSteps.length - 1);
@@ -421,8 +406,17 @@ function GetStartedFunnel() {
             coverageRadius: coverageRadius,
           }),
         });
-        const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string; draftCode?: string };
-        if (!res.ok || !data.ok) throw new Error(data.error || "Couldn't save your progress.");
+        const data = (await res.json().catch(() => ({}))) as {
+          ok?: boolean;
+          error?: string;
+          draftCode?: string;
+          accountExists?: ExistingAccountKind;
+        };
+        if (!res.ok || !data.ok) {
+          throw Object.assign(new Error(data.error || "Couldn't save your progress."), {
+            accountExists: data.accountExists,
+          });
+        }
         if (data.draftCode && data.draftCode !== draftCode) {
           draftCodeRef.current = data.draftCode;
           setDraftCode(data.draftCode);
@@ -553,11 +547,10 @@ function GetStartedFunnel() {
   };
 
   const regLabel = legalType === "limited_company" ? "Company number (CRN)" : "UTR (Unique Taxpayer Reference)";
-  const detailsValid = leadValid;
 
   const goBack = () => {
     setError(null);
-    if (currentStepId === "account" && accountPhase === "code") {
+    if (accountPhase === "code") {
       setAccountPhase("details");
       return;
     }
@@ -599,15 +592,51 @@ function GetStartedFunnel() {
     if (!profRes.ok || !prof.ok) throw new Error(prof.error || "Couldn't save your details.");
   };
 
-  const createAccount = async (emailOverride?: string) => {
+  // Signed in (new account, code verified, or already signed in on this
+  // browser): save the profile and carry on at the first step that needs the
+  // login. A resumed partner already has a profile on file, so we skip
+  // saveProfile (which would blank out fields they haven't re-entered).
+  const enterAccount = async (resumed: boolean) => {
+    if (!resumed) {
+      try {
+        await saveProfile();
+      } catch (e) {
+        // Cookie not seen yet on the very next request (rare race in dev when
+        // Turbopack reloads): the session IS set, later saves pick it up.
+        if ((e as { status?: number })?.status !== 401) throw e;
+      }
+    }
+    setResumeKind(null);
+    setAccountPhase("details");
+    setOtp("");
+    setDevCode(null);
+    const next = activeSteps.findIndex((id) => !PRE_ACCOUNT_STEP_IDS.has(id));
+    setStep(next >= 0 ? next : activeSteps.length - 1);
+  };
+
+  // Creates the login when leaving the business step (or picks an existing
+  // one back up) and signs in straight away, no email code. The code screen
+  // only shows if the server couldn't sign in, so nobody gets stuck.
+  const createAccount = async (emailOverride?: string, opts?: { resuming?: boolean }) => {
     setError(null);
     setBusy(true);
     try {
+      const target = (emailOverride ?? email).trim();
+      // Came back to the funnel on the same browser, still signed in as this
+      // email: nothing to create. (Resumes go to the server, which reactivates
+      // an inactive partner.)
+      if (!opts?.resuming) {
+        const { data: sessionData } = await createClient().auth.getSession();
+        if (sessionData.session?.user?.email?.toLowerCase() === target.toLowerCase()) {
+          await enterAccount(false);
+          return;
+        }
+      }
       const res = await fetch("/api/auth/signup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          email: (emailOverride ?? email).trim(),
+          email: target,
           fullName: fullName.trim(),
           company: company.trim(),
           plan: DEFAULT_PLAN_ID,
@@ -619,8 +648,13 @@ function GetStartedFunnel() {
         error?: string;
         devCode?: string;
         resume?: "onboarding" | "reactivate";
+        signedIn?: boolean;
       };
       if (!res.ok || !data.ok) throw new Error(data.error || "Couldn't create your account.");
+      if (data.signedIn) {
+        await enterAccount(Boolean(opts?.resuming || data.resume));
+        return;
+      }
       setDevCode(data.devCode ?? null);
       if (data.devCode) setOtp(data.devCode);
       setResumeKind(data.resume ?? null);
@@ -650,8 +684,15 @@ function GetStartedFunnel() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ draftCode: code || undefined, inviteCode: inviteCode || undefined, email: next }),
         });
-        const d = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
-        if (!res.ok || !d.ok) throw new Error(d.error || "Couldn't update your email.");
+        const d = (await res.json().catch(() => ({}))) as {
+          ok?: boolean;
+          error?: string;
+          accountExists?: ExistingAccountKind;
+        };
+        // An active account can't be taken over from here; onboarding / inactive
+        // ones go through the signup resume below, which asks for the code.
+        if (d.accountExists === "active") throw new Error(d.error || "This email already has a Fixfy account.");
+        if ((!res.ok || !d.ok) && !d.accountExists) throw new Error(d.error || "Couldn't update your email.");
       }
       setEmail(next);
       setOtp("");
@@ -675,24 +716,7 @@ function GetStartedFunnel() {
       });
       const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
       if (!res.ok || !data.ok) throw new Error(data.error || "That code didn't work.");
-
-      // Resume flow: the partner already has profile data on file, so we skip
-      // saveProfile (which would blank out empty fields the user hasn't
-      // re-entered) and jump straight to the next step.
-      if (!resumeKind) {
-        try {
-          await saveProfile();
-        } catch (e) {
-          // If the auth cookie is missing right after verifyOtp (rare race
-          // in dev when Turbopack reloads), don't abandon the user — the
-          // session cookie IS set by now, next click will pick it up.
-          if ((e as { status?: number })?.status !== 401) throw e;
-        }
-      }
-      // Clear the resume marker so subsequent bounces don't loop back to the
-      // welcome copy after a successful verify.
-      setResumeKind(null);
-      goNext();
+      await enterAccount(Boolean(resumeKind));
     } catch (e) {
       setError(e instanceof Error ? e.message : "That code didn't work.");
     } finally {
@@ -734,7 +758,25 @@ function GetStartedFunnel() {
     }
   };
 
+  // The email already has a login. Nothing was saved on the draft side; the
+  // signup route knows this partner and sends the code to pick up where they
+  // stopped (onboarding / inactive). Active partners just sign in.
+  const resumeExistingAccount = async (e: unknown): Promise<boolean> => {
+    const kind = (e as { accountExists?: ExistingAccountKind } | null)?.accountExists;
+    if (!kind) return false;
+    if (kind === "active") {
+      setAccountExistsEmail(email.trim().toLowerCase());
+      return true;
+    }
+    await createAccount(undefined, { resuming: true });
+    return true;
+  };
+
   const onPrimary = () => {
+    if (accountPhase === "code") {
+      if (otp.trim().length === 6) void verifyAndContinue();
+      return;
+    }
     if (currentStepId === "trades") {
       if (enabledIds.size === 0 || !primaryId) return;
       if (inviteCode) {
@@ -755,7 +797,10 @@ function GetStartedFunnel() {
           trackOnce("Lead");
           goNext();
         })
-        .catch((e) => setError(e instanceof Error ? e.message : "Couldn't save your details."))
+        .catch(async (e) => {
+          if (await resumeExistingAccount(e)) return;
+          setError(e instanceof Error ? e.message : "Couldn't save your details.");
+        })
         .finally(() => setBusy(false));
     } else if (currentStepId === "rates") {
       setBusy(true);
@@ -770,18 +815,16 @@ function GetStartedFunnel() {
         if (isPartnerRegistrationFieldMandatory("vat", registrationFields) && vatRegistered === null) return;
         if (vatRegistered === true && !vatNumber.trim()) return;
       }
-      // Last step before the account: make sure everything so far is on the draft.
+      // Last step before the account: make sure everything so far is on the
+      // draft, then create the login.
       setBusy(true);
       void saveDraft({ requireEmail: true })
-        .then(() => goNext())
-        .catch((e) => setError(e instanceof Error ? e.message : "Couldn't save your details."))
+        .then(() => createAccount())
+        .catch(async (e) => {
+          if (await resumeExistingAccount(e)) return;
+          setError(e instanceof Error ? e.message : "Couldn't save your details.");
+        })
         .finally(() => setBusy(false));
-    } else if (currentStepId === "account") {
-      if (accountPhase === "details") {
-        if (detailsValid) void createAccount();
-      } else if (otp.trim().length === 6) {
-        void verifyAndContinue();
-      }
     } else if (currentStepId === "equipment") {
       if (hasOwnTools !== true || canSupplyMaterials !== true) return;
       void saveEquipmentAndContinue();
@@ -792,11 +835,11 @@ function GetStartedFunnel() {
   };
 
   const primaryLabel = (() => {
+    if (accountPhase === "code") return "Verify & continue";
     if (currentStepId === "trades") return "Continue";
     if (currentStepId === "lead") return "Continue";
     if (currentStepId === "rates") return "Continue";
     if (currentStepId === "business") return "Continue";
-    if (currentStepId === "account") return accountPhase === "details" ? "Send my code" : "Verify & continue";
     if (currentStepId === "coverage") return "Continue";
     if (currentStepId === "equipment") return "Continue";
     return "";
@@ -804,6 +847,7 @@ function GetStartedFunnel() {
 
   const primaryDisabled = (() => {
     if (busy || configLoading) return true;
+    if (accountPhase === "code") return otp.trim().length !== 6;
     if (currentStepId === "trades") return enabledIds.size === 0 || !primaryId || catalogLoading;
     if (currentStepId === "lead") return !leadValid;
     if (currentStepId === "rates") return ratesLoading || !!ratesError;
@@ -816,7 +860,6 @@ function GetStartedFunnel() {
       }
       return false;
     }
-    if (currentStepId === "account") return accountPhase === "details" ? !detailsValid : otp.trim().length !== 6;
     if (currentStepId === "equipment") return hasOwnTools !== true || canSupplyMaterials !== true;
     if (currentStepId === "coverage") {
       return isPartnerRegistrationFieldMandatory("coverage", registrationFields) && !coveragePostcode.trim();
@@ -824,10 +867,12 @@ function GetStartedFunnel() {
     return false;
   })();
 
-  const showFooter =
-    currentStepId !== "documents" &&
-    currentStepId !== "agreements" &&
-    currentStepId !== "getting_ready";
+  // The code screen (an email that already has a login) sits over whatever
+  // step asked for it.
+  const view: GetStartedStepId | "code" = accountPhase === "code" ? "code" : currentStepId;
+  const stepEyebrow = (label: string) => `Step ${step + 1} · ${label}`;
+
+  const showFooter = view !== "documents" && view !== "agreements" && view !== "getting_ready";
 
   return (
     <div
@@ -899,9 +944,9 @@ function GetStartedFunnel() {
         <div style={{ width: "100%", maxWidth: 760, textAlign: "center" }}>
           <StepDots step={step} total={totalSteps} />
 
-          {currentStepId === "trades" && (
+          {view === "trades" && (
             <StepShell
-              eyebrow="Step 1 · What you cover"
+              eyebrow={stepEyebrow("What you cover")}
               title="What work do you do?"
               subtitle="Pick the trades you offer from our platform catalogue. Choose one as your primary trade."
               status={`${enabledIds.size} trade${enabledIds.size === 1 ? "" : "s"} selected`}
@@ -1005,9 +1050,9 @@ function GetStartedFunnel() {
             </StepShell>
           )}
 
-          {currentStepId === "lead" && (
+          {view === "lead" && (
             <StepShell
-              eyebrow="Step 2 · Your details"
+              eyebrow={stepEyebrow("Your details")}
               title="Your details"
               subtitle="Name, email, phone and business address. The basics to get you set up."
             >
@@ -1035,13 +1080,26 @@ function GetStartedFunnel() {
                     />
                   </LightField>
                 )}
+                {accountExistsEmail && accountExistsEmail === email.trim().toLowerCase() && (
+                  <div style={{ padding: 14, borderRadius: 12, background: T.paper, border: `1px solid ${T.line}`, display: "grid", gap: 8 }}>
+                    <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: T.ink }}>You already have a Fixfy account</p>
+                    <p style={{ margin: 0, fontSize: 13, color: T.slate, lineHeight: 1.5 }}>
+                      {accountExistsEmail} is already signed up. Sign in to see your jobs, or use a different email for a new profile.
+                    </p>
+                    <div>
+                      <Button variant="primary" onClick={() => (window.location.href = `/login?email=${encodeURIComponent(accountExistsEmail)}`)}>
+                        Sign in
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </div>
             </StepShell>
           )}
 
-          {currentStepId === "rates" && (
+          {view === "rates" && (
             <StepShell
-              eyebrow="Step 3 · Your rates"
+              eyebrow={stepEyebrow("Your rates")}
               title="What you get paid"
               subtitle="Fixed pay per job, you see the amount before you accept. Keep our standard rates or set your own for each size, time and add-on."
             >
@@ -1059,9 +1117,9 @@ function GetStartedFunnel() {
             </StepShell>
           )}
 
-          {currentStepId === "business" && (
+          {view === "business" && (
             <StepShell
-              eyebrow="Step 4 · Your business"
+              eyebrow={stepEyebrow("Your business")}
               title="How do you trade?"
               subtitle="This sets which tax and compliance documents you'll need."
             >
@@ -1113,85 +1171,48 @@ function GetStartedFunnel() {
             </StepShell>
           )}
 
-          {currentStepId === "account" && (
+          {view === "code" && (
             <StepShell
               eyebrow={
                 resumeKind === "reactivate"
-                  ? "Step 5 · Welcome back"
+                  ? "Welcome back"
                   : resumeKind === "onboarding"
-                    ? "Step 5 · Continue where you stopped"
-                    : "Step 5 · Create your account"
+                    ? "Continue where you stopped"
+                    : "Confirm your email"
               }
-              title={
-                accountPhase === "details"
-                  ? "Verify your email"
-                  : resumeKind
-                    ? "Check your email to continue"
-                    : "Check your email"
-              }
+              title={resumeKind ? "Check your email to continue" : "Check your email"}
               subtitle={
-                accountPhase === "details"
-                  ? `We'll send a 6-digit code to ${email || "your email"} so you can continue. 7 days free on ${plan.name} — no card needed today.`
-                  : resumeKind === "reactivate"
-                    ? `Your account was set inactive. Enter the 6-digit code we just sent to ${email} — we'll reactivate you and pick up onboarding.`
-                    : resumeKind === "onboarding"
-                      ? `We already have your onboarding on file. Enter the 6-digit code we just sent to ${email} — you'll skip straight to what's missing.`
-                      : `We sent a 6-digit code to ${email}. Enter it to continue.`
+                resumeKind === "reactivate"
+                  ? `Your account was set inactive. Enter the 6-digit code we just sent to ${email}. We'll reactivate you and pick up onboarding.`
+                  : resumeKind === "onboarding"
+                    ? `We already have your onboarding on file. Enter the 6-digit code we just sent to ${email} and you'll skip straight to what's missing.`
+                    : `We sent a 6-digit code to ${email}. Enter it to continue.`
               }
             >
               <div style={{ maxWidth: 380, margin: "6px auto 0", textAlign: "left" }}>
-                {accountPhase === "details" ? (
-                  <div style={{ display: "grid", gap: 12 }}>
-                    <div
-                      style={{
-                        padding: "14px 16px",
-                        borderRadius: 12,
-                        border: `1px solid ${T.line}`,
-                        background: T.white,
-                        textAlign: "left",
-                      }}
-                    >
-                      <p style={{ margin: 0, fontSize: 13, color: T.mute }}>Signing up as</p>
-                      <p style={{ margin: "6px 0 0", fontSize: 15, fontWeight: 600, color: T.ink }}>{fullName || "—"}</p>
-                      <p style={{ margin: "4px 0 0", fontSize: 13, color: T.slate }}>{company || "—"}</p>
-                      <p style={{ margin: "4px 0 0", fontSize: 13, color: T.slate, display: "flex", alignItems: "center", gap: 8 }}>
-                        <span style={{ minWidth: 0, overflowWrap: "anywhere" }}>{email || "—"}</span>
-                        <button
-                          type="button"
-                          onClick={() => setEmailFix({ value: email, error: null, busy: false })}
-                          style={{ background: "transparent", border: "none", padding: 0, color: T.coral, fontFamily: T.sans, fontSize: 13, fontWeight: 600, cursor: "pointer" }}
-                        >
-                          Change
-                        </button>
-                      </p>
-                      {phone.trim() ? <p style={{ margin: "4px 0 0", fontSize: 13, color: T.slate }}>{phone}</p> : null}
-                    </div>
-                  </div>
-                ) : (
-                  <div style={{ display: "grid", gap: 12 }}>
-                    <LightField label="6-digit code">
-                      <LightInput
-                        value={otp}
-                        onChange={(v) => setOtp(v.replace(/\D/g, "").slice(0, 6))}
-                        placeholder="000000"
-                        autoFocus
-                        style={{ letterSpacing: "0.4em", fontSize: 20, textAlign: "center", fontFamily: T.mono }}
-                      />
-                    </LightField>
-                    {devCode && (
-                      <p style={{ fontSize: 12, color: T.mute }}>
-                        Dev code: <span style={{ fontFamily: T.mono, color: T.coral }}>{devCode}</span>
-                      </p>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => setEmailFix({ value: email, error: null, busy: false })}
-                      style={{ background: "transparent", border: "none", color: T.slate, fontFamily: T.sans, fontSize: 13, cursor: "pointer", textAlign: "left", padding: 0 }}
-                    >
-                      Wrong email? <span style={{ color: T.coral, fontWeight: 600 }}>Change it</span>
-                    </button>
-                  </div>
-                )}
+                <div style={{ display: "grid", gap: 12 }}>
+                  <LightField label="6-digit code">
+                    <LightInput
+                      value={otp}
+                      onChange={(v) => setOtp(v.replace(/\D/g, "").slice(0, 6))}
+                      placeholder="000000"
+                      autoFocus
+                      style={{ letterSpacing: "0.4em", fontSize: 20, textAlign: "center", fontFamily: T.mono }}
+                    />
+                  </LightField>
+                  {devCode && (
+                    <p style={{ fontSize: 12, color: T.mute }}>
+                      Dev code: <span style={{ fontFamily: T.mono, color: T.coral }}>{devCode}</span>
+                    </p>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setEmailFix({ value: email, error: null, busy: false })}
+                    style={{ background: "transparent", border: "none", color: T.slate, fontFamily: T.sans, fontSize: 13, cursor: "pointer", textAlign: "left", padding: 0 }}
+                  >
+                    Wrong email? <span style={{ color: T.coral, fontWeight: 600 }}>Change it</span>
+                  </button>
+                </div>
               </div>
             </StepShell>
           )}
@@ -1200,7 +1221,7 @@ function GetStartedFunnel() {
             <Modal title="Change your email" width={420} onClose={() => !emailFix.busy && setEmailFix(null)}>
               <div style={{ padding: 20, display: "grid", gap: 12, textAlign: "left" }}>
                 <p style={{ margin: 0, fontSize: 13.5, color: T.slate, lineHeight: 1.5 }}>
-                  We&apos;ll send a new 6-digit code to this address. Everything else you filled in stays as it is.
+                  Use this address instead. Everything else you filled in stays as it is.
                 </p>
                 <LightField label="Email">
                   <LightInput
@@ -1217,16 +1238,16 @@ function GetStartedFunnel() {
                     Cancel
                   </Button>
                   <Button variant="primary" onClick={() => void applyEmailFix()} disabled={emailFix.busy}>
-                    {emailFix.busy ? "Sending…" : "Send code"}
+                    {emailFix.busy ? "Saving…" : "Use this email"}
                   </Button>
                 </div>
               </div>
             </Modal>
           )}
 
-          {currentStepId === "coverage" && (
+          {view === "coverage" && (
             <StepShell
-              eyebrow="Step 6 · Service area"
+              eyebrow={stepEyebrow("Service area")}
               title="Where do you work?"
               subtitle="Set your base postcode and how far you're willing to travel for jobs."
             >
@@ -1252,9 +1273,9 @@ function GetStartedFunnel() {
             </StepShell>
           )}
 
-          {currentStepId === "equipment" && (
+          {view === "equipment" && (
             <StepShell
-              eyebrow="Step 7 · Tools & materials"
+              eyebrow={stepEyebrow("Tools & materials")}
               title="Ready for the job?"
               subtitle="Every Fixfy partner turns up with their own kit and can pick up what the job needs."
             >
@@ -1280,11 +1301,12 @@ function GetStartedFunnel() {
             </StepShell>
           )}
 
-          {currentStepId === "documents" && (
-            <DocumentsStep mandatory={documentsMandatory} onContinue={goNext} />
+          {view === "documents" && (
+            <DocumentsStep eyebrow={stepEyebrow("Your documents")} mandatory={documentsMandatory} onContinue={goNext} />
           )}
-          {currentStepId === "agreements" && (
+          {view === "agreements" && (
             <AgreementsStep
+              eyebrow={stepEyebrow("Agreements")}
               mandatory={agreementsMandatory}
               signerDefault={fullName.trim()}
               onFinish={() => {
@@ -1297,7 +1319,7 @@ function GetStartedFunnel() {
               }}
             />
           )}
-          {currentStepId === "getting_ready" && (
+          {view === "getting_ready" && (
             <GettingReadyStep
               onDone={() => {
                 if (typeof window !== "undefined") {
@@ -1323,7 +1345,7 @@ function GetStartedFunnel() {
       {showFooter && (
         <footer style={FOOTER_STYLE}>
           <div style={{ display: "flex", alignItems: "center", gap: 12, width: "100%", maxWidth: 420 }}>
-            {(step > 0 || (currentStepId === "account" && accountPhase === "code")) && (
+            {(step > 0 || accountPhase === "code") && (
               <Button variant="secondary" size="lg" onClick={goBack} icon="arrow-left" disabled={busy}>
                 Back
               </Button>
@@ -1352,61 +1374,23 @@ const FOOTER_STYLE: CSSProperties = {
   backdropFilter: "blur(12px)",
 };
 
-function DocumentsStep({ mandatory, onContinue }: { mandatory: boolean; onContinue: () => void }) {
-  const [required, setRequired] = useState<RequiredDoc[] | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [uploaded, setUploaded] = useState<Record<string, { docId: string; fileName: string }>>({});
+function DocumentsStep({ eyebrow, mandatory, onContinue }: { eyebrow: string; mandatory: boolean; onContinue: () => void }) {
+  const { required, loadError, uploaded, markUploaded, missingMandatory } = useRequiredDocs();
 
-  useEffect(() => {
-    let alive = true;
-    void (async () => {
-      try {
-        // Prefer the OTP session; if the cookie hasn't stuck, fall back to
-        // the wizard's draft code so we still get the correct checklist.
-        const draftCode =
-          typeof window !== "undefined"
-            ? window.localStorage.getItem(DRAFT_STORAGE_KEY)?.trim() ?? ""
-            : "";
-        const url = draftCode
-          ? `/api/partner/required-docs?code=${encodeURIComponent(draftCode)}`
-          : "/api/partner/required-docs";
-        const res = await fetch(url, { credentials: "same-origin" });
-        const data = (await res.json().catch(() => ({}))) as { required?: RequiredDoc[]; error?: string };
-        if (!res.ok) throw new Error(data.error || "Couldn't load your document checklist.");
-        if (alive) setRequired(data.required ?? []);
-      } catch (e) {
-        if (alive) setLoadError(e instanceof Error ? e.message : "Couldn't load your document checklist.");
-      }
-    })();
-    return () => {
-      alive = false;
-    };
-  }, []);
-
-  const groups = useMemo(() => {
-    const order: RequiredDoc["group"][] = ["core", "legal", "trade_cert"];
-    const by: Record<string, RequiredDoc[]> = {};
-    for (const r of required ?? []) (by[r.group] ??= []).push(r);
-    return order.filter((g) => by[g]?.length).map((g) => ({ group: g, docs: by[g] }));
-  }, [required]);
-
-  const mandatoryDocs = useMemo(() => (required ?? []).filter((d) => d.mandatory !== false), [required]);
-  const total = mandatory ? mandatoryDocs.length : (required?.length ?? 0);
-  const done = mandatory
-    ? mandatoryDocs.filter((d) => uploaded[d.id]).length
-    : Object.keys(uploaded).length;
-  const allDone = mandatory ? (total === 0 || done >= total) : true;
+  const total = mandatory ? (required ?? []).filter((d) => d.mandatory !== false).length : (required?.length ?? 0);
+  const done = mandatory ? total - missingMandatory.length : Object.keys(uploaded).length;
+  const allDone = mandatory ? total === 0 || missingMandatory.length === 0 : true;
 
   return (
     <>
       <div style={{ fontFamily: T.mono, fontSize: 12.5, letterSpacing: "0.16em", textTransform: "uppercase", color: T.coralPress, marginBottom: 14, display: "inline-flex", alignItems: "center", gap: 7 }}>
         <span style={{ width: 6, height: 6, borderRadius: 9999, background: T.coral }} />
-        Step 8 · Your documents
+        {eyebrow}
       </div>
       <h1 style={{ fontSize: 40, fontWeight: 600, letterSpacing: "-0.03em", margin: "0 0 12px", color: T.navy }}>Upload what&apos;s required</h1>
       <p style={{ fontSize: 16, color: T.slate, maxWidth: 460, margin: "0 auto", lineHeight: 1.5 }}>
         {mandatory
-          ? "These are mandatory before Fixfy can approve your account. PDF or image, up to 10 MB each."
+          ? "We need these before we can approve your account. PDF or photo, up to 10 MB each. Not got them to hand? Skip for now and upload them while we review."
           : "Upload any documents you'd like us to review. You can add more later in Settings."}
       </p>
       {total > 0 && (
@@ -1416,31 +1400,18 @@ function DocumentsStep({ mandatory, onContinue }: { mandatory: boolean; onContin
       )}
 
       <div style={{ marginTop: 26, textAlign: "left", maxWidth: 560, marginInline: "auto" }}>
-        {loadError && <p style={{ color: T.red, fontSize: 14 }}>{loadError}</p>}
-        {!required && !loadError && <p style={{ color: T.mute, fontSize: 14, textAlign: "center" }}>Loading your checklist…</p>}
-        {groups.map(({ group, docs }) => (
-          <div key={group} style={{ marginBottom: 22 }}>
-            <div style={{ fontFamily: T.mono, fontSize: 11, fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.1em", color: T.mute, marginBottom: 10 }}>
-              {GROUP_LABELS[group]}
-            </div>
-            <div style={{ display: "grid", gap: 10 }}>
-              {docs.map((doc) => (
-                <DocUploadRow
-                  key={doc.id}
-                  doc={doc}
-                  uploaded={uploaded[doc.id]}
-                  onUploaded={(docId, fileName) => setUploaded((prev) => ({ ...prev, [doc.id]: { docId, fileName } }))}
-                />
-              ))}
-            </div>
-          </div>
-        ))}
+        <RequiredDocsList required={required} loadError={loadError} uploaded={uploaded} onUploaded={markUploaded} />
       </div>
 
       <div style={FOOTER_STYLE}>
-        <div style={{ width: "100%", maxWidth: 420 }}>
-          <Button variant="primary" size="lg" full onClick={onContinue} disabled={mandatory && !allDone} iconRight="arrow-right">
-            {allDone ? "Continue to agreements" : mandatory ? `Upload all documents (${done}/${total || "…"})` : "Continue"}
+        <div style={{ width: "100%", maxWidth: 420, display: "grid", gap: 10 }}>
+          {!allDone && (
+            <Button variant="secondary" size="lg" full onClick={onContinue}>
+              Skip for now
+            </Button>
+          )}
+          <Button variant="primary" size="lg" full onClick={onContinue} disabled={!allDone} iconRight="arrow-right">
+            {allDone ? "Continue to agreements" : `Upload all documents (${done}/${total || "…"})`}
           </Button>
         </div>
       </div>
@@ -1448,7 +1419,17 @@ function DocumentsStep({ mandatory, onContinue }: { mandatory: boolean; onContin
   );
 }
 
-function AgreementsStep({ mandatory, signerDefault, onFinish }: { mandatory: boolean; signerDefault: string; onFinish: () => void }) {
+function AgreementsStep({
+  eyebrow,
+  mandatory,
+  signerDefault,
+  onFinish,
+}: {
+  eyebrow: string;
+  mandatory: boolean;
+  signerDefault: string;
+  onFinish: () => void;
+}) {
   const [contracts, setContracts] = useState<PartnerContract[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -1576,7 +1557,7 @@ function AgreementsStep({ mandatory, signerDefault, onFinish }: { mandatory: boo
     <>
       <div style={{ fontFamily: T.mono, fontSize: 12.5, letterSpacing: "0.16em", textTransform: "uppercase", color: T.coralPress, marginBottom: 14, display: "inline-flex", alignItems: "center", gap: 7 }}>
         <span style={{ width: 6, height: 6, borderRadius: 9999, background: T.coral }} />
-        Step 9 · Agreements
+        {eyebrow}
       </div>
       <h1 style={{ fontSize: 40, fontWeight: 600, letterSpacing: "-0.03em", margin: "0 0 12px", color: T.navy }}>Sign your agreements</h1>
       <p style={{ fontSize: 16, color: T.slate, maxWidth: 460, margin: "0 auto", lineHeight: 1.5 }}>
@@ -1787,105 +1768,6 @@ function AgreementsStep({ mandatory, signerDefault, onFinish }: { mandatory: boo
         </div>
       )}
     </>
-  );
-}
-
-function DocUploadRow({
-  doc,
-  uploaded,
-  onUploaded,
-}: {
-  doc: RequiredDoc;
-  uploaded?: { docId: string; fileName: string };
-  onUploaded: (docId: string, fileName: string) => void;
-}) {
-  const inputRef = useRef<HTMLInputElement | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-
-  const upload = useCallback(
-    async (file: File) => {
-      setErr(null);
-      setBusy(true);
-      try {
-        const form = new FormData();
-        form.set("docType", doc.docType);
-        form.set("name", doc.name);
-        form.set("file", file);
-        // Include the draft code so uploads work even when the OTP session
-        // cookie hasn't been received yet by the server route handler.
-        const draftCode =
-          typeof window !== "undefined"
-            ? window.localStorage.getItem(DRAFT_STORAGE_KEY)?.trim() ?? ""
-            : "";
-        if (draftCode) form.set("code", draftCode);
-        const res = await fetch("/api/partner/documents", {
-          method: "POST",
-          body: form,
-          credentials: "same-origin",
-        });
-        const data = (await res.json().catch(() => ({}))) as { ok?: boolean; id?: string; error?: string };
-        if (!res.ok || !data.ok) throw new Error(data.error || "Upload failed.");
-        onUploaded(data.id ?? "", file.name);
-      } catch (e) {
-        setErr(e instanceof Error ? e.message : "Upload failed.");
-      } finally {
-        setBusy(false);
-      }
-    },
-    [doc.docType, doc.name, onUploaded],
-  );
-
-  const isDone = Boolean(uploaded);
-  return (
-    <div
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 14,
-        padding: "14px 16px",
-        borderRadius: 13,
-        border: `1px solid ${isDone ? "rgba(14,138,95,0.35)" : T.line}`,
-        background: isDone ? T.green50 : T.white,
-        boxShadow: "0 1px 2px rgba(2,0,64,0.05)",
-      }}
-    >
-      <span
-        style={{
-          width: 40,
-          height: 40,
-          borderRadius: 10,
-          flexShrink: 0,
-          display: "inline-flex",
-          alignItems: "center",
-          justifyContent: "center",
-          background: isDone ? T.white : T.paper,
-          color: isDone ? T.green : T.slate,
-        }}
-      >
-        <Icon name={isDone ? "check" : "file-text"} size={18} />
-      </span>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 14.5, fontWeight: 600, color: T.ink }}>{doc.name}</div>
-        <div style={{ fontSize: 12.5, color: T.mute, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-          {err ? <span style={{ color: T.red }}>{err}</span> : uploaded ? uploaded.fileName : doc.description}
-        </div>
-      </div>
-      <input
-        ref={inputRef}
-        type="file"
-        accept="image/*,application/pdf"
-        style={{ display: "none" }}
-        onChange={(e) => {
-          const f = e.target.files?.[0];
-          if (f) void upload(f);
-          e.target.value = "";
-        }}
-      />
-      <Button variant={isDone ? "secondary" : "primary"} size="sm" onClick={() => inputRef.current?.click()} disabled={busy}>
-        {busy ? "Uploading…" : isDone ? "Replace" : "Upload"}
-      </Button>
-    </div>
   );
 }
 
