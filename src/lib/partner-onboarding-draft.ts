@@ -6,7 +6,7 @@ import {
 } from "@/lib/partner-portal-crypto";
 import { resolvePartnerJoinInvite } from "@/lib/partner-join-invite";
 import { resolvePartnerPortalCredential } from "@/lib/partner-portal-session";
-import { NEW_PORTAL_PARTNER_REASONS } from "@/lib/partner-onboarding-flags";
+import { clearPartnerReason, NEW_PORTAL_PARTNER_REASONS } from "@/lib/partner-onboarding-flags";
 
 export type OnboardingDraftInput = {
   inviteCode?: string;
@@ -28,6 +28,8 @@ export type OnboardingDraftInput = {
   /** Coverage — Step 6. */
   coveragePostcode?: string;
   coverageRadius?: number;
+  /** Continue on the details step: the partner shows in the OS Onboarding tab from here. */
+  leadComplete?: boolean;
 };
 
 export type OnboardingDraftResult = {
@@ -293,6 +295,12 @@ export async function upsertOnboardingDraft(
 
   const { error: updateErr } = await supabase.from("partners").update(update).eq("id", partnerId);
   if (updateErr) throw updateErr;
+
+  // Details done (name, company, email, phone): the office sees them in
+  // Onboarding right away, with the contact info, even if they stop here.
+  if (input.leadComplete && fullName && company && email.includes("@") && phone) {
+    await clearPartnerReason(supabase, partnerId, NEW_PORTAL_PARTNER_REASONS);
+  }
 
   if (!draftCode) {
     draftCode = await insertPortalToken(supabase, partnerId);

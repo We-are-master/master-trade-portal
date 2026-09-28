@@ -370,7 +370,7 @@ function GetStartedFunnel() {
     (!showAddress || !isPartnerRegistrationFieldMandatory("address", registrationFields) || partnerAddress.trim().length > 0);
 
   const saveDraft = useCallback(
-    (opts?: { requireEmail?: boolean }) => {
+    (opts?: { requireEmail?: boolean; leadComplete?: boolean }) => {
       const run = async () => {
         const draftCode = draftCodeRef.current;
         const { names, primaryName, ids } = selectedTradeNames;
@@ -404,6 +404,7 @@ function GetStartedFunnel() {
             vatNumber: vatNumber.trim() || undefined,
             coveragePostcode: coveragePostcode.trim() || undefined,
             coverageRadius: coverageRadius,
+            leadComplete: opts?.leadComplete || undefined,
           }),
         });
         const data = (await res.json().catch(() => ({}))) as {
@@ -791,7 +792,8 @@ function GetStartedFunnel() {
     } else if (currentStepId === "lead") {
       if (!leadValid) return;
       setBusy(true);
-      void saveDraft({ requireEmail: true })
+      // From here the partner shows in the OS Onboarding tab with their contact info.
+      void saveDraft({ requireEmail: true, leadComplete: true })
         .then(() => {
           // Meta: começou o cadastro (só com o sim de cookies).
           trackOnce("Lead");
