@@ -11,6 +11,8 @@ export type ClaimPartnerInviteInput = {
   fullName?: string;
   company?: string;
   plan?: string;
+  /** False when the caller signs the partner in itself (no code email). Default true. */
+  sendCode?: boolean;
 };
 
 export type ClaimPartnerInviteResult = {
@@ -207,6 +209,16 @@ export async function claimPartnerInvite(
   const { createdAuth } = await provisionPartnerAuthUser(admin, partnerId, email, contactName, companyName);
   await admin.from("partners").update({ plan }).eq("id", partnerId);
 
+  if (input.sendCode === false) return { ok: true, partnerId, createdAuth };
+  const { devCode, emailError } = await sendSignInCode(admin, email);
+  return { ok: true, partnerId, createdAuth, devCode, emailError };
+}
+
+/** Emails the 6-digit sign-in code (generateLink itself sends nothing). devCode only outside production. */
+export async function sendSignInCode(
+  admin: AdminClient,
+  email: string,
+): Promise<{ devCode?: string; emailError?: string }> {
   let devCode: string | undefined;
   let emailError: string | undefined;
   const { data: link, error: genErr } = await admin.auth.admin.generateLink({ type: "magiclink", email });
@@ -218,9 +230,10 @@ export async function claimPartnerInvite(
     } catch (e) {
       emailError = e instanceof Error ? e.message : String(e);
     }
+  } else if (genErr) {
+    console.error("[partner-auth-claim] generateLink failed:", genErr);
   }
-
-  return { ok: true, partnerId, createdAuth, devCode, emailError };
+  return { devCode, emailError };
 }
 
 /** Ensure auth.users exists and partners.auth_user_id is set before OTP generateLink. */

@@ -1,5 +1,7 @@
 // GET /api/partner/required-docs
-// Dynamic mandatory-document checklist. Prefers the OTP session, but also
+// Dynamic mandatory-document checklist, each item with the file already on
+// record (`uploaded`) so a partner who skipped the step sees what's still
+// missing. Prefers the session, but also
 // accepts a draft `?code=<shortCode>` fallback so the wizard's documents step
 // still loads a proper checklist during dev races where the auth cookie
 // hasn't stuck yet.
@@ -9,6 +11,8 @@ import { getPartnerSession } from "@/lib/partner-auth";
 import {
   buildPortalRequiredDocumentChecklist,
   mergePartnerDocumentRules,
+  pickRequiredDocMatch,
+  type PartnerDocLike,
   type RequiredDocDef,
 } from "@/lib/partner-required-docs";
 import { tryCreateServiceClient } from "@/lib/supabase/service";
@@ -19,6 +23,7 @@ export const runtime = "nodejs";
 
 export type RequiredDocResponse = Pick<RequiredDocDef, "id" | "docType" | "name" | "description" | "group" | "aliases"> & {
   mandatory: boolean;
+  uploaded: { docId: string; fileName: string } | null;
 };
 
 export async function GET(req: NextRequest) {
@@ -52,11 +57,14 @@ export async function GET(req: NextRequest) {
     });
   }
 
-  const { data: prow } = await svc
-    .from("partners")
-    .select("trades, trade, partner_legal_type, crn")
-    .eq("id", partnerId)
-    .maybeSingle();
+  const [{ data: prow }, { data: docRows }] = await Promise.all([
+    svc.from("partners").select("trades, trade, partner_legal_type, crn").eq("id", partnerId).maybeSingle(),
+    svc
+      .from("partner_documents")
+      .select("id, name, doc_type, status, created_at, file_name")
+      .eq("partner_id", partnerId),
+  ]);
+  const onFile = (docRows ?? []) as (PartnerDocLike & { file_name?: string | null })[];
   const p = prow as {
     trades?: string[] | null;
     trade?: string | null;
@@ -77,6 +85,7 @@ export async function GET(req: NextRequest) {
   const checklist = buildPortalRequiredDocumentChecklist(p, trades, rules);
   const required: RequiredDocResponse[] = checklist.map(({ id, docType, name, description, group, aliases }) => {
     const row = rules.find((r) => r.id === id);
+    const match = pickRequiredDocMatch(onFile, { docType, name, aliases }) as (typeof onFile)[number] | null;
     return {
       id,
       docType,
@@ -85,6 +94,7 @@ export async function GET(req: NextRequest) {
       group,
       aliases,
       mandatory: row ? row.mandatory && row.enabled : true,
+      uploaded: match ? { docId: match.id, fileName: match.file_name || match.name } : null,
     };
   });
 
