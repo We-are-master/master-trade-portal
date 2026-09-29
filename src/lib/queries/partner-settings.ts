@@ -26,6 +26,8 @@ export interface Availability {
   maxJobsPerDay: number;
   lunch: { start: string; end: string };
   emergency247: boolean;
+  /** Folgas por data, "YYYY-MM-DD": nesses dias não chega oferta nem conta na capacidade. */
+  daysOff?: string[];
 }
 
 export interface JobPreferences {
@@ -35,7 +37,12 @@ export interface JobPreferences {
   insuranceOnly: boolean;
   minJobValue: number;
   maxActiveJobs: number;
+  /** Auto-accept: job que bate vira do parceiro na hora. Só vale com o aceite gravado. */
+  autoAccept?: { on: boolean; acceptedAt: string | null; termsVersion: string | null };
 }
+
+/** Versão do texto das regras do auto-accept que o parceiro aceita. */
+export const AUTO_ACCEPT_TERMS_VERSION = "2026-09-29";
 
 export const NOTIFICATION_EVENTS = [
   { key: "new_lead", label: "New lead matched" },

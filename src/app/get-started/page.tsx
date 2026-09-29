@@ -37,7 +37,7 @@ import { emailProblem, phoneProblem, suggestedEmail } from "@/lib/contact-valida
 import { ONBOARDING_DRAFT_STORAGE_KEY, RequiredDocsList, useRequiredDocs } from "@/components/required-docs";
 import type { ServicePrice } from "@/lib/queries/rate-card";
 
-type CatalogTrade = { id: string; name: string; category?: ServiceCategory };
+type CatalogTrade = { id: string; name: string; category?: string };
 type LegalType = "self_employed" | "limited_company";
 
 export default function GetStartedPage() {
@@ -155,13 +155,13 @@ function GetStartedFunnel() {
   // list put "After Builders Clean" above "Builder". Same order within each
   // group — just split, so a plumber is not scanning past cleaning services.
   const catalogGroups = useMemo(() => {
-    const groups: { label: string; items: CatalogTrade[] }[] = [
-      { label: "Trades", items: [] },
-      { label: "Cleaning", items: [] },
-    ];
+    // Grupos pela categoria do OS (304), na ordem que a API manda.
+    const groups: { label: string; items: CatalogTrade[] }[] = [];
     for (const c of catalog) {
-      const category = c.category ?? serviceCategory(c.name);
-      (category === "Cleaning" ? groups[1] : groups[0]).items.push(c);
+      const label = c.category ?? (serviceCategory(c.name) === "Trades" ? "General Maintenance" : serviceCategory(c.name));
+      let g = groups.find((x) => x.label === label);
+      if (!g) groups.push((g = { label, items: [] }));
+      g.items.push(c);
     }
     return groups.filter((g) => g.items.length > 0);
   }, [catalog]);
@@ -544,6 +544,31 @@ function GetStartedFunnel() {
     if (found) setCoveragePostcode(`${found[1]} ${found[2]}`);
   }, [currentStepId, partnerAddress, coveragePostcode]);
 
+  // "When can you work?": dias, horário e máx. de jobs por dia.
+  const [workDays, setWorkDays] = useState<Set<string>>(() => new Set(["mon", "tue", "wed", "thu", "fri"]));
+  const [workStart, setWorkStart] = useState("08:00");
+  const [workEnd, setWorkEnd] = useState("18:00");
+  const [workMax, setWorkMax] = useState(3);
+  const saveAvailabilityAndContinue = async () => {
+    setError(null);
+    setBusy(true);
+    try {
+      const res = await fetch("/api/partner/onboarding-availability", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ days: [...workDays], start: workStart, end: workEnd, maxJobsPerDay: workMax }),
+      });
+      const d = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
+      if (!res.ok || !d.ok) throw new Error(d.error || "Couldn't save your availability.");
+      goNext();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Couldn't save your availability.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const saveEquipmentAndContinue = async () => {
     setError(null);
     setBusy(true);
@@ -857,6 +882,9 @@ function GetStartedFunnel() {
     } else if (currentStepId === "equipment") {
       if (hasOwnTools !== true || canSupplyMaterials !== true) return;
       void saveEquipmentAndContinue();
+    } else if (currentStepId === "availability") {
+      if (workDays.size === 0) return;
+      void saveAvailabilityAndContinue();
     } else if (currentStepId === "coverage") {
       if (!coveragePostcode.trim() && isPartnerRegistrationFieldMandatory("coverage", registrationFields)) return;
       void saveCoverageAndContinue();
@@ -871,6 +899,7 @@ function GetStartedFunnel() {
     if (currentStepId === "business") return "Continue";
     if (currentStepId === "coverage") return "Continue";
     if (currentStepId === "equipment") return "Continue";
+    if (currentStepId === "availability") return "Continue";
     return "";
   })();
 
@@ -890,6 +919,7 @@ function GetStartedFunnel() {
       return false;
     }
     if (currentStepId === "equipment") return hasOwnTools !== true || canSupplyMaterials !== true;
+    if (currentStepId === "availability") return workDays.size === 0 || !(workStart < workEnd);
     if (currentStepId === "coverage") {
       return isPartnerRegistrationFieldMandatory("coverage", registrationFields) && !coveragePostcode.trim();
     }
@@ -1367,6 +1397,46 @@ function GetStartedFunnel() {
                     Your own tools and being able to supply materials are essential to work with Fixfy. If that changes, come back and pick up where you left off.
                   </p>
                 )}
+              </div>
+            </StepShell>
+          )}
+
+          {view === "availability" && (
+            <StepShell
+              eyebrow={stepEyebrow("Availability")}
+              title="When can you work?"
+              subtitle="We only send you jobs on these days and hours. You can add days off and change this any time in your portal."
+            >
+              <div style={{ maxWidth: 520, margin: "0 auto", display: "grid", gap: 16, textAlign: "left" }}>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "center" }}>
+                  {[
+                    ["mon", "Mon"], ["tue", "Tue"], ["wed", "Wed"], ["thu", "Thu"], ["fri", "Fri"], ["sat", "Sat"], ["sun", "Sun"],
+                  ].map(([k, rotulo]) => {
+                    const on = workDays.has(k);
+                    return (
+                      <button
+                        key={k}
+                        type="button"
+                        aria-pressed={on}
+                        onClick={() => setWorkDays((prev) => { const n = new Set(prev); if (on) n.delete(k); else n.add(k); return n; })}
+                        style={{ minWidth: 56, height: 40, borderRadius: 10, border: `1px solid ${on ? T.coral : T.line}`, background: on ? T.coralTint : T.white, color: on ? T.coralPress : T.slate, fontFamily: T.sans, fontSize: 14, fontWeight: 600, cursor: "pointer" }}
+                      >
+                        {rotulo}
+                      </button>
+                    );
+                  })}
+                </div>
+                <div style={{ display: "flex", gap: 12, justifyContent: "center", alignItems: "center", flexWrap: "wrap" }}>
+                  <label style={{ fontSize: 13, color: T.slate }}>From <input type="time" value={workStart} onChange={(e) => setWorkStart(e.target.value)} style={{ height: 38, padding: "0 8px", borderRadius: 8, border: `1px solid ${T.line}`, fontFamily: T.sans }} /></label>
+                  <label style={{ fontSize: 13, color: T.slate }}>to <input type="time" value={workEnd} onChange={(e) => setWorkEnd(e.target.value)} style={{ height: 38, padding: "0 8px", borderRadius: 8, border: `1px solid ${T.line}`, fontFamily: T.sans }} /></label>
+                </div>
+                <label style={{ fontSize: 13, color: T.slate, textAlign: "center" }}>
+                  Up to{" "}
+                  <select value={workMax} onChange={(e) => setWorkMax(Number(e.target.value))} style={{ height: 36, borderRadius: 8, border: `1px solid ${T.line}`, fontFamily: T.sans, padding: "0 6px" }}>
+                    {[1, 2, 3, 4, 5, 6, 8, 10].map((n) => <option key={n} value={n}>{n}</option>)}
+                  </select>{" "}
+                  jobs a day
+                </label>
               </div>
             </StepShell>
           )}

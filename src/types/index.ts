@@ -95,6 +95,10 @@ export interface AvailableJob {
   /** "Day rate" / "Half day" when the fixed price was agreed on that basis (jobs.rate_basis). */
   rateBasisLabel?: string | null;
   timing: string;
+  /** Janela de chegada ("9am to 12pm"), quando o job tem hora. */
+  arrivalWindow?: string | null;
+  /** Até quando a oferta está aberta (depois abre para mais parceiros). */
+  expiresAt?: string | null;
 }
 
 export type QuoteRequestStatus = "to-quote" | "submitted" | "won" | "lost";

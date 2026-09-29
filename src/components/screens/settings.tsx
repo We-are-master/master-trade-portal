@@ -45,6 +45,7 @@ import {
   type DayKey,
   type JobPreferences,
   type NotificationPrefs,
+  AUTO_ACCEPT_TERMS_VERSION,
 } from "@/lib/queries/partner-settings";
 import { openBillingPortal, startCheckout } from "@/lib/billing";
 import { getPlan, type PlanId } from "@/lib/plan-catalog";
@@ -286,7 +287,7 @@ function ProfilePage() {
         <Row label="Email" hint="Verified — used for sign-in">
           <Input value={partner.email} icon="mail" suffix={<Badge tone="success" size="sm" icon="check">Verified</Badge>} />
         </Row>
-        <Row label="Phone" hint="SMS for emergency jobs only">
+        <Row label="Phone" hint="For the office and job updates">
           <Input value={form.phone} onChange={set("phone")} icon="phone" placeholder="07…" />
         </Row>
         <Row label="Trading name" hint="Sole trader name OR limited company name">
@@ -334,6 +335,9 @@ function ProfilePage() {
 interface CatalogTrade {
   id: string;
   name: string;
+  /** Categoria do OS (304): General Maintenance, Cleaning, Certificates... */
+  category: string;
+  categorySort: number;
 }
 
 export function TradesPage() {
@@ -353,11 +357,19 @@ export function TradesPage() {
     void (async () => {
       const supabase = createClient();
       const [{ data: cats }, { data: prow }] = await Promise.all([
-        supabase.from("service_catalog").select("id, name").is("deleted_at", null).eq("is_active", true).order("name"),
+        supabase.from("service_catalog").select("id, name, service_categories(name, sort)").is("deleted_at", null).eq("is_active", true).order("name"),
         supabase.from("partners").select("catalog_service_ids, trade, trades").eq("id", partner.id).maybeSingle(),
       ]);
       if (!alive) return;
-      const list = ((cats ?? []) as { id: string; name: string | null }[]).map((c) => ({ id: c.id, name: c.name || "Service" }));
+      const list = ((cats ?? []) as unknown as { id: string; name: string | null; service_categories: { name: string; sort: number } | null }[])
+        .map((c) => ({
+          id: c.id,
+          name: c.name || "Service",
+          // Categoria do OS (304); sem ela, a adivinhação pelo nome.
+          category: c.service_categories?.name ?? (serviceCategory(c.name || "") === "Trades" ? "General Maintenance" : serviceCategory(c.name || "")),
+          categorySort: c.service_categories?.sort ?? 99,
+        }))
+        .sort((a, b) => a.categorySort - b.categorySort || a.name.localeCompare(b.name));
       setCatalog(list);
       const p = prow as { catalog_service_ids?: string[] | null; trade?: string | null; trades?: string[] | null } | null;
       // Prefill enabled from catalog_service_ids; fall back to matching stored trade names.
@@ -477,8 +489,8 @@ export function TradesPage() {
           <div style={{ fontSize: 13, color: T.mute }}>No services published yet.</div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-            {SERVICE_CATEGORY_ORDER.map((cat) => {
-              const catItems = catalog.filter((c) => serviceCategory(c.name) === cat);
+            {[...new Set(catalog.map((c) => c.category))].map((cat) => {
+              const catItems = catalog.filter((c) => c.category === cat);
               if (catItems.length === 0) return null;
               return (
                 <div key={cat}>
@@ -637,11 +649,27 @@ export function AvailabilityPage() {
   const setDay = (key: DayKey, patch: Partial<{ on: boolean; start: string; end: string }>) =>
     setAv((a) => (a ? { ...a, days: { ...a.days, [key]: { ...a.days[key], ...patch } } } : a));
 
+  const hoje = new Date().toISOString().slice(0, 10);
+  const [newDayOff, setNewDayOff] = useState("");
+
   const save = async () => {
     if (!av) return;
+    // Horário no formato HH:MM e fim depois do começo: é o que o despacho lê.
+    const HORA = /^([01]\d|2[0-3]):[0-5]\d$/;
+    for (const { key, label } of DAYS) {
+      const d = av.days[key];
+      if (d.on && (!HORA.test(d.start) || !HORA.test(d.end) || d.start >= d.end)) {
+        toast({ text: `${label}: use HH:MM, e.g. 08:00, and finish after you start`, icon: "alert-triangle", tone: "coral" });
+        return;
+      }
+    }
+    if (!(av.maxJobsPerDay >= 1)) {
+      toast({ text: "Max jobs per day must be at least 1", icon: "alert-triangle", tone: "coral" });
+      return;
+    }
     setSaving(true);
     try {
-      await savePartnerSettings(createClient(), partner.id, { availability: av });
+      await savePartnerSettings(createClient(), partner.id, { availability: { ...av, daysOff: (av.daysOff ?? []).filter((d) => d >= hoje) } });
       setInitial(av);
       toast({ text: "Availability saved", icon: "check" });
     } catch (e) {
@@ -694,21 +722,55 @@ export function AvailabilityPage() {
         </div>
       </PageCard>
 
-      <PageCard title="Defaults & breaks">
-        <Row label="Buffer between jobs">
-          <Input value={String(av.bufferMins)} onChange={(v) => setAv((a) => (a ? { ...a, bufferMins: Number(v.replace(/\D/g, "")) || 0 } : a))} suffix="min" />
-        </Row>
+      <PageCard title="Days off" subtitle="Holidays or days you can't work. No jobs are sent to you on these dates.">
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 10 }}>
+          {(av.daysOff ?? []).filter((d) => d >= hoje).length === 0 ? (
+            <span style={{ fontSize: 13, color: T.mute }}>No days off booked.</span>
+          ) : (
+            (av.daysOff ?? [])
+              .filter((d) => d >= hoje)
+              .sort()
+              .map((d) => (
+                <span key={d} style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "4px 10px", borderRadius: 999, background: T.paper, border: `1px solid ${T.line}`, fontSize: 12.5, color: T.ink }}>
+                  {new Date(`${d}T12:00:00Z`).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })}
+                  <button
+                    type="button"
+                    aria-label={`Remove ${d}`}
+                    onClick={() => setAv((a) => (a ? { ...a, daysOff: (a.daysOff ?? []).filter((x) => x !== d) } : a))}
+                    style={{ border: "none", background: "transparent", color: T.mute, cursor: "pointer", padding: 0, fontSize: 14 }}
+                  >
+                    ×
+                  </button>
+                </span>
+              ))
+          )}
+        </div>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <input
+            type="date"
+            min={hoje}
+            value={newDayOff}
+            onChange={(e) => setNewDayOff(e.target.value)}
+            style={{ height: 34, padding: "0 10px", borderRadius: 8, border: `1px solid ${T.line}`, fontFamily: T.sans, fontSize: 13 }}
+          />
+          <Button
+            variant="ghost"
+            icon="plus"
+            disabled={!newDayOff}
+            onClick={() => {
+              setAv((a) => (a ? { ...a, daysOff: [...new Set([...(a.daysOff ?? []), newDayOff])] } : a));
+              setNewDayOff("");
+            }}
+          >
+            Add day off
+          </Button>
+        </div>
+      </PageCard>
+
+      {/* Intervalo, almoço e emergência 24/7 saíram (29/09/2026): o OS não usa, e opção que não faz nada engana. */}
+      <PageCard title="How many jobs">
         <Row label="Max jobs per day">
           <Input value={String(av.maxJobsPerDay)} onChange={(v) => setAv((a) => (a ? { ...a, maxJobsPerDay: Number(v.replace(/\D/g, "")) || 0 } : a))} suffix="jobs" />
-        </Row>
-        <Row label="Lunch window">
-          <div style={{ display: "flex", gap: 8 }}>
-            <Input value={av.lunch.start} onChange={(v) => setAv((a) => (a ? { ...a, lunch: { ...a.lunch, start: v } } : a))} style={{ flex: 1 }} />
-            <Input value={av.lunch.end} onChange={(v) => setAv((a) => (a ? { ...a, lunch: { ...a.lunch, end: v } } : a))} style={{ flex: 1 }} />
-          </div>
-        </Row>
-        <Row label="24/7 emergency call-outs" hint="50% surcharge applied">
-          <Toggle on={av.emergency247} onChange={(v) => setAv((a) => (a ? { ...a, emergency247: v } : a))} />
         </Row>
       </PageCard>
 
@@ -955,6 +1017,10 @@ function PreferencesPage() {
 
   const dirty = !!prefs && !!notif && !!initial && JSON.stringify({ prefs, notif }) !== JSON.stringify(initial);
   const setPref = (patch: Partial<JobPreferences>) => setPrefs((p) => (p ? { ...p, ...patch } : p));
+  // Auto-accept: ao ligar, as regras aparecem e só valem depois do "li e aceito".
+  const [autoAcceptTerms, setAutoAcceptTerms] = useState(false);
+  const [autoAcceptRead, setAutoAcceptRead] = useState(false);
+  const cancelFee = usePartnerCancelFee();
   const setChannel = (event: string, ch: "email" | "push" | "sms", v: boolean) =>
     setNotif((n) => (n ? { ...n, [event]: { ...n[event], [ch]: v } } : n));
 
@@ -986,14 +1052,8 @@ function PreferencesPage() {
   return (
     <>
       <SettingsHeader title="Job preferences" subtitle="The kinds of work you want — and don't." />
-      <PageCard title="What you accept">
-        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-          <ToggleRow on={prefs.receiveLeads} onChange={(v) => setPref({ receiveLeads: v })} label="Receive leads" hint="Customer enquiries Fixfy hasn't quoted" />
-          <ToggleRow on={prefs.receiveEmergency} onChange={(v) => setPref({ receiveEmergency: v })} label="Receive emergency call-outs" hint="Out-of-hours, urgent. 50% surcharge applies" />
-          <ToggleRow on={prefs.receiveMultiDay} onChange={(v) => setPref({ receiveMultiDay: v })} label="Receive multi-day jobs (3+ days)" />
-          <ToggleRow on={prefs.insuranceOnly} onChange={(v) => setPref({ insuranceOnly: v })} label="Insurance / claim work only" />
-        </div>
-      </PageCard>
+      {/* "What you accept" saiu (29/09/2026): leads ficam ocultos (a Fixfy só envia jobs; o dado continua
+          salvo), e emergência, vários dias e só seguro não eram usados pelo OS. */}
       <PageCard title="Limits">
         <Row label="Minimum job value">
           <Input value={String(prefs.minJobValue)} onChange={(v) => setPref({ minJobValue: Number(v.replace(/\D/g, "")) || 0 })} prefix="£" />
@@ -1001,6 +1061,52 @@ function PreferencesPage() {
         <Row label="Max simultaneous active jobs">
           <Input value={String(prefs.maxActiveJobs)} onChange={(v) => setPref({ maxActiveJobs: Number(v.replace(/\D/g, "")) || 0 })} suffix="jobs" />
         </Row>
+      </PageCard>
+      <PageCard title="Auto-accept jobs" subtitle="Get jobs straight away, without having to accept each offer.">
+        <ToggleRow
+          on={prefs.autoAccept?.on === true}
+          onChange={(v) => {
+            if (v) {
+              setAutoAcceptTerms(true);
+              setAutoAcceptRead(false);
+            } else {
+              setPref({ autoAccept: { on: false, acceptedAt: prefs.autoAccept?.acceptedAt ?? null, termsVersion: prefs.autoAccept?.termsVersion ?? null } });
+              setAutoAcceptTerms(false);
+            }
+          }}
+          label="Auto-accept matching jobs"
+          hint={prefs.autoAccept?.on ? `On since ${prefs.autoAccept.acceptedAt ? new Date(prefs.autoAccept.acceptedAt).toLocaleDateString("en-GB") : "today"}` : "Off: you accept each offer yourself"}
+        />
+        {autoAcceptTerms && !prefs.autoAccept?.on ? (
+          <div style={{ marginTop: 12, padding: 14, borderRadius: 10, background: T.paper, border: `1px solid ${T.line}`, display: "flex", flexDirection: "column", gap: 10 }}>
+            <div style={{ fontSize: 13.5, fontWeight: 600, color: T.ink }}>How auto-accept works</div>
+            <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, color: T.slate, lineHeight: 1.6 }}>
+              <li>Jobs that match your services, your area and your availability become yours straight away. We email you and send a notification.</li>
+              <li>We use your working hours, max jobs per day and days off, so keep them up to date.</li>
+              <li>If you cancel a job, the cancellation policy applies: {cancelFee}.</li>
+              <li>You can switch auto-accept off here at any time.</li>
+            </ul>
+            <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: T.ink, cursor: "pointer" }}>
+              <input type="checkbox" checked={autoAcceptRead} onChange={(e) => setAutoAcceptRead(e.target.checked)} />
+              I have read this and want to switch auto-accept on
+            </label>
+            <div style={{ display: "flex", gap: 8 }}>
+              <Button variant="ghost" onClick={() => setAutoAcceptTerms(false)}>Not now</Button>
+              <Button
+                variant="primary"
+                icon="check"
+                disabled={!autoAcceptRead}
+                onClick={() => {
+                  setPref({ autoAccept: { on: true, acceptedAt: new Date().toISOString(), termsVersion: AUTO_ACCEPT_TERMS_VERSION } });
+                  setAutoAcceptTerms(false);
+                }}
+              >
+                Switch on
+              </Button>
+            </div>
+            <div style={{ fontSize: 12, color: T.mute }}>Then press Save preferences below.</div>
+          </div>
+        ) : null}
       </PageCard>
       <PageCard title="Notifications">
         <div style={{ overflow: "auto" }}>
@@ -2199,4 +2305,28 @@ export function PoliciesPage() {
       )}
     </>
   );
+}
+
+/**
+ * O texto da política de cancelamento que vale hoje, para as regras do
+ * auto-accept e do botão de cancelar. v1 (contrato atual): £X até 24h, com o
+ * valor de /api/portal/policies. v2 (NEXT_PUBLIC_PENALIDADE_V2=1, depois do
+ * contrato novo): 50% do seu pagamento até 36h.
+ */
+function usePartnerCancelFee(): string {
+  const [fee, setFee] = useState<number | null>(null);
+  useEffect(() => {
+    let alive = true;
+    void fetch("/api/portal/policies")
+      .then((r) => r.json())
+      .then((j: { partnerCancelFeeGbp?: number }) => {
+        if (alive && typeof j.partnerCancelFeeGbp === "number") setFee(j.partnerCancelFeeGbp);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
+  if (process.env.NEXT_PUBLIC_PENALIDADE_V2 === "1") return "50% of your pay for that job if you cancel less than 36 hours before arrival";
+  return `£${fee ?? 50} if you cancel less than 24 hours before arrival`;
 }

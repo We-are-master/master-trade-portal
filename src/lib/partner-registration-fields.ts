@@ -129,6 +129,8 @@ export type GetStartedStepId =
   | "coverage"
   /** Own tools + able to supply materials: both essential, asked after the service area. */
   | "equipment"
+  /** Dias, horário e máx. de jobs por dia: sem isso o OS não oferece job (29/09/2026). */
+  | "availability"
   | "documents"
   | "agreements"
   /** Gamified "we're getting you ready" full-screen animation shown after agreements, then straight into the portal. */
@@ -144,6 +146,8 @@ export const GET_STARTED_STEP_DEFS: { id: GetStartedStepId; ruleIds: string[] }[
   { id: "coverage", ruleIds: ["coverage"] },
   // Always asked, so it rides on the locked `account` rule like getting_ready.
   { id: "equipment", ruleIds: ["account"] },
+  // Também preso ao `account`: todo parceiro precisa dizer quando trabalha.
+  { id: "availability", ruleIds: ["account"] },
   { id: "documents", ruleIds: ["documents"] },
   { id: "agreements", ruleIds: ["agreements"] },
   // Closing animation piggybacks on the `account` rule (locked-visible) so it

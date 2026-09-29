@@ -42,7 +42,10 @@ export function TradePortalApp() {
   // UnderReviewGate below, so the flag only needs clearing from the URL.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    if (params.get("submitted") === "1" || params.get("welcome") === "1") {
+    // Link do e-mail da oferta: ?screen=opportunities abre direto nas ofertas.
+    const tela = params.get("screen");
+    if (tela && /^[a-z-]+(:[a-z-]+)?$/.test(tela)) setRoute(tela);
+    if (params.get("submitted") === "1" || params.get("welcome") === "1" || tela) {
       window.history.replaceState(null, "", window.location.pathname);
     }
   }, []);

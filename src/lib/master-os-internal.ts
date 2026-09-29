@@ -172,3 +172,46 @@ export async function callMasterOsPartnerPortalDecline(
   }
   return { ok: true, declined: true, jobReference: payload.jobReference ?? "" };
 }
+
+export type MasterOsPartnerPortalCancelResult =
+  | { ok: true; preview?: boolean; penalty: number; hoursBefore?: number | null; ruleText?: string; reoffered?: number }
+  | { ok: false; status: number; error: string; message?: string };
+
+/**
+ * O parceiro cancela um job que é dele (OS /api/internal/jobs/partner-portal-cancel).
+ * Com `preview`, só devolve a penalidade para mostrar antes de confirmar.
+ */
+export async function callMasterOsPartnerPortalCancel(
+  jobId: string,
+  partnerId: string,
+  opts: { preview?: boolean; reason?: string } = {},
+): Promise<MasterOsPartnerPortalCancelResult> {
+  const secret = process.env.INTERNAL_SYNC_SECRET?.trim();
+  const base =
+    process.env.MASTER_OS_BASE_URL?.trim().replace(/\/$/, "") ||
+    process.env.OS_BASE_URL?.trim().replace(/\/$/, "") ||
+    "https://app.getfixfy.com";
+  if (!secret) return { ok: false, status: 503, error: "cancel_not_configured" };
+  try {
+    const res = await fetch(`${base}/api/internal/jobs/partner-portal-cancel`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-internal-secret": secret },
+      body: JSON.stringify({ jobId, partnerId, preview: opts.preview === true, reason: opts.reason }),
+    });
+    const j = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+    if (!res.ok || j.ok !== true) {
+      return { ok: false, status: res.status, error: String(j.error ?? "cancel_failed"), message: typeof j.message === "string" ? j.message : undefined };
+    }
+    return {
+      ok: true,
+      preview: j.preview === true,
+      penalty: Number(j.penalty) || 0,
+      hoursBefore: typeof j.hoursBefore === "number" ? j.hoursBefore : null,
+      ruleText: typeof j.ruleText === "string" ? j.ruleText : undefined,
+      reoffered: typeof j.reoffered === "number" ? j.reoffered : undefined,
+    };
+  } catch (err) {
+    console.error("[portal-cancel] OS fetch failed:", err);
+    return { ok: false, status: 502, error: "os_unreachable" };
+  }
+}
