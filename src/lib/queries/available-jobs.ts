@@ -25,6 +25,7 @@ export const AVAILABLE_JOB_SELECT = [
   "scheduled_date",
   "scheduled_start_at",
   "scheduled_end_at",
+  "auto_assign_expires_at",
   "created_at",
 ].join(",");
 
@@ -42,6 +43,7 @@ interface AvailableJobRow {
   scheduled_date: string | null;
   scheduled_start_at: string | null;
   scheduled_end_at: string | null;
+  auto_assign_expires_at?: string | null;
   created_at: string | null;
 }
 
@@ -56,6 +58,13 @@ function durationLabel(row: AvailableJobRow): string {
   const hours = (new Date(row.scheduled_end_at).getTime() - new Date(row.scheduled_start_at).getTime()) / 3_600_000;
   if (hours <= 0) return "Flexible";
   return Number.isInteger(hours) ? `${hours} hour${hours === 1 ? "" : "s"}` : `${hours.toFixed(1)} hours`;
+}
+/** Janela de chegada em Londres: "9am to 12pm". */
+function windowLabel(row: AvailableJobRow): string | null {
+  if (!row.scheduled_start_at) return null;
+  const h = (iso: string) =>
+    new Date(iso).toLocaleTimeString("en-GB", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: LONDON }).replace(":00", "").replace(" ", "");
+  return row.scheduled_end_at ? `${h(row.scheduled_start_at)} to ${h(row.scheduled_end_at)}` : h(row.scheduled_start_at);
 }
 function timingLabel(date: string | null): string {
   if (!date) return "ASAP";
@@ -74,6 +83,8 @@ export function mapAvailableJob(row: AvailableJobRow): AvailableJob {
     duration: durationLabel(row),
     total: row.partner_cost ?? row.partner_agreed_value ?? row.client_price ?? 0,
     timing: timingLabel(row.scheduled_date),
+    arrivalWindow: windowLabel(row),
+    expiresAt: row.auto_assign_expires_at ?? null,
   };
 }
 

@@ -1153,11 +1153,12 @@ function AvailableJobCard({
           }}
         >
           <MetaItem icon="map-pin" label="Location" value={job.postcode || "—"} sub="Address on accept" />
-          <MetaItem icon="clock" label="Duration" value={job.duration} sub={job.timing} />
+          <MetaItem icon="clock" label="When" value={job.timing} sub={job.arrivalWindow ? `Arrive ${job.arrivalWindow}` : job.duration} />
           <MetaItem icon="user" label="Customer" value="Pre-vetted" sub="Fixfy-quoted" />
         </div>
 
         <div style={{ marginTop: 14, display: "flex", alignItems: "center", gap: 10 }}>
+          <OfferCountdown expiresAt={job.expiresAt ?? null} />
           <span style={{ flex: 1 }} />
           {onDecline && !locked ? (
             <Button variant="secondary" size="sm" icon="x" onClick={onDecline} disabled={accepting || declining}>
@@ -1352,4 +1353,21 @@ function QuoteRow({
       </div>
     </Card>
   );
+}
+
+/**
+ * Quanto tempo a oferta ainda fica só para quem foi chamado primeiro. Depois
+ * disso ela abre para mais parceiros (o primeiro que aceitar leva).
+ */
+function OfferCountdown({ expiresAt }: { expiresAt: string | null }) {
+  const [agora, setAgora] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setAgora(Date.now()), 30_000);
+    return () => clearInterval(t);
+  }, []);
+  if (!expiresAt) return null;
+  const min = Math.round((Date.parse(expiresAt) - agora) / 60_000);
+  if (!Number.isFinite(min)) return null;
+  const texto = min <= 0 ? "Open to more partners now" : min < 60 ? `${min} min left before it opens to more partners` : `${Math.floor(min / 60)}h ${min % 60}m left before it opens to more partners`;
+  return <span style={{ fontSize: 12, color: min <= 30 ? T.coral : T.mute }}>{texto}</span>;
 }

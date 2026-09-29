@@ -57,6 +57,43 @@ export function JobDrawer({
   const [closing, setClosing] = useState(false);
   const isMobile = useIsMobile();
   const [starting, setStarting] = useState(false);
+  // Cancelar: primeiro mostra a penalidade (preview no OS), depois confirma.
+  const [cancelInfo, setCancelInfo] = useState<{ penalty: number; ruleText?: string; hoursBefore?: number | null } | null>(null);
+  const [cancelBusy, setCancelBusy] = useState(false);
+  const [cancelReason, setCancelReason] = useState("");
+
+  const askCancel = async () => {
+    if (!job) return;
+    setCancelBusy(true);
+    try {
+      const res = await fetch("/api/jobs/cancel", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jobId: job.uuid, preview: true }) });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json.message || "This job can't be cancelled here. Please call us.");
+      setCancelInfo({ penalty: Number(json.penalty) || 0, ruleText: json.ruleText, hoursBefore: json.hoursBefore });
+    } catch (e) {
+      onShowToast({ icon: "alert-triangle", tone: "coral", text: e instanceof Error ? e.message : "Couldn't check the cancellation" });
+    } finally {
+      setCancelBusy(false);
+    }
+  };
+
+  const confirmCancel = async () => {
+    if (!job) return;
+    setCancelBusy(true);
+    try {
+      const res = await fetch("/api/jobs/cancel", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jobId: job.uuid, reason: cancelReason.trim() || undefined }) });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json.message || "Couldn't cancel the job");
+      setCancelInfo(null);
+      refresh();
+      onShowToast({ icon: "check", text: "Job cancelled. We're finding another partner." });
+      handleClose();
+    } catch (e) {
+      onShowToast({ icon: "alert-triangle", tone: "coral", text: e instanceof Error ? e.message : "Couldn't cancel the job" });
+    } finally {
+      setCancelBusy(false);
+    }
+  };
 
   const startJob = async () => {
     if (!job) return;
@@ -295,8 +332,30 @@ export function JobDrawer({
             display: "flex",
             alignItems: "center",
             gap: 14,
+            position: "relative",
           }}
         >
+          {cancelInfo && (
+            <div style={{ position: "absolute", left: 16, right: 16, bottom: "calc(100% + 8px)", padding: 14, borderRadius: 12, background: T.white, border: `1px solid ${T.line}`, boxShadow: "0 8px 24px rgba(2,0,64,.12)", display: "flex", flexDirection: "column", gap: 10, zIndex: 2 }}>
+              <div style={{ fontSize: 14, fontWeight: 600, color: T.ink }}>Cancel this job?</div>
+              <div style={{ fontSize: 13, color: T.slate, lineHeight: 1.5 }}>
+                {cancelInfo.penalty > 0
+                  ? `A cancellation fee of £${cancelInfo.penalty.toFixed(2)} applies${cancelInfo.hoursBefore != null ? ` (${cancelInfo.hoursBefore}h before arrival)` : ""}. It is taken from your next self-bill, unless the office waives it.`
+                  : "No cancellation fee applies at this point."}
+                {cancelInfo.ruleText ? ` Policy: ${cancelInfo.ruleText}.` : ""}
+              </div>
+              <input
+                value={cancelReason}
+                onChange={(e) => setCancelReason(e.target.value)}
+                placeholder="Why can't you make it? (helps the office)"
+                style={{ height: 36, padding: "0 10px", borderRadius: 8, border: `1px solid ${T.line}`, fontFamily: T.sans, fontSize: 13 }}
+              />
+              <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+                <Button variant="ghost" onClick={() => setCancelInfo(null)} disabled={cancelBusy}>Keep the job</Button>
+                <Button variant="primary" onClick={confirmCancel} disabled={cancelBusy}>{cancelBusy ? "Cancelling…" : "Cancel job"}</Button>
+              </div>
+            </div>
+          )}
           <div style={{ flex: 1 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 5 }}>
               <span style={{ fontSize: 11.5, color: T.mute, letterSpacing: 0.3 }}>JOB PROGRESS</span>
@@ -313,6 +372,11 @@ export function JobDrawer({
               />
             </div>
           </div>
+          {job.status === "scheduled" && !cancelInfo && (
+            <Button variant="ghost" size="lg" onClick={askCancel} disabled={cancelBusy || starting}>
+              {cancelBusy ? "Checking…" : "Can't make it"}
+            </Button>
+          )}
           {job.status === "scheduled" && (
             <Button variant="primary" icon="play" size="lg" onClick={startJob} disabled={starting}>
               {starting ? "Starting…" : "Start job"}
