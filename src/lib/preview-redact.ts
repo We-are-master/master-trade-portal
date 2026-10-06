@@ -41,7 +41,6 @@ export function redactAvailableJob(job: AvailableJob): AvailableJob {
     desc: "Job details unlock once your account is approved.",
     postcode: maskPostcode(job.postcode),
     total: 0,
-    platformBooking: null,
   };
 }
 

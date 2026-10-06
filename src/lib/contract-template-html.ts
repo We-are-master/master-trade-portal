@@ -12,7 +12,8 @@ export { PARTNER_CONTRACT_TYPES, PARTNER_CONTRACT_TITLES, type PartnerContractTy
 // FALLBACK ONLY. The agreements partners actually see and sign are the active
 // rows of contract_versions (body_html) in the shared database, published from
 // master-os. These local files mirror the 2026-10-06 documents (agent model):
-//   - contractor_service_agreement → Partner Agreement
+//   - contractor_service_agreement → Partner Agreement (with the Commission
+//     Schedule appended as its annex)
 //   - terms_of_use                 → Partner Terms of Use
 //   - self_bill_agreement          → Invoicing and Payment Collection Agreement
 // and are read only by the seed / migration scripts in scripts/.

@@ -31,7 +31,7 @@ export function platformDocsEnforced(): boolean {
  * Work (Schedule B). Null = unknown.
  *
  * TODO(master-os): jobs has no such field yet. When the OS adds it, read it
- * here (and in queries/available-jobs.ts for the offer breakdown).
+ * here.
  */
 export async function jobIsPlatformBooking(_svc: SupabaseClient, _jobId: string): Promise<boolean | null> {
   return null;

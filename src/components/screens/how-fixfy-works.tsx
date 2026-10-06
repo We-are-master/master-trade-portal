@@ -65,7 +65,7 @@ export function HowFixfyWorksCard({ defaultOpen = false }: { defaultOpen?: boole
       icon: "file-check",
       tint: "#8B5CF6",
       title: "Free to join, one commission",
-      body: "No fees and no plans. On bookings made through Fixfy, we collect the customer's payment for you, issue the receipt in your name and keep a fixed commission.",
+      body: "No fees and no plans. On bookings made through Fixfy, we collect the customer's payment for you, issue the receipt in your name and keep a commission set in your Commission Schedule.",
     },
     {
       icon: "life-buoy",

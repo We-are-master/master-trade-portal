@@ -1042,6 +1042,10 @@ export function AvailableJobsView({
           <span style={{ fontSize: 12.5, color: T.mute }}>
             <b style={{ color: T.ink, fontWeight: 500 }}>{jobs.length}</b> {jobs.length === 1 ? "offer" : "offers"} · first to accept wins
           </span>
+          {/* Offers show the partner's net only, never the commission in pounds (owner decision, 6 Oct 2026). */}
+          <span style={{ fontSize: 12, color: T.mute, marginTop: -10 }}>
+            Your price and commission % are in your Commission Schedule; every job is itemised on your payout statement.
+          </span>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 12 }}>
             {jobs.map((j) => (
               <AvailableJobCard
@@ -1140,14 +1144,6 @@ function AvailableJobCard({
           </div>
         </div>
 
-        {!locked && job.platformBooking && (
-          <PlatformBookingBreakdown
-            customerPrice={job.platformBooking.customerPrice}
-            commission={job.platformBooking.commission}
-            net={job.total}
-          />
-        )}
-
         <div
           style={{
             display: "grid",
@@ -1177,23 +1173,6 @@ function AvailableJobCard({
         </div>
       </div>
     </Card>
-  );
-}
-
-/** Platform Booking money, as the Partner Agreement shows it on every offer. */
-function PlatformBookingBreakdown({ customerPrice, commission, net }: { customerPrice: number; commission: number; net: number }) {
-  const row = (label: string, value: string, strong = false) => (
-    <div style={{ display: "flex", justifyContent: "space-between", gap: 12, fontSize: 12.5 }}>
-      <span style={{ color: strong ? T.ink : T.slate, fontWeight: strong ? 600 : 400 }}>{label}</span>
-      <span style={{ fontFamily: T.mono, color: strong ? T.navy : T.slate, fontWeight: strong ? 600 : 400 }}>{value}</span>
-    </div>
-  );
-  return (
-    <div style={{ marginTop: 12, padding: "10px 12px", borderRadius: 10, background: T.paper, display: "grid", gap: 4 }}>
-      {row("Customer price", formatGBP(customerPrice))}
-      {row("Fixfy commission", `- ${formatGBP(commission)}`)}
-      {row("Your net", formatGBP(net), true)}
-    </div>
   );
 }
 
