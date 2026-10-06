@@ -8,19 +8,26 @@
 //      code (only an email that already has a login is asked for the code)
 //   5. Service area (postcode + radius)
 //   6. Tools & materials
-//   7. Documents (can be skipped and uploaded from the review screen)
-//   8. Agreements (e-sign)
+//   7. Documents. Photo ID, public liability (min £1m) and the trade registration
+//      can't be skipped; the rest can wait for the review screen
+//   8. Agreements (e-sign): Partner Agreement, Terms of Use, Invoicing and
+//      Payment Collection Agreement, plus the VAT status line (its Annex 1)
 
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { useSearchParams } from "next/navigation";
 import { T } from "@/lib/tokens";
 import { Button, Icon, Modal } from "@/components/ui/primitives";
-import { DEFAULT_PLAN_ID, PARTNERS_LP_URL } from "@/lib/plan-catalog";
+import { PARTNERS_LP_URL } from "@/lib/plan-catalog";
 import { serviceCategory, type ServiceCategory } from "@/lib/service-category";
 import { createClient } from "@/lib/supabase/client";
 import { fetchContracts, type PartnerContract } from "@/lib/queries/contracts";
-import { COMPLIANCE_CONTRACT_TYPES } from "@/lib/partner-funnel-complete";
-import { PARTNER_CONTRACT_TITLES } from "@/lib/partner-contract-types";
+import {
+  INVOICING_CONTRACT_TYPE,
+  PARTNER_CONTRACT_SIGNING_ORDER,
+  PARTNER_CONTRACT_TITLES,
+} from "@/lib/partner-contract-types";
+import { vatStatusFromDraft, type VatStatusDraft } from "@/lib/vat-status";
+import { VatStatusField } from "@/components/vat-status-field";
 import type { ExistingAccountKind } from "@/lib/partner-onboarding-draft";
 import {
   filterGetStartedSteps,
@@ -35,6 +42,7 @@ import { GetStartedAddressAutocomplete } from "@/components/get-started/address-
 import { RateCardEditor } from "@/components/rate-card-editor";
 import { emailProblem, phoneProblem, suggestedEmail } from "@/lib/contact-validation";
 import { ONBOARDING_DRAFT_STORAGE_KEY, RequiredDocsList, useRequiredDocs } from "@/components/required-docs";
+import { isPlatformBookingRequiredDoc } from "@/lib/partner-required-docs";
 import type { ServicePrice } from "@/lib/queries/rate-card";
 
 type CatalogTrade = { id: string; name: string; category?: string };
@@ -625,7 +633,7 @@ function GetStartedFunnel() {
       }),
     });
     if (profRes.status === 401) {
-      const err = new Error("Your session expired — verify your email again to continue.") as Error & {
+      const err = new Error("Your session expired. Verify your email again to continue.") as Error & {
         status?: number;
       };
       err.status = 401;
@@ -682,7 +690,6 @@ function GetStartedFunnel() {
           email: target,
           fullName: fullName.trim(),
           company: company.trim(),
-          plan: DEFAULT_PLAN_ID,
           inviteCode: inviteCode || undefined,
         }),
       });
@@ -1200,8 +1207,8 @@ function GetStartedFunnel() {
           {view === "rates" && (
             <StepShell
               eyebrow={stepEyebrow("Your rates")}
-              title="What you get paid"
-              subtitle="Fixed pay per job, you see the amount before you accept. Keep our standard rates or set your own for each size, time and add-on."
+              title="Your net per job"
+              subtitle="What you receive after Fixfy's commission, shown on every offer before you accept. Keep our standard rates or set your own for each size, time and add-on."
             >
               <div style={{ maxWidth: 620, margin: "0 auto" }}>
                 {ratesLoading ? (
@@ -1355,7 +1362,7 @@ function GetStartedFunnel() {
                 <LightField label="Base postcode">
                   <LightInput value={coveragePostcode} onChange={setCoveragePostcode} placeholder="e.g. SW11 1AA" autoFocus />
                 </LightField>
-                <LightField label={`Service radius — ${coverageRadius} miles`}>
+                <LightField label={`Service radius: ${coverageRadius} miles`}>
                   <input
                     type="range"
                     min={1}
@@ -1449,6 +1456,7 @@ function GetStartedFunnel() {
               eyebrow={stepEyebrow("Agreements")}
               mandatory={agreementsMandatory}
               signerDefault={fullName.trim()}
+              vatDefault={{ registered: vatRegistered, number: vatNumber }}
               onFinish={() => {
                 // Meta: cadastro completo, contratos assinados (só com o sim de cookies).
                 trackOnce("CompleteRegistration");
@@ -1517,9 +1525,16 @@ const FOOTER_STYLE: CSSProperties = {
 function DocumentsStep({ eyebrow, mandatory, onContinue }: { eyebrow: string; mandatory: boolean; onContinue: () => void }) {
   const { required, loadError, uploaded, markUploaded, missingMandatory } = useRequiredDocs();
 
+  // Photo ID, public liability (min £1m) and the trade registration are needed
+  // before any Platform Booking, so those three can't be skipped. The rest can
+  // still wait for the review.
+  const missingForBookings = (required ?? []).filter((d) => isPlatformBookingRequiredDoc(d) && !uploaded[d.id]);
   const total = mandatory ? (required ?? []).filter((d) => d.mandatory !== false).length : (required?.length ?? 0);
   const done = mandatory ? total - missingMandatory.length : Object.keys(uploaded).length;
-  const allDone = mandatory ? total === 0 || missingMandatory.length === 0 : true;
+  const allDone = required !== null && missingForBookings.length === 0 && (mandatory ? total === 0 || missingMandatory.length === 0 : true);
+  // A checklist that fails to load must not trap them here: the accept gate on
+  // the server still blocks bookings until these documents are on file.
+  const canSkip = (required !== null && !allDone && missingForBookings.length === 0) || Boolean(loadError);
 
   return (
     <>
@@ -1528,10 +1543,13 @@ function DocumentsStep({ eyebrow, mandatory, onContinue }: { eyebrow: string; ma
         {eyebrow}
       </div>
       <h1 style={{ fontSize: 40, fontWeight: 600, letterSpacing: "-0.03em", margin: "0 0 12px", color: T.navy }}>Upload what&apos;s required</h1>
-      <p style={{ fontSize: 16, color: T.slate, maxWidth: 460, margin: "0 auto", lineHeight: 1.5 }}>
-        {mandatory
-          ? "We need these before we can approve your account. PDF or photo, up to 10 MB each. Not got them to hand? Skip for now and upload them while we review."
-          : "Upload any documents you'd like us to review. You can add more later in Settings."}
+      <p style={{ fontSize: 16, color: T.slate, maxWidth: 480, margin: "0 auto", lineHeight: 1.5 }}>
+        Photo ID, public liability insurance (at least £1m cover) and the registration or accreditation your trade needs are
+        required before you can receive bookings. PDF or photo, up to 10 MB each.
+      </p>
+      <p style={{ fontSize: 14, color: T.mute, maxWidth: 480, margin: "10px auto 0", lineHeight: 1.5 }}>
+        Your proof of address is the business address we show on your customers&apos; receipts.
+        {mandatory ? " Anything else not to hand can wait: skip it now and upload it while we review." : " You can add more later in Settings."}
       </p>
       {total > 0 && (
         <p style={{ fontSize: 14, fontWeight: 600, color: allDone ? T.green : T.slate, marginTop: 16 }}>
@@ -1545,13 +1563,17 @@ function DocumentsStep({ eyebrow, mandatory, onContinue }: { eyebrow: string; ma
 
       <div style={FOOTER_STYLE}>
         <div style={{ width: "100%", maxWidth: 420, display: "grid", gap: 10 }}>
-          {!allDone && (
+          {canSkip && (
             <Button variant="secondary" size="lg" full onClick={onContinue}>
-              Skip for now
+              Skip the rest for now
             </Button>
           )}
           <Button variant="primary" size="lg" full onClick={onContinue} disabled={!allDone} iconRight="arrow-right">
-            {allDone ? "Continue to agreements" : `Upload all documents (${done}/${total || "…"})`}
+            {allDone
+              ? "Continue to agreements"
+              : missingForBookings.length > 0
+                ? `${missingForBookings.length} required for bookings still to upload`
+                : `Upload all documents (${done}/${total || "…"})`}
           </Button>
         </div>
       </div>
@@ -1563,11 +1585,14 @@ function AgreementsStep({
   eyebrow,
   mandatory,
   signerDefault,
+  vatDefault,
   onFinish,
 }: {
   eyebrow: string;
   mandatory: boolean;
   signerDefault: string;
+  /** What the business step already collected (limited companies). */
+  vatDefault: VatStatusDraft;
   onFinish: () => void;
 }) {
   const [contracts, setContracts] = useState<PartnerContract[]>([]);
@@ -1579,6 +1604,8 @@ function AgreementsStep({
   const [viewing, setViewing] = useState<PartnerContract | null>(null);
   /** Per-contract consent — the checkbox next to each agreement row. */
   const [consented, setConsented] = useState<Record<string, boolean>>({});
+  /** Annex 1 of the Invoicing and Payment Collection Agreement. */
+  const [vat, setVat] = useState<VatStatusDraft>(vatDefault);
 
   useEffect(() => {
     let cancelled = false;
@@ -1593,8 +1620,21 @@ function AgreementsStep({
         if (!pid) throw new Error("Partner profile not found");
         if (cancelled) return;
         const rows = await fetchContracts(supabase, pid);
-        if (!cancelled) {
-          setContracts(rows.filter((c) => COMPLIANCE_CONTRACT_TYPES.includes(c.type as (typeof COMPLIANCE_CONTRACT_TYPES)[number])));
+        if (!cancelled) setContracts(rows);
+        // Best-effort: what's already on file (business step, or a resumed partner).
+        try {
+          const { data: vrow } = await supabase
+            .from("partners")
+            .select("vat_registered, vat_number")
+            .eq("id", pid)
+            .maybeSingle();
+          const v = vrow as { vat_registered?: boolean | null; vat_number?: string | null } | null;
+          if (!cancelled && typeof v?.vat_registered === "boolean") {
+            const registered = v.vat_registered;
+            setVat((prev) => (prev.registered === null ? { registered, number: v.vat_number?.trim() ?? "" } : prev));
+          }
+        } catch {
+          /* the partner picks it below */
         }
       } catch (e) {
         if (!cancelled) setLoadError(e instanceof Error ? e.message : "Couldn't load agreements");
@@ -1607,16 +1647,13 @@ function AgreementsStep({
     };
   }, []);
 
-  // Render both compliance contracts even if one has no active DB version yet
-  // — merge DB rows into a full slot list keyed by the constant.
+  // Render all three agreements even if one has no active DB version yet:
+  // merge DB rows into a full slot list keyed by the constant. sign-all signs
+  // every active version, so every one of them is listed for consent.
   const complianceContracts = useMemo<PartnerContract[]>(() => {
     const byType = new Map<string, PartnerContract>();
-    for (const c of contracts) {
-      if (COMPLIANCE_CONTRACT_TYPES.includes(c.type as (typeof COMPLIANCE_CONTRACT_TYPES)[number])) {
-        byType.set(c.type, c);
-      }
-    }
-    return COMPLIANCE_CONTRACT_TYPES.map((type) => {
+    for (const c of contracts) byType.set(c.type, c);
+    return PARTNER_CONTRACT_SIGNING_ORDER.map((type) => {
       const existing = byType.get(type);
       if (existing) return existing;
       return {
@@ -1636,7 +1673,11 @@ function AgreementsStep({
   const unsigned = complianceContracts.filter((c) => !c.signed);
   const allSigned = complianceContracts.length > 0 && unsigned.length === 0;
   const allConsented = unsigned.every((c) => consented[c.type] === true);
-  const canSubmit = !allSigned && allConsented && !!signerName.trim() && unsigned.length > 0;
+  // The VAT line is part of the Invoicing and Payment Collection Agreement.
+  const vatNeeded = unsigned.some((c) => c.type === INVOICING_CONTRACT_TYPE);
+  const vatStatus = vatStatusFromDraft(vat);
+  const canSubmit =
+    !allSigned && allConsented && !!signerName.trim() && unsigned.length > 0 && (!vatNeeded || vatStatus !== null);
 
   /**
    * Build a small PNG rendering of the typed signer name — click-through
@@ -1681,6 +1722,7 @@ function AgreementsStep({
           signerName: signerName.trim(),
           deviceInfo: typeof navigator !== "undefined" ? navigator.userAgent : undefined,
           code: draftCode || undefined,
+          vatStatus: vatStatus ?? undefined,
         }),
       });
       const json = (await res.json().catch(() => ({}))) as { error?: string };
@@ -1701,7 +1743,8 @@ function AgreementsStep({
       </div>
       <h1 style={{ fontSize: 40, fontWeight: 600, letterSpacing: "-0.03em", margin: "0 0 12px", color: T.navy }}>Sign your agreements</h1>
       <p style={{ fontSize: 16, color: T.slate, maxWidth: 460, margin: "0 auto", lineHeight: 1.5 }}>
-        One signature covers all Fixfy partner agreements. We&apos;ll review your application within 24 hours.
+        Joining Fixfy is free. One signature covers all three agreements and your VAT status. We&apos;ll review your
+        application within 24 hours.
       </p>
 
       <div style={{ marginTop: 26, textAlign: "left", maxWidth: 520, marginInline: "auto" }}>
@@ -1746,7 +1789,7 @@ function AgreementsStep({
                         </span>
                         {!c.bodyHtml && !c.signed && (
                           <span style={{ fontSize: 11, color: T.mute }}>
-                            (draft — full text pending publication)
+                            (draft: full text pending publication)
                           </span>
                         )}
                       </span>
@@ -1783,12 +1826,14 @@ function AgreementsStep({
             </div>
             {!allSigned && (
               <div style={{ display: "grid", gap: 14 }}>
+                {vatNeeded && <VatStatusField value={vat} onChange={setVat} disabled={busy} />}
                 <LightField label="Full legal name">
                   <LightInput value={signerName} onChange={setSignerName} placeholder="As shown on your ID" />
                 </LightField>
                 <p style={{ margin: 0, fontSize: 12, color: T.mute, lineHeight: 1.5 }}>
-                  By ticking the boxes above and continuing you accept both agreements. Your name, timestamp
-                  and IP address are recorded for the audit trail — no drawn signature required.
+                  By ticking the boxes above and continuing you accept the agreements
+                  {vatNeeded ? " and confirm your VAT status" : ""}. Your name, timestamp and IP address are recorded
+                  for the audit trail. No drawn signature required.
                 </p>
               </div>
             )}
@@ -2274,7 +2319,7 @@ function GettingReadyStep({ onDone }: { onDone: () => void }) {
           {current.label}
         </p>
         <p style={{ margin: "10px 0 0", fontSize: 13, color: T.mute }}>
-          Hold tight — we&apos;re syncing your profile with our platform.
+          Hold tight, we&apos;re syncing your profile with our platform.
         </p>
       </div>
 

@@ -11,7 +11,7 @@ import { isDemoMode } from "@/lib/demo/demo-mode";
 import { DEMO_PARTNER } from "@/lib/demo/demo-data";
 
 // Only columns guaranteed to exist on every environment. Columns added by
-// recent migrations (wizard_completed_at, account_type, billing…) are pulled
+// recent migrations (wizard_completed_at, subscription_status…) are pulled
 // in the best-effort `extra` select below — putting them here breaks sign-in
 // on databases where the migration hasn't been applied yet.
 const BASE_COLS = "id, company_name, contact_name, email, phone, trade, trades, rating, jobs_completed, location, partner_address, avatar_url, status";
@@ -55,17 +55,17 @@ export async function getPartnerSession(): Promise<PartnerSession | null> {
   let extra: Partial<PartnerRow> = {};
   const { data: ext } = await supabase
     .from("partners")
-    .select("trial_ends_at, subscription_status, plan, billing_ready, bio, years_experience, service_radius_miles, excluded_postcodes")
+    .select("subscription_status, bio, years_experience, service_radius_miles, excluded_postcodes")
     .eq("id", data.id)
     .maybeSingle();
   if (ext) extra = ext as Partial<PartnerRow>;
 
-  // Best-effort #2 (migration 247): wizard completion + account tier. Kept in
-  // its own select so a database without 247 still resolves the session AND
-  // keeps the billing columns above.
+  // Best-effort #2 (migration 247): wizard completion. Kept in its own select
+  // so a database without 247 still resolves the session AND keeps the
+  // columns above.
   const { data: ext2 } = await supabase
     .from("partners")
-    .select("wizard_completed_at, account_type")
+    .select("wizard_completed_at")
     .eq("id", data.id)
     .maybeSingle();
   if (ext2) extra = { ...extra, ...(ext2 as Partial<PartnerRow>) };

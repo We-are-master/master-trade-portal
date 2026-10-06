@@ -3,129 +3,207 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Fixfy — Self-Billing Agreement</title>
+<!--
+  Fallback copy of the Fixfy Invoicing and Payment Collection Agreement, version 2026-10-06.
+  The live text partners sign is contract_versions.body_html in the shared database
+  (published from master-os). This file only seeds or stands in for it; keep it in
+  line with the source document.
+-->
+<title>Fixfy · Invoicing and Payment Collection Agreement</title>
 <style>
   :root{--navy:#020040;--coral:#ED4B00;--ink:#1a1a1a;--grey:#555;--light:#f2f2f5;--line:#ccc;}
   *{box-sizing:border-box;}
   html{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
   body{font-family:Arial,Helvetica,sans-serif;color:var(--ink);background:#e9e9ee;margin:0;line-height:1.5;font-size:11pt;}
   .page{background:#fff;max-width:820px;margin:24px auto;padding:48px 56px 64px;box-shadow:0 2px 16px rgba(0,0,0,.12);}
-  header.brand{display:flex;justify-content:space-between;align-items:baseline;border-bottom:3px solid var(--coral);padding-bottom:10px;margin-bottom:6px;}
-  header.brand{align-items:center;}
+  header.brand{display:flex;justify-content:space-between;align-items:center;border-bottom:3px solid var(--coral);padding-bottom:10px;margin-bottom:6px;}
   header.brand .logo{display:flex;align-items:center;}
   .fixfy-logo-wrap{display:inline-flex;align-items:center;gap:8px;}
   .fixfy-logo-img{height:32px;width:auto;display:block;}
   header.brand .meta{font-size:8.5pt;color:var(--grey);}
   h1.title{font-size:24pt;color:var(--navy);font-weight:800;margin:24px 0 0;line-height:1.05;}
   h1.title .accent{color:var(--coral);display:block;}
-  .lead{text-align:justify;margin:14px 0;}
-  .party{font-weight:700;color:var(--navy);}
-  .andword{font-style:italic;}
+  .lead{margin:14px 0;}
+  h2.part{font-size:16pt;color:var(--navy);font-weight:800;margin:32px 0 10px;padding-top:14px;border-top:2px solid var(--coral);}
   h2.section{font-size:13pt;color:var(--navy);font-weight:700;margin:24px 0 8px;}
-  p{text-align:justify;margin:8px 0;}
-  .sub{font-weight:700;color:var(--navy);}
-  ul.dash{list-style:none;margin:6px 0 10px;padding-left:24px;}
-  ul.dash li{position:relative;padding-left:18px;margin:3px 0;text-align:justify;}
-  ul.dash li::before{content:"\2013";color:var(--coral);position:absolute;left:0;font-weight:700;}
-  .label{font-size:9pt;font-weight:700;color:var(--navy);text-transform:uppercase;letter-spacing:.5px;margin:16px 0 8px;}
-  table.details{width:100%;border-collapse:collapse;margin:8px 0 4px;}
-  table.details td{border:1px solid var(--line);padding:8px 12px;font-size:10pt;vertical-align:top;}
-  table.details td.k{background:var(--light);font-weight:700;color:var(--navy);width:32%;}
-  table.details td.v{height:14px;}
+  p{margin:8px 0;}
+  ul.dash,ol.num{margin:6px 0 10px;padding-left:24px;}
+  ul.dash{list-style:none;}
+  ul.dash li{position:relative;padding-left:18px;margin:3px 0;}
+  ul.dash li::before{content:"\2022";color:var(--coral);position:absolute;left:0;font-weight:700;}
+  ol.num li{margin:3px 0;}
+  table.grid{width:100%;border-collapse:collapse;margin:8px 0 12px;}
+  table.grid th,table.grid td{border:1px solid var(--line);padding:6px 10px;font-size:10pt;text-align:left;vertical-align:top;}
+  table.grid th{background:var(--light);color:var(--navy);}
   .callout{background:var(--light);border-left:4px solid var(--coral);padding:12px 16px;margin:14px 0;font-size:10pt;}
+  .callout p{margin:4px 0;}
+  hr{border:none;border-top:1px solid var(--line);margin:22px 0;}
   .execution{page-break-before:always;}
-  h2.exec{font-size:18pt;color:var(--navy);font-weight:800;margin:8px 0 14px;}
-  .sigwrap{display:flex;gap:0;border:1px solid var(--line);}
-  .sigcell{flex:1;padding:16px;}
-  .sigcell + .sigcell{border-left:1px solid var(--line);}
-  .sigcell .h{font-weight:700;color:var(--navy);font-size:10.5pt;margin-bottom:4px;}
-  .sigcell .org{font-size:10pt;margin:2px 0;}
-  .sigline{border-bottom:1.5px solid var(--navy);height:34px;margin-top:14px;}
-  .sigcap{font-size:8.5pt;color:var(--grey);margin-top:2px;}
   footer.foot{border-top:1px solid var(--line);margin-top:40px;padding-top:8px;display:flex;justify-content:space-between;font-size:8.5pt;color:var(--grey);}
   @media print{body{background:#fff;}.page{box-shadow:none;margin:0;max-width:100%;padding:0 12mm;}@page{size:A4;margin:14mm 0;}}
 </style>
 </head>
 <body>
 <div class="page">
-  <header class="brand"><div class="logo">{{FIXFY_LOGO}}</div><div class="meta">Getfixfy Ltd &middot; Co. No. 15406523</div></header>
-  <h1 class="title">SELF-BILLING<span class="accent">AGREEMENT</span></h1>
-  <p class="lead">This Self-Billing Agreement (the &ldquo;Agreement&rdquo;) is made between <span class="party">GETFIXFY LTD</span>, a company incorporated in England and Wales under company number 15406523, registered office 124 City Road, London EC1V 2NX (the &ldquo;Self-Biller&rdquo; or &ldquo;Fixfy&rdquo;), and the undersigned Partner (the &ldquo;Supplier&rdquo;).</p>
-  <p class="lead">It sets out the terms on which Fixfy will issue self-billed invoices on behalf of the Supplier for Jobs completed through the Fixfy platform, in accordance with HMRC self-billing requirements.</p>
-
-  <div class="callout"><strong>What self-billing means.</strong> Under a self-billing arrangement, the customer (Fixfy) prepares the supplier&rsquo;s invoice and sends a copy to the supplier with the payment. The Supplier agrees not to raise its own sales invoices for the transactions covered by this Agreement.</div>
-
-  <div class="label">Supplier Details</div>
-  <table class="details">
-    <tr><td class="k">Full legal / Trading name</td><td class="v"></td></tr>
-    <tr><td class="k">Business address</td><td class="v"></td></tr>
-    <tr><td class="k">Company / UTR number (if any)</td><td class="v"></td></tr>
-    <tr><td class="k">VAT registration number (if VAT registered)</td><td class="v"></td></tr>
-    <tr><td class="k">Email</td><td class="v"></td></tr>
-  </table>
-
-  <h2 class="section">1.&nbsp;&nbsp;Agreement to Self-Bill</h2>
-  <p><span class="sub">1.1</span>&nbsp;&nbsp;The Supplier agrees that Fixfy may issue self-billed invoices for all Jobs completed by the Supplier through the platform for the duration of this Agreement.</p>
-  <p><span class="sub">1.2</span>&nbsp;&nbsp;The Supplier agrees not to raise sales invoices for the supplies covered by this Agreement.</p>
-  <p><span class="sub">1.3</span>&nbsp;&nbsp;This Agreement takes effect on the date of acceptance and remains in force for a period of twelve (12) months, automatically renewing for successive twelve-month periods unless terminated earlier in accordance with clause 5.</p>
-
-  <h2 class="section">2.&nbsp;&nbsp;Supplier Obligations</h2>
-  <p>The Supplier agrees to:</p>
-  <ul class="dash">
-    <li>accept self-billed invoices raised by Fixfy on the Supplier&rsquo;s behalf until this Agreement ends;</li>
-    <li>notify Fixfy immediately if the Supplier changes its VAT registration number;</li>
-    <li>notify Fixfy immediately if the Supplier becomes, or ceases to be, registered for VAT;</li>
-    <li>notify Fixfy immediately if the Supplier transfers its business, or part of it, as a going concern;</li>
-    <li>not issue its own VAT or sales invoices for the supplies covered by this Agreement; and</li>
-    <li>keep copies of all self-billed invoices it receives.</li>
-  </ul>
-
-  <h2 class="section">3.&nbsp;&nbsp;Fixfy Obligations</h2>
-  <p>Fixfy agrees to:</p>
-  <ul class="dash">
-    <li>issue self-billed invoices showing the Supplier&rsquo;s name, address and, where applicable, VAT registration number, together with all particulars required for a valid VAT invoice;</li>
-    <li>include on each self-billed invoice the statement &ldquo;The VAT shown is your output tax due to HMRC&rdquo; where the Supplier is VAT registered;</li>
-    <li>issue a new self-billing agreement if the Supplier&rsquo;s VAT registration number changes;</li>
-    <li>send a copy of each self-billed invoice to the Supplier and retain a copy; and</li>
-    <li>not reclaim input tax on invoices that are incorrect or where this Agreement has ended.</li>
-  </ul>
-
-  <h2 class="section">4.&nbsp;&nbsp;VAT and the Agency Model</h2>
-  <p><span class="sub">4.1</span>&nbsp;&nbsp;Fixfy acts as a disclosed agent introducing Jobs between Clients and the Supplier. The Supplier supplies its Services to the Client; Fixfy provides agency, coordination and platform services and charges commission.</p>
-  <p><span class="sub">4.2</span>&nbsp;&nbsp;Where the Supplier is VAT registered, the self-billed invoice will reflect the VAT due on the Supplier&rsquo;s supply. Fixfy&rsquo;s commission is accounted for separately, with VAT applied to the commission as required by law.</p>
-  <p><span class="sub">4.3</span>&nbsp;&nbsp;The Supplier is solely responsible for accounting to HMRC for any VAT and income tax due on its supplies.</p>
-
-  <h2 class="section">5.&nbsp;&nbsp;Duration and Termination</h2>
-  <p><span class="sub">5.1</span>&nbsp;&nbsp;Either party may terminate this Agreement at any time by written notice (including through the platform).</p>
-  <p><span class="sub">5.2</span>&nbsp;&nbsp;This Agreement automatically ends if the Supplier&rsquo;s circumstances change such that self-billing is no longer permitted under HMRC rules, including a change of VAT registration number until a new agreement is made.</p>
-  <p><span class="sub">5.3</span>&nbsp;&nbsp;On termination, the Supplier resumes responsibility for issuing its own invoices for subsequent supplies.</p>
-
-  <h2 class="section">6.&nbsp;&nbsp;Governing Law</h2>
-  <p><span class="sub">6.1</span>&nbsp;&nbsp;This Agreement is governed by the laws of England and Wales and operated in accordance with HMRC self-billing requirements (VAT Notice 700/62 as amended from time to time).</p>
-
+  <header class="brand"><div class="logo">{{FIXFY_LOGO}}</div><div class="meta">Getfixfy Ltd · Co. No. 15406523 · VAT No. 478 1027 82</div></header>
+  <h1 class="title">INVOICING AND PAYMENT <span class="accent">COLLECTION AGREEMENT</span></h1>
+  <p><strong>GETFIXFY LTD, trading as Fixfy</strong><br>Company No. 15406523 · VAT No. 478 1027 82 · 124 City Road, London EC1V 2NX</p>
+  <p><strong>Version 2026-10-06 · Effective 6 October 2026</strong></p>
+  <p>This agreement replaces the Self-Billing Agreement version 2026-09-22 for all work offered to the Partner from 6 October 2026.</p>
+  <hr>
+  <p>This Invoicing and Payment Collection Agreement (the "Agreement") is made on the date it is accepted on the Fixfy platform, between:</p>
+  <p>(1) <strong>GETFIXFY LTD</strong>, a company registered in England and Wales under company number 15406523, whose registered office is at 124 City Road, London EC1V 2NX, trading as Fixfy, VAT number 478 1027 82 ("Fixfy", "we" or "us"); and</p>
+  <p>(2) the independent business whose details are recorded on the Fixfy account that accepts this Agreement (the "Partner", "you" or "your"). Your legal name, trading name, business address, company number or UTR and VAT registration number (if you are registered) are the ones recorded on that account and in your VAT Status Declaration.</p>
+  <p>It applies to the work you carry out under the Fixfy Partner Agreement. Words defined in the Partner Agreement and the Partner Terms of Use have the same meaning here.</p>
+  <h2 class="section">Background</h2>
+  <p>Since April 2026 Fixfy has accounted for VAT on its commission only, on the advice of its accountants. This version, effective 6 October 2026, sets out that arrangement in writing.</p>
+  <div class="callout"><p><strong>What this agreement does</strong></p><ul class="dash"><li><strong>Platform Bookings.</strong> The Customer is your customer. Fixfy collects the Customer's payment for you, issues the receipt or invoice to the Customer in your name, holds the money for you and pays it to you less Fixfy's commission. Fixfy gives you a VAT invoice for its commission with every payout.</li><li><strong>Fixfy Client Work.</strong> Fixfy is your customer. Fixfy prepares your invoice for you (self-billing) and pays it.</li><li>You don't need to send invoices to Fixfy or to Customers, and you must not send your own invoice for the same work.</li><li>You tell Fixfy your VAT status once, in the VAT Status Declaration in Annex 1, and you tell Fixfy within 14 days if it changes.</li></ul></div>
+  <h2 class="section">1. Scope</h2>
+  <p>1.1 Sections 2 to 6 apply to Platform Bookings (Schedule A of the Partner Agreement).</p>
+  <p>1.2 Section 7 applies to Fixfy Client Work (Schedule B of the Partner Agreement) only.</p>
+  <p>1.3 Sections 8 to 14 and Annex 1 apply to both.</p>
+  <h2 class="section">2. Fixfy's Appointment as Your Limited Payment Collection Agent</h2>
+  <p>2.1 For each Platform Booking, you appoint Fixfy as your limited payment collection agent, to receive payment from the Customer on your behalf by card through Fixfy's payment provider, by bank transfer or by any other method Fixfy offers Customers.</p>
+  <p>2.2 Fixfy's appointment is limited to:</p>
+  <p>(a) receiving Customer payments for Platform Bookings, including deposits, balances, extra work, extra materials, cancellation charges and call-outs under the Customer Terms;</p>
+  <p>(b) holding them on your behalf as Funds Held;</p>
+  <p>(c) making refunds to Customers as the Partner Agreement allows;</p>
+  <p>(d) deducting the Commission and the other amounts set out in section 9; and</p>
+  <p>(e) paying the balance to you.</p>
+  <p>2.3 Fixfy acts only for you in collecting payment. It does not act as the Customer's agent.</p>
+  <p>2.4 A payment a Customer makes to Fixfy for a Platform Booking discharges the Customer's debt to you for that amount, as if the Customer had paid you directly. The Customer has no further liability to you for it, and you must not ask the Customer to pay you again for any amount the Customer has paid Fixfy.</p>
+  <p>2.5 A Customer may pay when booking, before any partner has accepted the Booking. Fixfy receives that payment as agent for the partner who accepts the Booking. When you accept, it becomes Funds Held for you. If no partner accepts, Fixfy refunds the Customer.</p>
+  <p>2.6 Fixfy takes reasonable steps to collect what a Customer owes for a Booking, including sending payment links and reminders. Fixfy is not obliged to take legal action and does not guarantee payment. If a Customer does not pay, Fixfy will tell you and, if you ask, give you the information you reasonably need to pursue the debt yourself.</p>
+  <p>2.7 Fixfy bears its own payment processing costs. They are never deducted from your net amount.</p>
+  <p>2.8 In each Platform Booking, Fixfy acts in your name and on your behalf. Fixfy does not buy the Service from you and does not resell it to the Customer. Fixfy does not receive or use the Service itself, and it does not change the nature or the value of your supply to the Customer.</p>
+  <h2 class="section">3. Funds Held</h2>
+  <p>3.1 Fixfy holds Funds Held on your behalf from the time it receives them until payout.</p>
+  <p>3.2 For each Platform Booking, Fixfy records the amounts received from the Customer and the dates, any promotion amount Fixfy paid on the Customer's behalf, any refund and the Commission. Fixfy keeps Funds Held readily distinguishable in its records from its own taxable supplies, which are its Commission, the Late-Withdrawal Fee and its Fixfy Client Work.</p>
+  <p>3.3 Fixfy keeps Funds Held in a separate account (a dedicated pot of its business bank account) used only for money collected for Partners on Platform Bookings, and records them separately from Fixfy's own money. Funds Held do not earn interest for you.</p>
+  <p>3.4 Funds Held become due for payout as set out in paragraph A6.4 of Schedule A of the Partner Agreement, and Fixfy pays them on the next payout date.</p>
+  <p>3.5 When you ask, Fixfy will give you a statement of the Funds Held for you.</p>
+  <p>3.6 <strong>Fixfy promotions.</strong> Where a Customer uses a Fixfy discount or promotion code, Fixfy pays the promotion amount to you as part of the Published Price, on the Customer's behalf, and it forms part of your Funds Held for that Booking. Your price stays the Published Price and your net amount does not change.</p>
+  <h2 class="section">4. Receipts and Invoices to Customers in Your Name</h2>
+  <p>4.1 Invoicing for a Platform Booking is between you and the Customer. You authorise Fixfy to issue, in your name and on your behalf, the Booking confirmation and the receipts, invoices and credit notes for each Platform Booking.</p>
+  <p>4.2 Each receipt or invoice shows:</p>
+  <p>(a) your legal name and trading name, and your business address;</p>
+  <p>(b) your VAT registration number, if you are VAT registered;</p>
+  <p>(c) the Customer's name and the property address;</p>
+  <p>(d) a unique number and the date of issue;</p>
+  <p>(e) the date and a description of the Service;</p>
+  <p>(f) the Published Price for each item;</p>
+  <p>(g) any promotion amount paid by Fixfy on the Customer's behalf, as a separate line;</p>
+  <p>(h) the amount paid by the Customer and any balance due; and</p>
+  <p>(i) the statement: "Issued by GETFIXFY LTD, trading as Fixfy, as agent for [your name]. Payment received by Fixfy as [your name]'s payment collection agent."</p>
+  <p>4.3 <strong>If you are VAT registered</strong>, each invoice also shows the other details a VAT invoice needs, including the rate and amount of VAT included in the Published Price, so that it serves as your VAT invoice to the Customer. You account to HMRC for VAT on the full Published Price, including any promotion amount Fixfy paid on the Customer's behalf.</p>
+  <p>4.4 <strong>If you are not VAT registered</strong>, receipts show no VAT and no VAT number, and state that no VAT is charged. Fixfy issues them on the basis of your VAT Status Declaration in Annex 1.</p>
+  <p>4.5 Fixfy is responsible for issuing receipts and invoices accurately from the details on your Fixfy account and the Booking. You are responsible for keeping those details accurate, and you remain responsible for the VAT on your supplies.</p>
+  <p>4.6 You must not issue your own receipt or invoice to a Customer for a Platform Booking, unless Fixfy agrees in writing, so that the Customer is not invoiced twice.</p>
+  <p>4.7 Fixfy keeps a copy of each receipt, invoice and credit note and makes them available to you on the Platform.</p>
+  <p>4.8 Fixfy does not issue receipts or invoices in its own name for your Service, because it does not supply the Service.</p>
+  <h2 class="section">5. Your VAT Status</h2>
+  <p>5.1 Before your first Platform Booking under this version, you sign the VAT Status Declaration in Annex 1. Fixfy keeps it as evidence of your VAT status for as long as it keeps the records in section 12.</p>
+  <p>5.2 You must tell Fixfy in writing within 14 days if you register for VAT, stop being registered for VAT, change your VAT registration number, change your legal form (for example from sole trader to limited company), or sell or transfer your business or any part of it. You must give the date the change takes effect and sign a new VAT Status Declaration.</p>
+  <p>5.3 Fixfy changes the receipts and invoices it issues in your name from the date the change takes effect, as far as it can. If late notice means a receipt shows the wrong VAT status, you are responsible for putting it right with HMRC, and you will indemnify Fixfy against any cost this causes it. Fixfy will issue corrected documents where it can.</p>
+  <p>5.4 The Published Price includes any VAT you must charge. It does not increase because you are or become VAT registered.</p>
+  <p>5.5 The full Published Price of your Platform Bookings counts towards your turnover for the VAT registration threshold, together with your Partner Fees for Fixfy Client Work and your other business income. You are responsible for monitoring the threshold.</p>
+  <h2 class="section">6. Fixfy's VAT Invoices to You</h2>
+  <p>6.1 In each Platform Booking there are two separate supplies: your supply of the Service to the Customer, for the Published Price; and Fixfy's supply of agency services to you, for the Commission. Fixfy's agency services are standard-rated for VAT. The Late-Withdrawal Fee is also a standard-rated Fixfy charge.</p>
+  <p>6.2 For every payout, Fixfy issues you one VAT invoice showing:</p>
+  <p>(a) Fixfy's name and address, and its VAT registration number 478 1027 82;</p>
+  <p>(b) your name and address;</p>
+  <p>(c) a unique sequential number, the date of issue and the tax point;</p>
+  <p>(d) the reference and date of each Platform Booking, with its Commission;</p>
+  <p>(e) each Late-Withdrawal Fee, with its Booking reference; and</p>
+  <p>(f) the total excluding VAT, the VAT rate, the VAT amount and the total including VAT.</p>
+  <p>6.3 Fixfy issues this VAT invoice for every payout even though the Commission and fees are deducted from the Funds Held rather than paid by you separately. The full invoicing procedure applies even when only the net amount is paid to you.</p>
+  <p>6.4 The Commission in the Commission Schedule, the 30% Commission on quoted work and the Late-Withdrawal Fee all include VAT at the standard rate. If you are VAT registered, you may be able to reclaim that VAT under the normal rules.</p>
+  <h2 class="section">7. Self-Billing for Fixfy Client Work</h2>
+  <p>7.1 This section applies only to Fixfy Client Work under Schedule B of the Partner Agreement, where Fixfy is your customer. It does not apply to Platform Bookings.</p>
+  <p>7.2 <strong>Agreement to self-bill.</strong> You agree that Fixfy will issue self-billed invoices ("self-bills") for all supplies you make to Fixfy as Fixfy Client Work, for as long as this section lasts.</p>
+  <p>7.3 <strong>Term.</strong> This section starts on the date you accept this Agreement and lasts for 12 months. It then renews for further periods of 12 months unless it ends earlier under section 13. Before each renewal Fixfy reviews your details on file, and it keeps a record of this agreement and each renewal.</p>
+  <p>7.4 <strong>Fixfy agrees to:</strong></p>
+  <p>(a) issue a self-bill for each fortnightly payout period, covering every Booking of Fixfy Client Work you completed and Fixfy approved in that period;</p>
+  <p>(b) show on each self-bill: the words "Self-billing invoice"; a unique sequential number; the date of issue and the tax point; Fixfy's name and address and VAT registration number 478 1027 82; your name and address, and your VAT registration number if you are registered; each Booking with its reference, date, property and Partner Fee; any materials reimbursed; any CIS deduction; any other deductions, shown separately; and the total payable;</p>
+  <p>(c) where you are VAT registered, show the rate and amount of VAT included, and the statement "The VAT shown is your output tax due to HMRC";</p>
+  <p>(d) send each self-bill to you by email or through the Platform, and keep a copy;</p>
+  <p>(e) keep a record of your name, address and, if you are registered, your VAT registration number;</p>
+  <p>(f) make a new self-billing agreement with you if your VAT registration number changes, or if you register or stop being registered for VAT; and</p>
+  <p>(g) not issue self-bills after this section has ended.</p>
+  <p>7.5 <strong>You agree to:</strong></p>
+  <p>(a) accept the self-bills Fixfy issues for your supplies of Fixfy Client Work until this section ends;</p>
+  <p>(b) not issue your own sales invoices or VAT invoices for Fixfy Client Work covered by this section;</p>
+  <p>(c) tell Fixfy immediately, and in any case within 14 days, in writing, if you register for VAT, stop being registered for VAT, change your VAT registration number, change your legal form, or sell or transfer your business or any part of it;</p>
+  <p>(d) keep your business name, address, tax details and bank details on your Fixfy account accurate and up to date; and</p>
+  <p>(e) keep a copy of every self-bill you receive.</p>
+  <p>7.6 All Partner Fees and other amounts on a self-bill are inclusive of any VAT due on them.</p>
+  <h2 class="section">8. Payout Statements</h2>
+  <p>8.1 For each payout, Fixfy gives you one Payout Statement with:</p>
+  <p>(a) <strong>Part A, Platform Bookings:</strong> for each Job, its reference and date, the Published Price, any promotion amount Fixfy paid on the Customer's behalf, the amount received from the Customer, the Commission and your net amount;</p>
+  <p>(b) <strong>Part B, Fixfy Client Work:</strong> for each Job, its reference and date, the Partner Fee and any materials reimbursed;</p>
+  <p>(c) <strong>Deductions:</strong> each deduction under section 9, with a description; and</p>
+  <p>(d) the total paid to you.</p>
+  <p>Each Job is always shown at its full value.</p>
+  <p>8.2 With each Payout Statement Fixfy sends its VAT invoice under section 6 and, where there is Fixfy Client Work, a self-bill under section 7. The Payout Statement is a summary. It is not itself a VAT invoice.</p>
+  <h2 class="section">9. Deductions and Set-Off</h2>
+  <p>9.1 Fixfy may deduct from Funds Held and from Partner Fees any amount you owe Fixfy under the Partner Agreement or the Terms of Use, including:</p>
+  <p>(a) the Commission and any Late-Withdrawal Fee;</p>
+  <p>(b) refunds to Customers where you are at fault, and card payments reversed by a Customer's card issuer, under Schedule A of the Partner Agreement;</p>
+  <p>(c) the reasonable cost of remedial work arranged under Schedule A or Schedule B;</p>
+  <p>(d) materials charged back and the cost of replacing Keys; and</p>
+  <p>(e) any CIS deduction under section 10.2.</p>
+  <p>9.2 Fixfy takes no Commission on Customer cancellation charges, call-outs or extra materials. They are paid to you in full.</p>
+  <p>9.3 Each deduction is shown in the Deductions section of the Payout Statement, and each deduction that is a Fixfy charge is also shown on Fixfy's VAT invoice.</p>
+  <h2 class="section">10. Tax Responsibilities and CIS</h2>
+  <p>10.1 You are responsible for your own income tax, National Insurance, corporation tax and VAT, and for declaring your income to HMRC. Fixfy does not deduct tax from payouts, except under section 10.2.</p>
+  <p>10.2 Where a Booking of Fixfy Client Work is a construction operation within the Construction Industry Scheme ("CIS"), such as painting and decorating, repairs or building work, and Fixfy is the contractor, Fixfy will verify you with HMRC before paying and make any deduction HMRC requires, at the rate HMRC confirms. The deduction is shown on the self-bill, and Fixfy will give you a CIS payment and deduction statement for each tax month in which a deduction is made.</p>
+  <p>10.3 Fixfy makes no CIS deductions from Platform Bookings, because Fixfy is not the contractor. It passes on the Customer's payment as your agent.</p>
+  <h2 class="section">11. Queries and Corrections</h2>
+  <p>11.1 If you believe a receipt, invoice, self-bill or Payout Statement is wrong, tell Fixfy within 14 days of receiving it, through the Platform or by email to support@getfixfy.com, explaining what is wrong.</p>
+  <p>11.2 Fixfy will review the query in good faith. Any agreed correction is made by a credit note, a corrected or supplementary document, or a separate, clearly described line on the next Payout Statement.</p>
+  <p>11.3 A document you do not query within 14 days is treated as accepted. This does not prevent either party from correcting an obvious error later.</p>
+  <h2 class="section">12. Records</h2>
+  <p>12.1 Each party will keep its copies of receipts, invoices, credit notes, self-bills, Payout Statements, VAT Status Declarations and related records for at least six years.</p>
+  <h2 class="section">13. Term and Ending</h2>
+  <p>13.1 This Agreement starts on the date you accept it and lasts as long as the Partner Agreement, except that section 7 lasts for the term set out in section 7.3.</p>
+  <p>13.2 Either party may end section 7 (self-billing) at any time by telling the other in writing, including by email or through the Platform. Section 7 ends automatically when the Partner Agreement ends, or if your VAT registration changes in a way that requires a new self-billing agreement, until a new one is in place. Fixfy will still issue the final self-bill for Bookings completed before it ends. If you continue to supply Fixfy Client Work after section 7 ends, you must issue your own invoices to Fixfy until a new self-billing agreement is in place.</p>
+  <p>13.3 When the Partner Agreement ends, Fixfy continues to collect payment for Platform Bookings completed before the end, to hold and pay out Funds Held, to issue receipts and invoices in your name for those Bookings, and to issue its final VAT invoice to you.</p>
+  <p>13.4 Sections 3, 5.3, 6, 9, 11 and 12 survive the end of this Agreement for as long as they are needed.</p>
+  <h2 class="section">14. Changes and Governing Law</h2>
+  <p>14.1 Fixfy may change this Agreement by giving you at least 14 days' notice by email, in the Fixfy Trade app or on the Platform, in the same way as the Partner Agreement. A change to section 7 that HMRC rules treat as a new self-billing agreement takes effect only when you accept it.</p>
+  <p>14.2 This Agreement operates in line with HMRC's guidance on agents (VAT Notice 700, sections 22 and 23) and on self-billing (VAT Notice 700/62), as updated from time to time.</p>
+  <p>14.3 This Agreement, and any dispute or claim arising out of or in connection with it (including non-contractual disputes or claims), is governed by the law of England and Wales. The courts of England and Wales have exclusive jurisdiction.</p>
+  <hr>
   <div class="execution">
-    <h2 class="exec">ACCEPTANCE</h2>
-    <p>By clicking &ldquo;Sign&rdquo; / &ldquo;Accept&rdquo; in the Fixfy onboarding portal, or by signing below, the Supplier agrees to this Self-Billing Agreement and confirms the Supplier Details above are correct.</p>
-    <div class="sigwrap">
-      <div class="sigcell">
-        <div class="h">GETFIXFY LTD (Self-Biller)</div>
-        <div class="org">Getfixfy Ltd</div>
-        <div class="org">124 City Road, London EC1V 2NX</div>
-        <div class="org">Co. No. 15406523</div>
-        <div class="sigline"></div><div class="sigcap">Authorised signatory</div>
-        <div class="sigline"></div><div class="sigcap">Date</div>
-      </div>
-      <div class="sigcell">
-        <div class="h">THE SUPPLIER (Partner)</div>
-        <div class="org">&nbsp;</div>
-        <div class="sigline"></div><div class="sigcap">Name / Business name</div>
-        <div class="sigline"></div><div class="sigcap">Signature</div>
-        <div class="sigline"></div><div class="sigcap">Date</div>
-      </div>
-    </div>
+  <h2 class="section">Signed</h2>
+  <p>By signing or accepting in the Fixfy Trade app or on the Platform, the Partner agrees to this Agreement, including the agreement to self-bill in section 7, and confirms that the details on its Fixfy account are correct.</p>
+  <p><strong>Getfixfy Ltd</strong> (payment collection agent, and self-biller for Fixfy Client Work)</p>
+  <p>Victor Braz de Souza<br>Signed by Victor Henrique Braz de Souza, Director, duly authorised, for and on behalf of Getfixfy Ltd</p>
+  <p><strong>The Partner</strong> (supplier)</p>
+  <p>Signature: ______________________________</p>
+  <p>Name, duly authorised, for and on behalf of the Partner: ______________________________</p>
+  <p>Date: ______________________________</p>
+  <p>Your acceptance is recorded on the Platform against this version of the Agreement.</p>
+  <hr>
   </div>
-
-  <footer class="foot"><span>Self-Billing Agreement &middot; v2026 &mdash; Confidential</span><span>Getfixfy Ltd</span></footer>
+  <h2 class="part">Annex 1: VAT Status Declaration</h2>
+  <p><strong>To:</strong> GETFIXFY LTD, trading as Fixfy, 124 City Road, London EC1V 2NX (VAT No. 478 1027 82)</p>
+  <p><strong>Partner details</strong></p>
+  <p>Legal name: ______________________________</p>
+  <p>Trading name (if different): ______________________________</p>
+  <p>Business address: ______________________________</p>
+  <p>Company number or UTR: ______________________________</p>
+  <p><strong>VAT status</strong> (tick one)</p>
+  <p>[ ] I declare that the Partner is <strong>not a VAT-registered person</strong>. To the best of the Partner's knowledge, it is not currently required to register for VAT.</p>
+  <p>[ ] I declare that the Partner is <strong>registered for VAT</strong>.<br>VAT registration number: ______________________________<br>Date of registration: ______________________________</p>
+  <p><strong>The Partner confirms that:</strong></p>
+  <ol class="num"><li>the information in this declaration is true and complete;</li><li>it will tell Fixfy in writing within 14 days of any change to its VAT status, including registering for VAT, stopping being registered, changing its VAT registration number, changing its legal form or selling or transferring its business, and will sign a new declaration;</li><li>it understands that Fixfy relies on this declaration to issue receipts and invoices to Customers in the Partner's name for Platform Bookings, and self-bills for Fixfy Client Work; and</li><li>it is responsible for any VAT due on its own supplies.</li></ol>
+  <p>Signature: ______________________________</p>
+  <p>Name: ______________________________</p>
+  <p>Position (sole trader, partner or director): ______________________________</p>
+  <p>Date: ______________________________</p>
+  <p>Signing or accepting this declaration in the Fixfy Trade app or on the Platform is as binding as signing it by hand. Fixfy keeps it on file for at least six years.</p>
+  <footer class="foot"><span>Invoicing and Payment Collection Agreement · Version 2026-10-06 · Getfixfy Ltd, trading as Fixfy · Company No. 15406523 · VAT No. 478 1027 82</span></footer>
 </div>
 </body>
 </html>

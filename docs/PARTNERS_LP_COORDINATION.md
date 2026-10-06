@@ -1,15 +1,12 @@
 # Partners LP coordination (getfixfy.com/partners)
 
-The marketing landing page lives outside this repo. Wire each plan CTA to the trade portal signup with a `plan` query param:
+The marketing landing page lives outside this repo.
 
-| Plan | Price | CTA URL |
-|------|-------|---------|
-| Starter | £69/mo | `https://partners.getfixfy.com/signup?plan=starter` |
-| Pro | £99/mo | `https://partners.getfixfy.com/signup?plan=pro` |
-| VIP Annual | £499/yr | `https://partners.getfixfy.com/signup?plan=vip` |
+Paid partner plans (Starter, Pro, VIP) were retired on 6 October 2026. Joining and using
+Fixfy is free: Fixfy's only charges to a partner are its commission on Platform Bookings and
+the £50 late-withdrawal fee (Partner Agreement, version 2026-10-06, clause 8).
 
-**VIP** should be the hero card with copy: **Save £689/year vs Pro monthly** (£99×12 − £499).
-
-Self-signup without `?plan=` redirects users back to https://www.getfixfy.com/partners to choose a plan.
-
-OS-invited partners (express `/invite` flow) default to **Pro** unless a plan is passed at claim time.
+- Every "Join" CTA points to `https://partners.getfixfy.com/get-started` (no `plan` param).
+  Old `/signup?plan=...` links still redirect there and the `plan` param is dropped.
+- The LP must not show plan prices, trials or "7 days free" copy.
+- OS-invited partners (express `/invite` flow) get no plan either.

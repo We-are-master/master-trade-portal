@@ -1,7 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { sendOtpEmail } from "@/lib/email";
 import { resolvePartnerJoinInvite } from "@/lib/partner-join-invite";
-import { parsePlanId, DEFAULT_PLAN_ID } from "@/lib/plan-catalog";
 
 type AdminClient = SupabaseClient;
 
@@ -10,7 +9,6 @@ export type ClaimPartnerInviteInput = {
   inviteCode?: string;
   fullName?: string;
   company?: string;
-  plan?: string;
   /** False when the caller signs the partner in itself (no code email). Default true. */
   sendCode?: boolean;
 };
@@ -205,9 +203,7 @@ export async function claimPartnerInvite(
     input.company,
   );
 
-  const plan = parsePlanId(input.plan) ?? DEFAULT_PLAN_ID;
   const { createdAuth } = await provisionPartnerAuthUser(admin, partnerId, email, contactName, companyName);
-  await admin.from("partners").update({ plan }).eq("id", partnerId);
 
   if (input.sendCode === false) return { ok: true, partnerId, createdAuth };
   const { devCode, emailError } = await sendSignInCode(admin, email);

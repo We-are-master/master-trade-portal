@@ -11,7 +11,6 @@ import {
 } from "react";
 import { useRouter } from "next/navigation";
 import { T } from "@/lib/tokens";
-import { DEFAULT_PLAN_ID } from "@/lib/plan-catalog";
 import { AuthWordmark, BrandPanelBackground } from "@/components/brand/auth-wordmark";
 import { Icon } from "@/components/ui/icon";
 
@@ -408,7 +407,7 @@ function SignInFlow({
             padding: 0,
           }}
         >
-          Start a 7-day free trial
+          Join Fixfy for free
         </button>
       </p>
     </div>
@@ -509,7 +508,7 @@ function RegisterFlow({
         <CodeBoxes value={code} onChange={setCode} />
         <div style={{ marginTop: 22 }}>
           <PrimaryBtn disabled={busy || code.length < 6} onClick={verify}>
-            {busy ? "Verifying…" : "Start free trial"}{" "}
+            {busy ? "Verifying…" : "Create my account"}{" "}
             <StrokeIcon size={17}>
               <path d="M5 12h14M13 6l6 6-6 6" />
             </StrokeIcon>
@@ -540,8 +539,8 @@ function RegisterFlow({
       </h2>
       <p style={{ fontSize: 14, color: T.mute, margin: "8px 0 22px", lineHeight: 1.5 }}>
         {inviteCode
-          ? "Confirm your details — we'll email you a code to sign in and finish onboarding."
-          : "Start a 7-day free trial. No card required."}
+          ? "Confirm your details. We'll email you a code to sign in and finish onboarding."
+          : "Free to join. No fees, no plans and no card."}
       </p>
       {inviteBanner && (
         <div style={{ marginBottom: 14, fontSize: 13, color: T.slate, background: T.coralTint, borderRadius: 8, padding: "10px 12px", lineHeight: 1.45 }}>
@@ -743,7 +742,7 @@ export function AuthBrandToggle({
             company: payload.company,
             inviteCode: useInvite,
           }
-        : { ...payload, plan: DEFAULT_PLAN_ID };
+        : payload;
       const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -853,7 +852,7 @@ export function AuthBrandToggle({
             </p>
             <div style={{ display: "flex", flexDirection: "column", gap: 20, maxWidth: "40ch" }}>
               <ValueProp light icon="map-pin" title="Jobs sent to you" sub="Vetted local work, matched to your trade and postcode." />
-              <ValueProp light icon="wallet" title="Weekly self-bill payouts" sub="We invoice the client — you get paid on a clear schedule." />
+              <ValueProp light icon="wallet" title="Paid every two weeks" sub="We collect the customer's payment for you and send a statement with every payout." />
               <ValueProp light icon="zap" title="Run it all in one place" sub="Quotes, schedule, team and invoices, together." />
             </div>
           </div>

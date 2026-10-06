@@ -32,21 +32,16 @@ export interface Partner {
   radiusMiles: number;
   excludedPostcodes?: string[];
   tradingName: string;
-  trialDaysLeft: number;
-  trialEndsOn: string;
   yearsExperience: number;
   bio: string;
   rating: number;
   ratingsCount: number;
   /** OS partners.status — onboarding = account in review until staff activates. */
   status: string;
-  plan: string;
-  billingReady: boolean;
+  /** Legacy Stripe subscription state (paid plans were retired on 6 Oct 2026). */
   subscriptionStatus: string | null;
   /** ISO timestamp set when the /get-started wizard finishes. Null while the wizard is still in progress. */
   wizardCompletedAt?: string | null;
-  /** `subscription` = billed via Stripe · `free` = ops-managed free tier · null = admin has not tiered them yet. */
-  accountType?: "subscription" | "free" | null;
 }
 
 // master-os: clients / contacts on a job.
@@ -94,6 +89,12 @@ export interface AvailableJob {
   total: number;
   /** "Day rate" / "Half day" when the fixed price was agreed on that basis (jobs.rate_basis). */
   rateBasisLabel?: string | null;
+  /**
+   * Platform Booking breakdown (agent model, Partner Agreement 4.3.1): what the
+   * customer pays and Fixfy's commission; `total` is then the partner's net.
+   * Null for Fixfy Client Work (Partner Fee only) or when the kind is unknown.
+   */
+  platformBooking?: { customerPrice: number; commission: number } | null;
   timing: string;
   /** Janela de chegada ("9am to 12pm"), quando o job tem hora. */
   arrivalWindow?: string | null;

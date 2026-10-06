@@ -15,7 +15,6 @@ import { useToast } from "@/components/ui/toast";
 import { PartnerRatingCard } from "@/components/ui/partner-rating";
 import { usePartner } from "@/components/partner-context";
 import { useIsMobile } from "@/hooks/use-media-query";
-import { partnerBillingEnabled } from "@/lib/partner-work-access";
 import { usePartnerRating } from "@/hooks/use-partner-rating";
 import { createClient } from "@/lib/supabase/client";
 import { formatGBPdec } from "@/lib/format";
@@ -30,9 +29,17 @@ import {
 import { SERVICE_CATEGORY_ORDER, serviceCategory } from "@/lib/service-category";
 import { fetchSelfBills, type SelfBill } from "@/lib/queries/self-bills";
 import { fetchPartnerDocuments, type PartnerDoc } from "@/lib/queries/partner-documents";
-import { missingFromChecklist, pickRequiredDocMatch, type RequiredDocDef } from "@/lib/partner-required-docs";
+import {
+  isPlatformBookingRequiredDoc,
+  missingFromChecklist,
+  pickRequiredDocMatch,
+  type RequiredDocDef,
+} from "@/lib/partner-required-docs";
 import { hydrateContractHtml } from "@/lib/contract-branding";
 import { fetchContracts, type PartnerContract } from "@/lib/queries/contracts";
+import { INVOICING_CONTRACT_TYPE } from "@/lib/partner-contract-types";
+import { vatStatusFromDraft, type VatStatusDraft } from "@/lib/vat-status";
+import { VatStatusField } from "@/components/vat-status-field";
 import { clampRateCard, fetchRateCard, saveRateCard, type ServicePrice } from "@/lib/queries/rate-card";
 import { RateCardEditor } from "@/components/rate-card-editor";
 import { useRegisterOnboardingSave, useIsOnboarding } from "@/components/onboarding-save";
@@ -47,10 +54,6 @@ import {
   type NotificationPrefs,
   AUTO_ACCEPT_TERMS_VERSION,
 } from "@/lib/queries/partner-settings";
-import { openBillingPortal, startCheckout } from "@/lib/billing";
-import { getPlan, type PlanId } from "@/lib/plan-catalog";
-import { PlanPickerGrid, PlanSummaryCard } from "@/components/billing/plan-summary-card";
-import { OnboardingPaymentStep } from "@/components/billing/onboarding-payment-step";
 
 export interface SettingsPage {
   id: string;
@@ -65,8 +68,8 @@ export const SETTINGS_PAGES: SettingsPage[] = [
   { id: "availability", label: "Availability", icon: "calendar-clock" },
   { id: "area", label: "Service area", icon: "map-pin" },
   { id: "preferences", label: "Job preferences", icon: "sliders-horizontal" },
-  { id: "billing", label: "Billing & plan", icon: "credit-card" },
-  { id: "selfbill", label: "Self-bill", icon: "receipt" },
+  // Route id stays "selfbill" so old links (settings:selfbill) keep working.
+  { id: "selfbill", label: "Statements", icon: "receipt" },
   { id: "docs", label: "Documents", icon: "shield-check" },
   { id: "policies", label: "Policies", icon: "gavel" },
 ];
@@ -76,11 +79,9 @@ export function settingsPageLabel(id: string): string {
 }
 
 export function SettingsView({ initial = "profile" }: { initial?: string }) {
-  const partner = usePartner();
-  const billingEnabled = partnerBillingEnabled(partner);
-  // Free / un-tiered partners: no "Billing & plan" tab at all.
-  const pages = billingEnabled ? SETTINGS_PAGES : SETTINGS_PAGES.filter((p) => p.id !== "billing");
-  const safeInitial = initial === "billing" && !billingEnabled ? "profile" : initial;
+  const pages = SETTINGS_PAGES;
+  // "Billing & plan" was retired with the paid plans; an old link lands on Profile.
+  const safeInitial = initial === "billing" ? "profile" : initial;
   const [page, setPage] = useState(safeInitial);
   const isMobile = useIsMobile();
   useEffect(() => {
@@ -135,7 +136,6 @@ export function SettingsView({ initial = "profile" }: { initial?: string }) {
         {page === "availability" && <AvailabilityPage />}
         {page === "area" && <ServiceAreaPage />}
         {page === "preferences" && <PreferencesPage />}
-        {page === "billing" && billingEnabled && <BillingPage />}
         {page === "selfbill" && <SelfBillPage />}
         {page === "docs" && <DocsPage />}
         {page === "policies" && <PoliciesPage />}
@@ -578,7 +578,7 @@ export function RatesPage() {
 
   return (
     <>
-      {!inOnboarding && <SettingsHeader title="Rate card" subtitle="What Fixfy pays you per service. Our standard, or your own rate below it." />}
+      {!inOnboarding && <SettingsHeader title="Rate card" subtitle="Your net per service: what you receive after Fixfy's commission. Our standard, or your own rate below it." />}
       {loading ? (
         <div style={{ padding: 8, color: T.mute, fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}>
           <Icon name="loader" size={14} color={T.mute} /> Loading rate card…
@@ -1157,144 +1157,11 @@ function PreferencesPage() {
   );
 }
 
-// ---------- BILLING & PLAN ----------
-interface SubInfo {
-  subscription_status: string | null;
-  plan: string | null;
-  trial_ends_at: string | null;
-  current_period_end: string | null;
-}
-
-function fmtDate(iso: string | null): string {
-  if (!iso) return "";
-  return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "Europe/London" });
-}
-function daysLeft(iso: string | null): number {
-  if (!iso) return 0;
-  const ms = new Date(iso).getTime() - Date.now();
-  return ms <= 0 ? 0 : Math.ceil(ms / 86_400_000);
-}
-
-const PRO_FEATURES = getPlan("pro").features;
-
 function isEmploymentContract(c: { type: string; title: string }): boolean {
   return /employment/i.test(c.type) || /employment/i.test(c.title);
 }
 
-export function BillingPage() {
-  const partner = usePartner();
-  const inOnboarding = useIsOnboarding();
-  // Best-effort read of the subscription columns (migration 196). If 196 isn't applied yet the
-  // query errors on the missing columns — we swallow it and fall back to the "start trial" state,
-  // so this never breaks the page (and stays out of the critical auth select).
-  const [sub, setSub] = useState<SubInfo | null>(null);
-  const [loaded, setLoaded] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const { data, error } = await createClient()
-          .from("partners")
-          .select("subscription_status, plan, trial_ends_at, current_period_end")
-          .eq("id", partner.id)
-          .maybeSingle();
-        if (!cancelled && !error && data) setSub(data as SubInfo);
-      } catch {
-        /* 196 not applied — fall back below */
-      } finally {
-        if (!cancelled) setLoaded(true);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [partner.id]);
-
-  const status = sub?.subscription_status ?? null;
-  const isActive = status === "active";
-  const isTrialing = status === "trialing" || (!status && daysLeft(sub?.trial_ends_at ?? null) > 0);
-  const trialDays = daysLeft(sub?.trial_ends_at ?? null);
-  const currentPlan = getPlan(sub?.plan ?? partner.plan);
-  const selectedPlan = (sub?.plan ?? partner.plan) as PlanId;
-
-  const statusBadge = isActive
-    ? `${currentPlan.name.toUpperCase()} · ACTIVE`
-    : isTrialing
-      ? `FREE TRIAL · ${trialDays} DAY${trialDays === 1 ? "" : "S"} LEFT`
-      : status
-        ? `PLAN · ${status.toUpperCase()}`
-        : partner.billingReady
-          ? "CARD SAVED · AWAITING ACTIVATION"
-          : "ADD PAYMENT METHOD";
-
-  const subline = isActive
-    ? sub?.current_period_end
-      ? `Renews ${fmtDate(sub.current_period_end)}.`
-      : "Subscription active."
-    : isTrialing
-      ? sub?.trial_ends_at
-        ? `Trial ends ${fmtDate(sub.trial_ends_at)}.`
-        : "Trial in progress."
-      : partner.billingReady
-        ? "Your card is saved. Billing starts when your account is approved."
-        : "Secure your plan with a card — no charge until Fixfy approves you.";
-
-  if (inOnboarding) {
-    return <OnboardingPaymentStep />;
-  }
-
-  return (
-    <>
-      <SettingsHeader title="Billing & plan" />
-      <PlanSummaryCard planId={selectedPlan} />
-      <div style={{ height: 14 }} />
-      <PlanPickerGrid
-        selected={selectedPlan}
-        onSelect={(id) => void startCheckout(id)}
-      />
-      <div style={{ height: 14 }} />
-      <Card style={{ marginBottom: 14, padding: 0, background: T.navy, color: T.white, borderColor: T.navy }}>
-        <div style={{ padding: "18px 20px", display: "flex", alignItems: "flex-start", gap: 20 }}>
-          <div style={{ flex: 1 }}>
-            <Badge tone="coral" size="sm">{statusBadge}</Badge>
-            <div style={{ fontSize: 26, fontWeight: 600, marginTop: 8, letterSpacing: -0.4 }}>
-              {currentPlan.name} <span style={{ color: T.coral }}>· {currentPlan.priceLabel}</span>
-            </div>
-            <div style={{ fontSize: 13, color: "rgba(255,255,255,0.7)", marginTop: 4 }}>{subline}</div>
-          </div>
-          <div style={{ width: 220, display: "flex", flexDirection: "column", gap: 10, justifyContent: "center" }}>
-            {isActive ? (
-              <Button variant="ghost_dark" size="sm" full onClick={openBillingPortal}>Manage subscription</Button>
-            ) : (
-              <>
-                <Button variant="primary" size="md" icon="arrow-right" full onClick={() => void startCheckout(selectedPlan)}>
-                  {partner.billingReady ? "Activate plan" : "Choose plan & pay"}
-                </Button>
-                <Button variant="ghost_dark" size="sm" full onClick={openBillingPortal}>Manage billing</Button>
-              </>
-            )}
-          </div>
-        </div>
-      </Card>
-
-      <PageCard title="Payment & invoices" subtitle="Cards, receipts and plan changes are managed securely by Stripe.">
-        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-          <div style={{ width: 36, height: 36, borderRadius: 9, background: T.paper2, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
-            <Icon name="credit-card" size={18} color={T.navy} />
-          </div>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 13.5, color: T.ink, fontWeight: 500 }}>Open the billing portal</div>
-            <div style={{ fontSize: 11.5, color: T.mute, marginTop: 2 }}>Update your card, download invoices, or change your plan.</div>
-          </div>
-          <Button variant="secondary" icon="external-link" onClick={openBillingPortal} disabled={!loaded}>Manage</Button>
-        </div>
-      </PageCard>
-    </>
-  );
-}
-
-// ---------- SELF-BILL ----------
+// ---------- STATEMENTS (route id "selfbill") ----------
 interface PayoutStatus {
   connected: boolean;
   payoutsEnabled: boolean;
@@ -1410,7 +1277,9 @@ export function PaymentHowItWorksCard() {
         <div>
           <div style={{ fontSize: 13, fontWeight: 600, color: T.navy }}>Important</div>
           <div style={{ fontSize: 13, color: T.slate, marginTop: 4, lineHeight: 1.55 }}>
-            We invoice the customer for you. You do not need to chase payments.
+            For bookings made through Fixfy, we collect the customer&apos;s payment for you and issue the receipt in your
+            name. You keep the price less Fixfy&apos;s commission, and every payout comes with a statement and our
+            commission invoice. You do not need to invoice anyone or chase payments.
           </div>
         </div>
       </div>
@@ -1567,7 +1436,7 @@ function PayoutsCardInner({ handleRef }: { handleRef: RefObject<PayoutsCardHandl
               </div>
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 13.5, fontWeight: 500, color: T.ink }}>
-                  {enabled ? "Bank connected — paid every 2 weeks on Friday" : started ? "Finish connecting your bank on Stripe" : "Connect your bank to receive payouts"}
+                  {enabled ? "Bank connected · paid every 2 weeks on Friday" : started ? "Finish connecting your bank on Stripe" : "Connect your bank to receive payouts"}
                 </div>
                 <div style={{ fontSize: 11.5, color: T.mute, marginTop: 3 }}>Secured by Stripe Connect · trusted by millions of businesses</div>
               </div>
@@ -1642,7 +1511,7 @@ export function SelfBillPage() {
         const rows = await fetchSelfBills(createClient(), partner.id);
         if (!cancelled) setBills(rows);
       } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load self-bills");
+        if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load statements");
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -1656,22 +1525,27 @@ export function SelfBillPage() {
 
   return (
     <>
-      {!inOnboarding && <SettingsHeader title="Self-bill" subtitle="Every invoice Fixfy has issued on your behalf. The agreement lives in Documents; how payment works is in Policies." />}
+      {!inOnboarding && (
+        <SettingsHeader
+          title="Statements"
+          subtitle="Payout statements and commission invoices. Your agreements live in Documents; how payment works is in Policies."
+        />
+      )}
 
       {inOnboarding && <PaymentHowItWorksCard />}
 
       {!inOnboarding && <PayoutsCard />}
 
       {!inOnboarding && (
-      <PageCard title="Past self-bills">
+      <PageCard title="Past statements">
         {loading ? (
           <div style={{ padding: 8, color: T.mute, fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}>
-            <Icon name="loader" size={14} color={T.mute} /> Loading self-bills…
+            <Icon name="loader" size={14} color={T.mute} /> Loading statements…
           </div>
         ) : error ? (
           <div style={{ padding: 8, color: T.coral, fontSize: 13 }}>{error}</div>
         ) : past.length === 0 ? (
-          <div style={{ padding: 8, color: T.mute, fontSize: 13 }}>No self-bills issued yet. They appear here once your completed jobs are billed.</div>
+          <div style={{ padding: 8, color: T.mute, fontSize: 13 }}>No statements yet. They appear here once your completed jobs are paid out.</div>
         ) : (
           <div style={{ overflow: "auto" }}>
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
@@ -1724,8 +1598,9 @@ export function DocsPage({ onChanged }: { onChanged?: () => void } = {}) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busyType, setBusyType] = useState<string | null>(null);
-  // The self-billing agreement is a Fixfy-issued document, so it belongs on
-  // this page rather than buried in the Self-bill screen.
+  // The Invoicing and Payment Collection Agreement (contract_type
+  // self_bill_agreement) is a Fixfy-issued document, so it belongs on this page
+  // rather than buried in the Statements screen.
   const [selfBill, setSelfBill] = useState<PartnerContract | null>(null);
   const [readingSelfBill, setReadingSelfBill] = useState(false);
 
@@ -1769,7 +1644,7 @@ export function DocsPage({ onChanged }: { onChanged?: () => void } = {}) {
       const res = await fetch("/api/partner/documents", { method: "POST", body: form });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(json.error || "Upload failed");
-      toast({ text: `${name} uploaded — we'll review it shortly`, icon: "check" });
+      toast({ text: `${name} uploaded. We'll review it shortly`, icon: "check" });
       await load();
       onChanged?.();
     } catch (e) {
@@ -1787,6 +1662,10 @@ export function DocsPage({ onChanged }: { onChanged?: () => void } = {}) {
     created_at: new Date(0).toISOString(),
   }));
   const missing = missingFromChecklist(docRows, required);
+  // ID, public liability and the trade registration gate website bookings
+  // (Platform Bookings); the rest of the checklist is for our review.
+  const missingForBookings = missing.filter((d) => isPlatformBookingRequiredDoc(d)).length;
+  const missingOther = missing.length - missingForBookings;
   const extraDocs = docs.filter((d) => !required.some((r) => pickRequiredDocMatch(docRows, r)));
 
   return (
@@ -1816,7 +1695,16 @@ export function DocsPage({ onChanged }: { onChanged?: () => void } = {}) {
             <Icon name={missing.length === 0 ? "shield-check" : "alert-triangle"} size={15} />
             {missing.length === 0
               ? "All required documents are on file. You're cleared to work."
-              : `${missing.length} required document${missing.length === 1 ? "" : "s"} still needed before you can use the platform.`}
+              : [
+                  missingForBookings > 0
+                    ? `Photo ID, public liability insurance and your trade registration are required before you can receive website bookings: ${missingForBookings} still needed.`
+                    : "",
+                  missingOther > 0
+                    ? `${missingOther} ${missingForBookings > 0 ? "other " : ""}required document${missingOther === 1 ? "" : "s"} still needed for our review.`
+                    : "",
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
           </div>
 
           {selfBill && (
@@ -2098,16 +1986,21 @@ export function PoliciesPage() {
   const [sig, setSig] = useState<string | null>(null);
   const [signerName, setSignerName] = useState(`${partner.firstName} ${partner.lastName}`.trim());
   const [signBusy, setSignBusy] = useState(false);
+  const [vat, setVat] = useState<VatStatusDraft>({ registered: null, number: "" });
 
   const signableContracts = contracts.filter((c) => !isEmploymentContract(c));
-  // The self-billing agreement is surfaced under Documents, so it is not listed
-  // here — but it still has to be signed, so it stays in the signing set.
+  // The Invoicing and Payment Collection Agreement is surfaced under Documents,
+  // so it is not listed here, but it still has to be signed, so it stays in the
+  // signing set (with the VAT status line, its Annex 1).
   const visibleContracts = signableContracts.filter((c) => c.type !== "self_bill_agreement");
   const unsignedContracts = signableContracts.filter((c) => !c.signed);
   const allSigned = signableContracts.length > 0 && unsignedContracts.length === 0;
+  const vatNeeded = unsignedContracts.some((c) => c.type === INVOICING_CONTRACT_TYPE);
+  const vatStatus = vatStatusFromDraft(vat);
 
   const submitBulkSignature = async () => {
     if (!sig || !signerName.trim() || unsignedContracts.length === 0) return;
+    if (vatNeeded && !vatStatus) return;
     setSignBusy(true);
     try {
       const res = await fetch("/api/contracts/sign-all", {
@@ -2117,6 +2010,7 @@ export function PoliciesPage() {
           signatureImageBase64: sig,
           signerName: signerName.trim(),
           deviceInfo: typeof navigator !== "undefined" ? navigator.userAgent : undefined,
+          vatStatus: vatStatus ?? undefined,
         }),
       });
       const json = await res.json();
@@ -2163,8 +2057,23 @@ export function PoliciesPage() {
       setLoading(true);
       setError(null);
       try {
-        const rows = await fetchContracts(createClient(), partner.id);
+        const supabase = createClient();
+        const rows = await fetchContracts(supabase, partner.id);
         if (!cancelled) setContracts(rows);
+        // Best-effort prefill of the VAT line from what's on file.
+        try {
+          const { data: vrow } = await supabase
+            .from("partners")
+            .select("vat_registered, vat_number")
+            .eq("id", partner.id)
+            .maybeSingle();
+          const v = vrow as { vat_registered?: boolean | null; vat_number?: string | null } | null;
+          if (!cancelled && typeof v?.vat_registered === "boolean") {
+            setVat({ registered: v.vat_registered, number: v.vat_number?.trim() ?? "" });
+          }
+        } catch {
+          /* the partner picks it when signing */
+        }
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load policies");
       } finally {
@@ -2250,8 +2159,8 @@ export function PoliciesPage() {
         <Modal title="Sign all agreements" onClose={() => setBulkSigning(false)} width={520}>
           <div style={{ padding: 20, display: "flex", flexDirection: "column", gap: 14 }}>
             <div style={{ fontSize: 12.5, color: T.slate, lineHeight: 1.5 }}>
-              By signing once below you agree to all of the following. Your name, the time, your IP and device are recorded
-              for a legally-valid UK e-signature on each agreement.
+              By signing once below you agree to all of the following{vatNeeded ? " and confirm your VAT status" : ""}. Your
+              name, the time, your IP and device are recorded for a legally valid UK e-signature on each agreement.
             </div>
             <Card style={{ padding: 12, background: T.paper2 }}>
               <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12.5, color: T.ink, lineHeight: 1.6 }}>
@@ -2260,6 +2169,7 @@ export function PoliciesPage() {
                 ))}
               </ul>
             </Card>
+            {vatNeeded && <VatStatusField value={vat} onChange={setVat} disabled={signBusy} />}
             <div>
               <div style={{ fontSize: 12, fontWeight: 500, color: T.ink, marginBottom: 6 }}>Full name</div>
               <Input value={signerName} onChange={setSignerName} placeholder="Your full legal name" />
@@ -2271,7 +2181,12 @@ export function PoliciesPage() {
           </div>
           <div style={{ padding: 16, borderTop: `1px solid ${T.line}`, display: "flex", justifyContent: "flex-end", gap: 8 }}>
             <Button variant="secondary" onClick={() => setBulkSigning(false)} disabled={signBusy}>Cancel</Button>
-            <Button variant="primary" icon="check" onClick={submitBulkSignature} disabled={signBusy || !sig || !signerName.trim()}>
+            <Button
+              variant="primary"
+              icon="check"
+              onClick={submitBulkSignature}
+              disabled={signBusy || !sig || !signerName.trim() || (vatNeeded && !vatStatus)}
+            >
               {signBusy ? "Signing…" : "Agree & sign all"}
             </Button>
           </div>
@@ -2327,6 +2242,6 @@ function usePartnerCancelFee(): string {
       alive = false;
     };
   }, []);
-  if (process.env.NEXT_PUBLIC_PENALIDADE_V2 === "1") return "50% of your pay for that job if you cancel less than 36 hours before arrival";
+  if (process.env.NEXT_PUBLIC_PENALIDADE_V2 === "1") return "50% of your net for that job if you cancel less than 36 hours before arrival";
   return `£${fee ?? 50} if you cancel less than 24 hours before arrival`;
 }

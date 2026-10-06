@@ -82,6 +82,14 @@ export function mapAvailableJob(row: AvailableJobRow): AvailableJob {
     distance: 0, // no partner-relative geo distance
     duration: durationLabel(row),
     total: row.partner_cost ?? row.partner_agreed_value ?? row.client_price ?? 0,
+    // TODO(master-os): jobs has no field saying whether an offer is a Platform
+    // Booking (Schedule A: customer price, Fixfy commission, partner net) or
+    // Fixfy Client Work (Schedule B: Partner Fee only), and client_price on a
+    // B2B job is the Client's price, which partners must not see. Once the OS
+    // adds that marker (and ideally the commission per job), select them here
+    // and set { customerPrice: client_price, commission } for Platform Bookings
+    // only. Until then the card shows "Your net" alone.
+    platformBooking: null,
     timing: timingLabel(row.scheduled_date),
     arrivalWindow: windowLabel(row),
     expiresAt: row.auto_assign_expires_at ?? null,

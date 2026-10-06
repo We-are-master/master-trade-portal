@@ -114,7 +114,7 @@ export async function sendOtpEmail(to: string, code: string): Promise<void> {
 const esc = (s: string) =>
   s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c] ?? c);
 
-function newPartnerAdminHtml(p: { email: string; contactName: string; companyName: string; plan: string }): string {
+function newPartnerAdminHtml(p: { email: string; contactName: string; companyName: string }): string {
   const year = new Date().getUTCFullYear();
   const logoUrl = `${absoluteAppUrl()}/logos/fixfy-primary-navy.png`;
   const row = (label: string, value: string) => `
@@ -143,7 +143,6 @@ function newPartnerAdminHtml(p: { email: string; contactName: string; companyNam
             <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-top:1px solid ${T.line};">
               ${row("Contact", p.contactName)}
               ${row("Email", p.email)}
-              ${row("Plan", p.plan)}
             </table>
             <p style="margin:22px 0 0;font-size:13px;color:${T.slate};line-height:1.55;">
               They're in the portal now with <strong>restricted access</strong> until you approve them.
@@ -169,7 +168,6 @@ export async function sendNewPartnerAdminNotification(p: {
   email: string;
   contactName: string;
   companyName: string;
-  plan: string;
 }): Promise<void> {
   if (!resend) throw new Error("RESEND_API_KEY not set");
   const from = process.env.RESEND_FROM_EMAIL || "Fixfy Trade <onboarding@resend.dev>";
@@ -177,7 +175,7 @@ export async function sendNewPartnerAdminNotification(p: {
   await resend.emails.send({
     from,
     to,
-    subject: `New Fixfy Trade signup — ${p.companyName}`,
+    subject: `New Fixfy Trade signup: ${p.companyName}`,
     html: newPartnerAdminHtml(p),
   });
 }

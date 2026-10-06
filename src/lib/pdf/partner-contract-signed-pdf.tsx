@@ -16,6 +16,9 @@ export interface PartnerContractSignedPdfData {
   deviceInfo: string | null;
   signatureImageBase64: string;
   contractVersionId: string;
+  /** A declaration made with this signature (e.g. Annex 1, the VAT Status Declaration). */
+  declarationTitle?: string;
+  declarationLines?: string[];
 }
 
 const styles = StyleSheet.create({
@@ -80,6 +83,17 @@ const styles = StyleSheet.create({
     fontWeight: 700,
     marginBottom: 2,
   },
+  declarationBox: {
+    marginTop: 16,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: "#e5e5e5",
+    borderRadius: 4,
+  },
+  declarationLine: {
+    fontSize: 8.5,
+    marginBottom: 4,
+  },
   auditBox: {
     marginTop: 16,
     padding: 10,
@@ -136,6 +150,17 @@ export function PartnerContractSignedPDF({ data }: { data: PartnerContractSigned
             </Text>
           ))}
         </View>
+
+        {data.declarationLines && data.declarationLines.length > 0 ? (
+          <View style={styles.declarationBox} wrap={false}>
+            <Text style={styles.auditTitle}>{data.declarationTitle ?? "Declaration"}</Text>
+            {data.declarationLines.map((line, i) => (
+              <Text key={`decl-${i}`} style={styles.declarationLine}>
+                {line}
+              </Text>
+            ))}
+          </View>
+        ) : null}
 
         <View style={styles.signSection}>
           <Text style={styles.signLabel}>Electronic signature</Text>

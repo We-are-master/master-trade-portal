@@ -2,6 +2,10 @@
  * Seed Fixfy partner contract HTML via Supabase service role (no raw SQL).
  * For contractor_service_agreement, migration 229 CHECK update may still be required.
  *
+ * CAUTION: this DEACTIVATES the live versions and activates the local templates
+ * for every partner. New versions normally ship as master-os migrations (kept
+ * inactive until the owner switches them on); only run this on a dev database.
+ *
  * Usage: npx tsx scripts/seed-partner-contracts.mts
  */
 import { readFileSync, existsSync } from "fs";
@@ -10,11 +14,12 @@ import { createClient } from "@supabase/supabase-js";
 import {
   loadPartnerContractBodyHtml,
   partnerContractTitle,
+  PARTNER_CONTRACT_TEMPLATE_VERSION,
   PARTNER_CONTRACT_TYPES,
   type PartnerContractType,
 } from "../src/lib/contract-template-html.ts";
 
-const VERSION = "2026-06-10";
+const VERSION = PARTNER_CONTRACT_TEMPLATE_VERSION;
 
 function loadEnv(): void {
   for (const name of [".env.local", ".env"]) {

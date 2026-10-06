@@ -73,16 +73,20 @@ export async function GET(req: NextRequest) {
   } | null;
   const trades = [...(p?.trades ?? []), p?.trade ?? ""].filter(Boolean);
 
-  let rules = mergePartnerDocumentRules(null);
+  // The checklist the partner sees always asks for the Platform Booking documents
+  // (ID, public liability, trade registration); /get-started won't let them skip.
+  let rules = mergePartnerDocumentRules(null, { forcePlatformBookingDocs: true });
   try {
     const { data: cs } = await svc.from("company_settings").select("frontend_setup").limit(1).maybeSingle();
     const fs = (cs as { frontend_setup?: { partner_document_rules?: unknown } } | null)?.frontend_setup;
-    if (fs?.partner_document_rules) rules = mergePartnerDocumentRules(fs.partner_document_rules);
+    if (fs?.partner_document_rules) {
+      rules = mergePartnerDocumentRules(fs.partner_document_rules, { forcePlatformBookingDocs: true });
+    }
   } catch {
     /* settings not readable — use defaults */
   }
 
-  const checklist = buildPortalRequiredDocumentChecklist(p, trades, rules);
+  const checklist = buildPortalRequiredDocumentChecklist(p, trades, rules, { platformBooking: true });
   const required: RequiredDocResponse[] = checklist.map(({ id, docType, name, description, group, aliases }) => {
     const row = rules.find((r) => r.id === id);
     const match = pickRequiredDocMatch(onFile, { docType, name, aliases }) as (typeof onFile)[number] | null;

@@ -9,6 +9,8 @@ import {
   fetchCompanyName,
   signPartnerContract,
 } from "@/lib/partner-contract-sign";
+import { INVOICING_CONTRACT_TYPE } from "@/lib/partner-contract-types";
+import { parseVatStatus, vatStatusDeclarationLines, VAT_DECLARATION_TITLE } from "@/lib/vat-status";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -20,6 +22,8 @@ type SignBody = {
   signatureImageBase64?: string;
   signerName?: string;
   deviceInfo?: string;
+  /** Required for the Invoicing and Payment Collection Agreement (its Annex 1). */
+  vatStatus?: unknown;
 };
 
 export async function POST(req: Request) {
@@ -65,6 +69,21 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Contract type mismatch" }, { status: 400 });
   }
 
+  const vatStatus = cv.contract_type === INVOICING_CONTRACT_TYPE ? parseVatStatus(body.vatStatus) : null;
+  if (cv.contract_type === INVOICING_CONTRACT_TYPE && !vatStatus) {
+    return NextResponse.json(
+      { error: "Confirm your VAT status before signing this agreement.", code: "vat_status_required" },
+      { status: 400 },
+    );
+  }
+  if (vatStatus) {
+    const { error: vatErr } = await svc
+      .from("partners")
+      .update({ vat_registered: vatStatus.registered, vat_number: vatStatus.number })
+      .eq("id", session.partnerId);
+    if (vatErr) console.error("[contracts/sign] vat status update failed:", vatErr.message);
+  }
+
   const signerIp = getClientIp(req);
   const deviceInfo = body.deviceInfo?.trim() || req.headers.get("user-agent") || null;
   const companyName = await fetchCompanyName(svc);
@@ -81,6 +100,9 @@ export async function POST(req: Request) {
       signerIp,
       deviceInfo,
       companyName,
+      declaration: vatStatus
+        ? { title: VAT_DECLARATION_TITLE, lines: vatStatusDeclarationLines(vatStatus), vatStatus }
+        : undefined,
     });
 
     return NextResponse.json({

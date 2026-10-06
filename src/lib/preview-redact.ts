@@ -23,7 +23,7 @@ export function redactLead<T extends LeadLike>(lead: T): T {
   return {
     ...lead,
     title: "Customer enquiry",
-    desc: "Details unlock after you add your card.",
+    desc: "Details unlock once your account is approved.",
     postcode: maskPostcode(lead.postcode),
     phone: null,
     email: null,
@@ -38,9 +38,10 @@ export function redactAvailableJob(job: AvailableJob): AvailableJob {
   return {
     ...job,
     title: "Available job",
-    desc: "Job details unlock after you add your card.",
+    desc: "Job details unlock once your account is approved.",
     postcode: maskPostcode(job.postcode),
     total: 0,
+    platformBooking: null,
   };
 }
 
@@ -48,7 +49,7 @@ export function redactQuote(q: QuoteRequest): QuoteRequest {
   return {
     ...q,
     title: "Quote request",
-    desc: "Details unlock after you add your card.",
+    desc: "Details unlock once your account is approved.",
     propertyAddress: undefined,
     postcode: maskPostcode(q.postcode),
   };
@@ -58,7 +59,7 @@ export function redactMyJob(job: MyJob): MyJob {
   return {
     ...job,
     title: "Assigned job",
-    desc: "Details unlock after you add your card.",
+    desc: "Details unlock once your account is approved.",
     postcode: maskPostcode(job.postcode),
     customer: { ...job.customer, name: "Customer", address: "Hidden" },
     total: 0,
