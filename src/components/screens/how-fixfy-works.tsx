@@ -47,13 +47,13 @@ export function HowFixfyWorksCard({ defaultOpen = false }: { defaultOpen?: boole
       icon: "hand-metal",
       tint: T.coral,
       title: "Jobs come in as offers",
-      body: "Every lead, quote and booked job hits your inbox as an offer. Accept or decline in seconds — the first partner who accepts locks it in.",
+      body: "Every lead, quote and booked job hits your inbox as an offer. Accept or decline in seconds: the first partner who accepts locks it in.",
     },
     {
       icon: "pound-sterling",
       tint: "#0E8A5F",
       title: "Payouts land like clockwork",
-      body: `${payoutTerms}. We generate the self-bill PDF for you — no invoicing, no chasing.`,
+      body: `${payoutTerms}. Every payout comes with a statement for each job and our commission invoice. No invoicing, no chasing.`,
     },
     {
       icon: "calendar-clock",
@@ -64,14 +64,14 @@ export function HowFixfyWorksCard({ defaultOpen = false }: { defaultOpen?: boole
     {
       icon: "file-check",
       tint: "#8B5CF6",
-      title: "One self-bill agreement",
-      body: "You signed a single self-bill agreement covering every completed week. No POs, no invoices — Fixfy invoices itself on your behalf.",
+      title: "Free to join, one commission",
+      body: "No fees and no plans. On bookings made through Fixfy, we collect the customer's payment for you, issue the receipt in your name and keep a fixed commission.",
     },
     {
       icon: "life-buoy",
       tint: "#0B5FFF",
       title: "Support that answers",
-      body: `WhatsApp us or email ${supportEmail} — real humans, most replies inside 30 minutes during working hours.`,
+      body: `WhatsApp us or email ${supportEmail}. Real humans, most replies inside 30 minutes during working hours.`,
     },
   ];
 

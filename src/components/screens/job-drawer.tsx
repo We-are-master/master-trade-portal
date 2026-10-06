@@ -340,7 +340,7 @@ export function JobDrawer({
               <div style={{ fontSize: 14, fontWeight: 600, color: T.ink }}>Cancel this job?</div>
               <div style={{ fontSize: 13, color: T.slate, lineHeight: 1.5 }}>
                 {cancelInfo.penalty > 0
-                  ? `A cancellation fee of £${cancelInfo.penalty.toFixed(2)} applies${cancelInfo.hoursBefore != null ? ` (${cancelInfo.hoursBefore}h before arrival)` : ""}. It is taken from your next self-bill, unless the office waives it.`
+                  ? `A cancellation fee of £${cancelInfo.penalty.toFixed(2)} applies${cancelInfo.hoursBefore != null ? ` (${cancelInfo.hoursBefore}h before arrival)` : ""}. It is taken from your next payout, unless the office waives it.`
                   : "No cancellation fee applies at this point."}
                 {cancelInfo.ruleText ? ` Policy: ${cancelInfo.ruleText}.` : ""}
               </div>
@@ -605,7 +605,7 @@ function OverviewTab({
         </DrawerSection>
       ) : null}
 
-      <DrawerSection title="Your pay" icon="banknote">
+      <DrawerSection title="Your net" icon="banknote">
         <div
           style={{
             display: "grid",
@@ -633,7 +633,7 @@ function OverviewTab({
             flexWrap: "wrap",
           }}
         >
-          <span style={{ fontSize: 13, fontWeight: 600, color: T.ink }}>Total payout</span>
+          <span style={{ fontSize: 13, fontWeight: 600, color: T.ink }}>Your net payout</span>
           <span style={{ fontFamily: T.mono, fontSize: "clamp(20px, 5vw, 26px)", fontWeight: 600, color: T.navy }}>
             {formatGBPdec(job.total)}
           </span>
@@ -1238,7 +1238,7 @@ function NotesTab({ job }: { job: MyJob }) {
               }}
             >
               <Icon name="zap" size={12} />
-              <span>You can quote any additional work spotted on-site for 0% commission.</span>
+              <span>Spotted extra work? Tell Fixfy before you start: we quote it to the customer for you and collect the payment.</span>
             </div>
           </div>
         </div>

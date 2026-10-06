@@ -14,7 +14,6 @@ import {
   Tabs,
 } from "@/components/ui/primitives";
 import { formatGBP } from "@/lib/format";
-import { PlanUpgradeBanner } from "@/components/billing/plan-upgrade-banner";
 import { redactLead, redactAvailableJob, redactQuote } from "@/lib/preview-redact";
 import { usePartner } from "@/components/partner-context";
 import { useMyJobs } from "@/components/jobs-context";
@@ -1015,7 +1014,6 @@ export function AvailableJobsView({
 
   return (
     <div style={{ padding: 24, display: "flex", flexDirection: "column", gap: 18, flex: 1, overflow: "auto" }}>
-      {!previewMode && <PlanUpgradeBanner feature="jobs" />}
       <SectionHeader
         title="Available jobs"
         subtitle="Fixfy-quoted work, customer's already signed off. First to accept wins."
@@ -1137,10 +1135,18 @@ function AvailableJobCard({
               {locked ? "£•••" : formatGBP(job.total)}
             </div>
             <div style={{ fontSize: 10.5, color: T.coral, marginTop: 4, letterSpacing: 0.3, fontWeight: 600 }}>
-              {job.rateBasisLabel ? `${job.rateBasisLabel} · inc VAT` : "inc VAT"}
+              {job.rateBasisLabel ? `Your net · ${job.rateBasisLabel}` : "Your net"}
             </div>
           </div>
         </div>
+
+        {!locked && job.platformBooking && (
+          <PlatformBookingBreakdown
+            customerPrice={job.platformBooking.customerPrice}
+            commission={job.platformBooking.commission}
+            net={job.total}
+          />
+        )}
 
         <div
           style={{
@@ -1171,6 +1177,23 @@ function AvailableJobCard({
         </div>
       </div>
     </Card>
+  );
+}
+
+/** Platform Booking money, as the Partner Agreement shows it on every offer. */
+function PlatformBookingBreakdown({ customerPrice, commission, net }: { customerPrice: number; commission: number; net: number }) {
+  const row = (label: string, value: string, strong = false) => (
+    <div style={{ display: "flex", justifyContent: "space-between", gap: 12, fontSize: 12.5 }}>
+      <span style={{ color: strong ? T.ink : T.slate, fontWeight: strong ? 600 : 400 }}>{label}</span>
+      <span style={{ fontFamily: T.mono, color: strong ? T.navy : T.slate, fontWeight: strong ? 600 : 400 }}>{value}</span>
+    </div>
+  );
+  return (
+    <div style={{ marginTop: 12, padding: "10px 12px", borderRadius: 10, background: T.paper, display: "grid", gap: 4 }}>
+      {row("Customer price", formatGBP(customerPrice))}
+      {row("Fixfy commission", `- ${formatGBP(commission)}`)}
+      {row("Your net", formatGBP(net), true)}
+    </div>
   );
 }
 
@@ -1225,7 +1248,6 @@ export function AvailableQuotesView({
 
   return (
     <div style={{ padding: 24, display: "flex", flexDirection: "column", gap: 18, flex: 1, overflow: "auto" }}>
-      {!previewMode && <PlanUpgradeBanner feature="quotes" />}
       <SectionHeader
         title="Available quotes"
         subtitle="Fixfy clients needing a custom estimate. Submit a number, win the work."

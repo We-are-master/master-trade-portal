@@ -1,4 +1,11 @@
 // Ported from master-os/src/lib/partner-required-docs.ts — keep doc_type values aligned.
+//
+// Agent model (6 Oct 2026): Photo ID, public liability insurance (minimum £1m) and
+// the registration or accreditation each trade needs (Partner Terms of Use, 8.5)
+// are required before a partner can receive Platform Bookings. The OS document
+// rules can't switch those off here; see PLATFORM_BOOKING_REQUIRED_DOC_IDS.
+// TODO(master-os): mirror the forced rules and the certificate list in
+// master-os/src/lib/partner-required-docs.ts so both sides agree.
 
 export type PartnerDocRuleRow = {
   id: string;
@@ -46,7 +53,7 @@ export const REQUIRED_PARTNER_DOCS: RequiredDocDef[] = [
   {
     id: "proof_of_address",
     name: "Proof of Address",
-    description: "Utility bill or bank statement (last 3 months)",
+    description: "Utility bill or bank statement (last 3 months), used on your receipts",
     docType: "proof_of_address",
     aliases: ["proof of address", "utility bill", "bank statement", "address proof"],
     group: "core",
@@ -62,7 +69,7 @@ export const REQUIRED_PARTNER_DOCS: RequiredDocDef[] = [
   {
     id: "public_liability",
     name: "Public Liability Insurance",
-    description: "Active public liability policy",
+    description: "Active policy, at least £1m cover",
     docType: "insurance",
     aliases: ["public liability", "insurance", "liability insurance"],
     group: "core",
@@ -87,15 +94,37 @@ export const COMPANY_REGISTRATION_REQUIRED_DOC: RequiredDocDef = {
   group: "legal",
 };
 
+// Trade registration / accreditation per service, from the minimums in the
+// Partner Terms of Use (version 2026-10-06, section 8.5). Cleaning needs six
+// months' experience (no document). Training that the Terms list for handyman,
+// carpentry and painting (asbestos awareness) and the waste carrier registration
+// (only when waste is taken away) are not asked for here yet.
 const CERTS_BY_KEYWORD: { keywords: string[]; certs: string[] }[] = [
-  { keywords: ["electr", "eicr", "niceic", "rewire", "consumer unit", "fuse board"], certs: ["NICEIC / NAPIT registration", "18th Edition Wiring Regulations"] },
+  {
+    keywords: ["electr", "eicr", "niceic", "rewire", "consumer unit", "fuse board"],
+    certs: ["Competent Person Scheme membership (NICEIC, NAPIT, ELECSA or Stroma)"],
+  },
   { keywords: ["gas", "boiler", "central heating"], certs: ["Gas Safe registration"] },
-  { keywords: ["plumb"], certs: ["Water Regulations (WRAS)"] },
-  { keywords: ["pat", "appliance test"], certs: ["PAT Testing Certificate"] },
-  { keywords: ["fire alarm"], certs: ["Fire Alarm Certification"] },
-  { keywords: ["emergency lighting"], certs: ["Emergency Lighting Certification"] },
-  { keywords: ["extinguisher"], certs: ["BAFE / extinguisher servicing certificate"] },
+  { keywords: ["plumb"], certs: ["Plumbing NVQ Level 2 or 3"] },
+  { keywords: ["appliance repair"], certs: ["Domestic appliance servicing NVQ Level 3"] },
+  { keywords: ["epc", "energy performance"], certs: ["Domestic Energy Assessor accreditation"] },
+  { keywords: ["pat test", "portable appliance", "appliance test"], certs: ["PAT testing qualification"] },
+  { keywords: ["fire risk"], certs: ["Fire risk assessor qualification"] },
+  { keywords: ["fire alarm"], certs: ["Fire alarm certification (BS 5839)"] },
+  { keywords: ["emergency lighting"], certs: ["Emergency lighting certification (BS 5266)"] },
+  { keywords: ["extinguisher"], certs: ["Fire extinguisher servicing certification (BS 5306)"] },
 ];
+
+/** Always required before Platform Bookings, whatever the OS document rules say. */
+export const PLATFORM_BOOKING_REQUIRED_DOC_IDS: readonly string[] = ["photo_id", "public_liability"];
+
+/**
+ * Photo ID, public liability insurance and the trade registration / accreditation
+ * for the partner's services: required before Platform Bookings, never skippable.
+ */
+export function isPlatformBookingRequiredDoc(doc: { id: string; group?: string }): boolean {
+  return PLATFORM_BOOKING_REQUIRED_DOC_IDS.includes(doc.id) || doc.group === "trade_cert";
+}
 
 function tradeCertRequirementId(certName: string): string {
   const key = certName.trim().toLowerCase();
@@ -143,6 +172,10 @@ export function mergePartnerDocumentRules(stored: unknown): PartnerDocRuleRow[] 
     COMPANY_REGISTRATION_REQUIRED_DOC,
   ].map((d) => ({ id: d.id, enabled: true, mandatory: true }));
   if (!Array.isArray(stored)) return defaults;
+  // Trade certificates have no stored rule here (resolvePartnerDocRule treats a
+  // missing rule as required), so only the fixed ids need forcing.
+  const forced = (row: PartnerDocRuleRow): PartnerDocRuleRow =>
+    PLATFORM_BOOKING_REQUIRED_DOC_IDS.includes(row.id) ? { id: row.id, enabled: true, mandatory: true } : row;
   const storedById = new Map<string, PartnerDocRuleRow>();
   for (const row of stored) {
     if (row == null || typeof row !== "object") continue;
@@ -155,7 +188,7 @@ export function mergePartnerDocumentRules(stored: unknown): PartnerDocRuleRow[] 
       mandatory: enabled && Boolean(o.mandatory),
     });
   }
-  return defaults.map((d) => storedById.get(d.id) ?? d);
+  return defaults.map((d) => forced(storedById.get(d.id) ?? d));
 }
 
 function resolvePartnerDocRule(id: string, rules: PartnerDocRuleRow[]): { enabled: boolean; mandatory: boolean } {
@@ -184,7 +217,7 @@ function buildTradeCertificateRequirements(trades: string[], rules: PartnerDocRu
       out.push({
         id: tradeCertRequirementId(cert),
         name: cert,
-        description: "Trade certificate required for your services",
+        description: "Registration or accreditation for your trade",
         docType: "certification",
         aliases: [key, "certificate"],
         group: "trade_cert",

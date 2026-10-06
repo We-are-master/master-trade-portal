@@ -4,7 +4,8 @@ import { NextResponse } from "next/server";
 import { getPartnerSession } from "@/lib/partner-auth";
 import { createServiceClient } from "@/lib/supabase/service";
 import { getClientIp } from "@/lib/client-ip";
-import { PARTNER_CONTRACT_TYPES } from "@/lib/partner-contract-types";
+import { INVOICING_CONTRACT_TYPE, PARTNER_CONTRACT_TYPES } from "@/lib/partner-contract-types";
+import { parseVatStatus, vatStatusDeclarationLines, VAT_DECLARATION_TITLE, type VatStatus } from "@/lib/vat-status";
 import { syncSignedContractToPartnerDocument } from "@/lib/partner-agreement-doc-sync";
 import { resolvePartnerPortalCredential } from "@/lib/partner-portal-session";
 import {
@@ -24,6 +25,12 @@ type SignAllBody = {
   deviceInfo?: string;
   /** Wizard draft short-code — used as a fallback when the OTP session cookie hasn't landed yet. */
   code?: string;
+  /**
+   * VAT Status Declaration (Annex 1 of the Invoicing and Payment Collection
+   * Agreement): `{ registered: false }` or `{ registered: true, number }`.
+   * Required while that agreement is still unsigned.
+   */
+  vatStatus?: unknown;
 };
 
 export async function POST(req: Request) {
@@ -94,6 +101,42 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "No active partner contracts published" }, { status: 404 });
   }
 
+  // VAT status: the partner's declaration that receipts in their name rely on.
+  let vatStatus: VatStatus | null = null;
+  if (body.vatStatus !== undefined && body.vatStatus !== null) {
+    vatStatus = parseVatStatus(body.vatStatus);
+    if (!vatStatus) {
+      return NextResponse.json(
+        { error: "Confirm your VAT status: not VAT registered, or VAT registered with a valid UK VAT number.", code: "vat_status_invalid" },
+        { status: 400 },
+      );
+    }
+  }
+  const invoicingVersion = activeVersions.find((cv) => cv.contract_type === INVOICING_CONTRACT_TYPE);
+  if (invoicingVersion && !vatStatus) {
+    const { data: invoicingSig } = await svc
+      .from("partner_contract_signatures")
+      .select("id")
+      .eq("partner_id", partnerId)
+      .eq("contract_version_id", invoicingVersion.id)
+      .maybeSingle();
+    if (!invoicingSig) {
+      return NextResponse.json(
+        { error: "Confirm your VAT status before signing the agreements.", code: "vat_status_required" },
+        { status: 400 },
+      );
+    }
+  }
+  if (vatStatus) {
+    // Existing columns (migrations 089 and 247). Non-blocking: the signed PDF
+    // carries the declaration even if this write fails.
+    const { error: vatErr } = await svc
+      .from("partners")
+      .update({ vat_registered: vatStatus.registered, vat_number: vatStatus.number })
+      .eq("id", partnerId);
+    if (vatErr) console.error("[contracts/sign-all] vat status update failed:", vatErr.message);
+  }
+
   const results: Array<{
     contractType: string;
     contractVersionId: string;
@@ -117,10 +160,15 @@ export async function POST(req: Request) {
         deviceInfo,
         companyName,
         signedAt,
+        declaration:
+          vatStatus && cv.contract_type === INVOICING_CONTRACT_TYPE
+            ? { title: VAT_DECLARATION_TITLE, lines: vatStatusDeclarationLines(vatStatus), vatStatus }
+            : undefined,
       });
       await syncSignedContractToPartnerDocument(svc, {
         partnerId,
         contractType: result.contractType,
+        contractTitle: cv.title,
         signaturePdfUrl: result.signaturePdfUrl,
         signedAt: result.signedAt,
       });

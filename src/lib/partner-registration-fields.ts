@@ -21,7 +21,7 @@ export const PARTNER_REGISTRATION_FIELD_CATALOG: PartnerRegistrationFieldDef[] =
   { id: "trades", name: "Trades / services", description: "What work the partner offers (service catalog).", group: "profile" },
   { id: "legal_type", name: "Business type", description: "Sole trader vs limited company.", group: "profile" },
   { id: "tax_id", name: "UTR / CRN", description: "Tax or company registration number.", group: "profile" },
-  { id: "vat", name: "VAT details", description: "VAT registered status and number (limited companies).", group: "profile" },
+  { id: "vat", name: "VAT details", description: "VAT registered status and number (limited companies, business step). Every partner also confirms their VAT status when signing.", group: "profile" },
   { id: "phone", name: "Phone number", description: "Contact number for dispatch and ops.", group: "profile" },
   { id: "address", name: "Business address", description: "Street address and postcode.", group: "profile" },
   {
@@ -34,13 +34,13 @@ export const PARTNER_REGISTRATION_FIELD_CATALOG: PartnerRegistrationFieldDef[] =
   { id: "coverage", name: "Service area", description: "Base postcode and travel radius.", group: "profile" },
   { id: "avatar", name: "Profile photo", description: "Partner avatar in the portal.", group: "profile" },
   { id: "documents", name: "Documents", description: "Upload step in /get-started and onboarding.", group: "onboarding_step" },
-  { id: "agreements", name: "Agreements (e-sign)", description: "Service and self-bill contract signatures.", group: "agreement" },
+  { id: "agreements", name: "Agreements (e-sign)", description: "Partner Agreement, Terms of Use, Invoicing and Payment Collection Agreement and the VAT status declaration.", group: "agreement" },
   { id: "rate_card", name: "Rate card", description: "Per-service pricing in onboarding.", group: "onboarding_step" },
   { id: "bank_details", name: "Bank / payouts", description: "Payout bank details or Stripe Connect.", group: "onboarding_step" },
-  { id: "payment", name: "Payment method", description: "Card on file after trial.", group: "onboarding_step" },
+  // "payment" (card on file for a paid plan) was retired with the plans on 6 Oct 2026.
 ];
 
-const OPTIONAL_BY_DEFAULT = new Set(["rate_card", "bank_details", "payment", "avatar"]);
+const OPTIONAL_BY_DEFAULT = new Set(["rate_card", "bank_details", "avatar"]);
 
 export function buildDefaultPartnerRegistrationRules(): PartnerRegistrationRuleRow[] {
   return PARTNER_REGISTRATION_FIELD_CATALOG.map((f) => ({
@@ -106,7 +106,6 @@ export const ONBOARDING_STEP_RULE_ID: Record<string, string> = {
   docs: "documents",
   selfbill: "bank_details",
   policies: "agreements",
-  payment: "payment",
 };
 
 /** Settings page id → registration rule id (pages without an entry stay visible). */
@@ -116,7 +115,6 @@ export const SETTINGS_PAGE_RULE_ID: Record<string, string> = {
   area: "coverage",
   docs: "documents",
   policies: "agreements",
-  billing: "payment",
   selfbill: "bank_details",
 };
 

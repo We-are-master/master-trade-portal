@@ -1,4 +1,5 @@
-// Maps real Fixfy OS `self_bills` rows → the portal's self-bill row UI type.
+// Maps real Fixfy OS `self_bills` rows → the portal's payout statement rows
+// (Settings → Statements; the table keeps its OS name).
 // One self-bill per partner per ISO week. There is no VAT column on self_bills, so the
 // portal surfaces job value + net payout (net_payout) rather than a fabricated VAT line.
 
@@ -93,7 +94,7 @@ export function mapSelfBill(row: SelfBillRow): SelfBill {
   const status = row.status ?? "generated";
   const periodLabel =
     row.period ||
-    (row.week_start && row.week_end ? `${fmtDayMonth(row.week_start)} – ${fmtDayMonth(row.week_end)}` : row.week_label || "—");
+    (row.week_start && row.week_end ? `${fmtDayMonth(row.week_start)} to ${fmtDayMonth(row.week_end)}` : row.week_label || "—");
   return {
     id: row.id,
     reference: row.reference || row.id,

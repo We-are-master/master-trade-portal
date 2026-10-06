@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { hydrateContractHtml } from "@/lib/contract-branding";
 import { renderPartnerSignedContractPdf } from "@/lib/partner-contract-pdf-server";
+import type { VatStatus } from "@/lib/vat-status";
 
 export const PARTNER_CONTRACTS_BUCKET = "partner-documents";
 
@@ -24,6 +25,11 @@ export interface SignPartnerContractInput {
   deviceInfo: string | null;
   companyName: string;
   signedAt?: string;
+  /**
+   * A declaration the partner made with this signature, printed on the signed
+   * PDF and kept in the audit log (e.g. Annex 1, the VAT Status Declaration).
+   */
+  declaration?: { title: string; lines: string[]; vatStatus?: VatStatus };
 }
 
 export interface SignPartnerContractResult {
@@ -57,6 +63,7 @@ export async function signPartnerContract(
     signerIp,
     deviceInfo,
     companyName,
+    declaration,
   } = input;
   const signedAt = input.signedAt ?? new Date().toISOString();
 
@@ -121,6 +128,8 @@ export async function signPartnerContract(
       deviceInfo,
       signatureImageBase64: signatureDataUrl,
       contractVersionId: cv.id,
+      declarationTitle: declaration?.title,
+      declarationLines: declaration?.lines,
     });
 
     const pdfStoragePath = `${partnerId}/contracts/${signatureId}.pdf`;
@@ -186,6 +195,9 @@ export async function signPartnerContract(
         device_info: deviceInfo,
         signed_at: signedAt,
         signature_image_url: signaturePublicUrl.publicUrl,
+        ...(declaration
+          ? { declaration_title: declaration.title, declaration_lines: declaration.lines, vat_status: declaration.vatStatus ?? null }
+          : {}),
       },
     })
     .then(({ error }) => {

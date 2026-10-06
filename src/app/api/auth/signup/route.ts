@@ -1,7 +1,7 @@
 // POST /api/auth/signup  { email, fullName, company }
 //
 // Self-registration for new trades. Creates the auth user + public.users (external_partner) +
-// public.partners row with a 7-day free trial (no card) and signs the browser in right away
+// public.partners row (free to join: no plan, no trial, no card) and signs the browser in right away
 // ({ signedIn: true }). The funnel never asks for an email code: new emails, logins coming back
 // to finish onboarding and inactive / on-break accounts (reactivated here) all go straight in.
 // The code email is only the fallback if signing in fails. Active partners sign in at /login.
@@ -10,8 +10,6 @@
 
 import { NextResponse, type NextRequest } from "next/server";
 import { claimPartnerInvite, sendSignInCode } from "@/lib/partner-auth-claim";
-import { DEFAULT_PLAN_ID, parsePlanId, PARTNERS_LP_URL } from "@/lib/plan-catalog";
-import { PARTNER_TRIAL_DAYS } from "@/lib/trial-config";
 import { createServiceClient } from "@/lib/supabase/service";
 import { sendOtpEmail, sendNewPartnerAdminNotification } from "@/lib/email";
 import { EMAIL_UNVERIFIED_REASON } from "@/lib/partner-onboarding-flags";
@@ -21,7 +19,8 @@ import { signInWithoutCode } from "@/lib/partner-signin-without-code";
 export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
-  let body: { email?: unknown; fullName?: unknown; company?: unknown; inviteCode?: unknown; plan?: unknown };
+  // `plan` from older clients is ignored: paid partner plans were retired on 6 October 2026.
+  let body: { email?: unknown; fullName?: unknown; company?: unknown; inviteCode?: unknown };
   try {
     body = (await req.json()) as typeof body;
   } catch {
@@ -32,8 +31,6 @@ export async function POST(req: NextRequest) {
   const fullName = typeof body.fullName === "string" ? body.fullName.trim() : "";
   const company = typeof body.company === "string" ? body.company.trim() : "";
   const inviteCode = typeof body.inviteCode === "string" ? body.inviteCode.trim() : "";
-  const planParam = typeof body.plan === "string" ? body.plan.trim() : "";
-  const plan = parsePlanId(planParam) ?? DEFAULT_PLAN_ID;
 
   if (!email || !email.includes("@")) return NextResponse.json({ error: "Enter a valid email." }, { status: 400 });
   if (!fullName) return NextResponse.json({ error: "Enter your name." }, { status: 400 });
@@ -116,21 +113,10 @@ export async function POST(req: NextRequest) {
         inviteCode: inviteCode || undefined,
         fullName,
         company,
-        plan,
         sendCode: false,
       });
-      const trialEnds = new Date(Date.now() + PARTNER_TRIAL_DAYS * 24 * 60 * 60 * 1000).toISOString();
-      await admin
-        .from("partners")
-        .update({
-          subscription_status: "trialing",
-          trial_ends_at: trialEnds,
-          plan,
-        })
-        .eq("id", result.partnerId)
-        .is("trial_ends_at", null);
       // Notify ops so they can approve fast (fire-and-forget — never block signup).
-      void sendNewPartnerAdminNotification({ email, contactName: fullName, companyName: company, plan }).catch((e) =>
+      void sendNewPartnerAdminNotification({ email, contactName: fullName, companyName: company }).catch((e) =>
         console.error("[auth/signup] admin notification (claim) failed:", e),
       );
       if (await signInWithoutCode(admin, email, result.partnerId)) {
@@ -149,14 +135,6 @@ export async function POST(req: NextRequest) {
       const err = e as Error & { status?: number };
       return NextResponse.json({ error: err.message || "Couldn't claim invite." }, { status: err.status ?? 500 });
     }
-  }
-
-  // Self-signup requires a plan from the partners LP.
-  if (!inviteCode && !parsePlanId(planParam)) {
-    return NextResponse.json(
-      { error: "Choose a plan at getfixfy.com/partners first.", redirect: PARTNERS_LP_URL },
-      { status: 422 },
-    );
   }
 
   const { data: existingUser } = await admin.from("users").select("id").ilike("email", email).limit(1);
@@ -189,8 +167,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Couldn't set up your account. Try again." }, { status: 500 });
   }
 
-  // 3) Partner row with a 7-day free trial (no card). Operational data keys off partners.id.
-  const trialEnds = new Date(Date.now() + PARTNER_TRIAL_DAYS * 24 * 60 * 60 * 1000).toISOString();
+  // 3) Partner row. Joining is free: no plan, trial or card. Operational data keys off partners.id.
   const { data: partnerRow, error: partnerErr } = await admin.from("partners").insert({
     auth_user_id: userId,
     email,
@@ -205,9 +182,6 @@ export async function POST(req: NextRequest) {
     // right away (see partner-onboarding-flags).
     partner_status_reasons: [],
     verified: false,
-    subscription_status: "trialing",
-    plan,
-    trial_ends_at: trialEnds,
   }).select("id").single();
   if (partnerErr) {
     await admin.from("users").delete().eq("id", userId);
@@ -217,21 +191,20 @@ export async function POST(req: NextRequest) {
   }
 
   // Notify ops of the new registration so they can approve fast (fire-and-forget).
-  void sendNewPartnerAdminNotification({ email, contactName: fullName, companyName: company, plan }).catch((e) =>
+  void sendNewPartnerAdminNotification({ email, contactName: fullName, companyName: company }).catch((e) =>
     console.error("[auth/signup] admin notification failed:", e),
   );
 
   // 4) Sign them in now; the code email is only the fallback.
   const partnerId = (partnerRow as { id: string }).id;
   if (await signInWithoutCode(admin, email, partnerId)) {
-    return NextResponse.json({ ok: true, trialDays: PARTNER_TRIAL_DAYS, signedIn: true });
+    return NextResponse.json({ ok: true, signedIn: true });
   }
   const { devCode, emailError } = await sendSignInCode(admin, email);
 
   const dev = process.env.NODE_ENV !== "production";
   return NextResponse.json({
     ok: true,
-    trialDays: PARTNER_TRIAL_DAYS,
     ...(dev && devCode ? { devCode } : {}),
     ...(dev && emailError ? { emailError } : {}),
   });

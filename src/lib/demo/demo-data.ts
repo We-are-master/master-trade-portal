@@ -47,18 +47,13 @@ export const DEMO_PARTNER: Partner = {
   radiusMiles: 15,
   excludedPostcodes: [],
   tradingName: "Morgan Maintenance Ltd",
-  trialDaysLeft: 0,
-  trialEndsOn: "",
   yearsExperience: 12,
   bio: "Gas Safe registered plumber covering central and east London. Twelve years on domestic and commercial maintenance.",
   rating: 4.8,
   ratingsCount: 63,
   status: "active",
-  plan: "pro",
-  billingReady: true,
-  subscriptionStatus: "active",
+  subscriptionStatus: null,
   wizardCompletedAt: `${ymd(-180)}T10:00:00Z`,
-  accountType: "subscription",
 };
 
 function customer(name: string, address: string, postcode: string, priorJobs: number) {
@@ -297,6 +292,8 @@ export const DEMO_AVAILABLE_JOBS: AvailableJob[] = [
     distance: 2.1,
     duration: "2h",
     total: 260,
+    // Platform Booking: shows the customer price / commission / net breakdown.
+    platformBooking: { customerPrice: 372, commission: 112 },
     timing: "Today, ASAP",
   },
   {

@@ -50,7 +50,7 @@ export const NOTIFICATION_EVENTS = [
   { key: "job_assigned", label: "Job assigned to you" },
   { key: "quote_accepted", label: "Quote accepted" },
   { key: "signed_off", label: "Customer signed off" },
-  { key: "self_bill", label: "Self-bill issued" },
+  { key: "self_bill", label: "Payout statement issued" },
   { key: "doc_expiring", label: "Document expiring" },
   { key: "new_review", label: "New review" },
 ] as const;

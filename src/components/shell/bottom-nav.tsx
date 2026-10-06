@@ -41,7 +41,7 @@ const MORE_ITEMS: { id: string; label: string; icon: string; hint: string }[] = 
   { id: "settings:rates", label: "Rate card", icon: "credit-card", hint: "Your call-out and hourly rates" },
   { id: "settings:availability", label: "Availability", icon: "calendar-clock", hint: "When you can work" },
   { id: "settings:area", label: "Service area", icon: "map-pin", hint: "Where you travel to" },
-  { id: "settings:selfbill", label: "Self-bill", icon: "receipt", hint: "Invoices Fixfy issued for you" },
+  { id: "settings:selfbill", label: "Statements", icon: "receipt", hint: "Payout statements and commission invoices" },
   { id: "settings:docs", label: "Documents", icon: "shield-check", hint: "Insurance and certificates" },
   { id: "settings:policies", label: "Policies", icon: "gavel", hint: "Agreements and payment rules" },
 ];

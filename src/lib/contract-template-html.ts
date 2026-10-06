@@ -9,6 +9,15 @@ import {
 
 export { PARTNER_CONTRACT_TYPES, PARTNER_CONTRACT_TITLES, type PartnerContractType };
 
+// FALLBACK ONLY. The agreements partners actually see and sign are the active
+// rows of contract_versions (body_html) in the shared database, published from
+// master-os. These local files mirror the 2026-10-06 documents (agent model):
+//   - contractor_service_agreement → Partner Agreement
+//   - terms_of_use                 → Partner Terms of Use
+//   - self_bill_agreement          → Invoicing and Payment Collection Agreement
+// and are read only by the seed / migration scripts in scripts/.
+export const PARTNER_CONTRACT_TEMPLATE_VERSION = "2026-10-06";
+
 const TEMPLATE_FILES: Record<PartnerContractType, string> = {
   terms_of_use: "fixfy-terms-of-use.html",
   self_bill_agreement: "fixfy-self-billing-agreement.html",

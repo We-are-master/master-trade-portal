@@ -2,8 +2,7 @@
 //
 // The DB shape (company_name, contact_name, single `trade`, location…) differs from the
 // design's richer partner model, so some fields are derived and a few are placeholders
-// until the schema gains them (trial/subscription land with the Stripe phase; bio,
-// postcode, radius, years-experience aren't columns yet).
+// until the schema gains them (bio, postcode, radius, years-experience aren't columns yet).
 
 import { displayPartnerRating } from "@/lib/partner-rating";
 import type { Partner, Trade } from "@/types";
@@ -22,17 +21,13 @@ export interface PartnerRow {
   partner_address: string | null;
   avatar_url?: string | null;
   // present once their migrations land (read best-effort by partner-auth):
-  trial_ends_at?: string | null;
   subscription_status?: string | null;
-  plan?: string | null;
-  billing_ready?: boolean | null;
   status?: string | null;
   bio?: string | null;
   years_experience?: number | null;
   service_radius_miles?: number | null;
   excluded_postcodes?: string[] | null;
   wizard_completed_at?: string | null;
-  account_type?: string | null;
 }
 
 function initialsFrom(name: string): string {
@@ -40,12 +35,6 @@ function initialsFrom(name: string): string {
   if (parts.length === 0) return "?";
   if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-}
-
-function daysUntil(iso?: string | null): number {
-  if (!iso) return 0;
-  const ms = new Date(iso).getTime() - Date.now();
-  return ms <= 0 ? 0 : Math.ceil(ms / 86_400_000);
 }
 
 export function mapPartner(row: PartnerRow): Partner {
@@ -68,21 +57,13 @@ export function mapPartner(row: PartnerRow): Partner {
     postcode: (row.location || row.partner_address || "").trim(),
     radiusMiles: row.service_radius_miles ?? 8,
     tradingName: row.company_name || contact,
-    trialDaysLeft: daysUntil(row.trial_ends_at),
-    trialEndsOn: row.trial_ends_at ? new Date(row.trial_ends_at).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "",
     yearsExperience: row.years_experience ?? 0,
     bio: row.bio ?? "",
     excludedPostcodes: row.excluded_postcodes ?? [],
     rating: displayPartnerRating(row.rating),
     ratingsCount: row.jobs_completed ?? 0,
     status: row.status?.trim() || "onboarding",
-    plan: row.plan?.trim() || "pro",
-    billingReady: Boolean(row.billing_ready),
     subscriptionStatus: row.subscription_status?.trim() || null,
     wizardCompletedAt: row.wizard_completed_at ?? null,
-    accountType:
-      row.account_type === "subscription" || row.account_type === "free"
-        ? row.account_type
-        : null,
   };
 }

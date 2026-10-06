@@ -7,9 +7,10 @@ const CONTRACT_TO_DOC_TYPE: Record<string, string> = {
   self_bill_agreement: "self_bill_agreement",
 };
 
+/** Fallback names; the signed version's own title wins (e.g. "Partner Agreement"). */
 const DOC_NAMES: Record<string, string> = {
-  service_agreement: "Service Agreement",
-  self_bill_agreement: "Self Bill Agreement",
+  service_agreement: "Partner Agreement",
+  self_bill_agreement: "Invoicing and Payment Collection Agreement",
 };
 
 export async function syncSignedContractToPartnerDocument(
@@ -17,6 +18,8 @@ export async function syncSignedContractToPartnerDocument(
   params: {
     partnerId: string;
     contractType: string;
+    /** contract_versions.title of the version just signed. */
+    contractTitle?: string | null;
     signaturePdfUrl: string | null;
     signedAt: string;
   },
@@ -36,7 +39,7 @@ export async function syncSignedContractToPartnerDocument(
   const row = {
     partner_id: params.partnerId,
     doc_type: docType,
-    name: DOC_NAMES[docType] ?? docType,
+    name: params.contractTitle?.trim() || DOC_NAMES[docType] || docType,
     file_name: `${docType}.pdf`,
     file_path: params.signaturePdfUrl.trim(),
     status: "pending",

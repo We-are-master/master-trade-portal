@@ -80,12 +80,6 @@ interface OpportunitySnapshot {
 
 // Most partners are on a fortnightly cycle, but the OS also runs weekly and
 // monthly ones — label the card with whatever period the partner is actually on.
-const PERIOD_NOUN: Record<PeriodCadence, string> = {
-  week: "week",
-  fortnight: "fortnight",
-  month: "month",
-};
-
 const PERIOD_TITLE: Record<PeriodCadence, string> = {
   week: "Week",
   fortnight: "Fortnight",
@@ -182,7 +176,6 @@ export function Dashboard({
   const { value: dateFilter, setValue: setDateFilter, label: dateFilterLabel } = useDateRangeFilter();
 
   const [docs, setDocs] = useState<PartnerDoc[] | null>(null);
-  const [trialDays, setTrialDays] = useState<number>(partner.trialDaysLeft);
   const [opps, setOpps] = useState<OpportunitySnapshot>({ leads: [], jobs: [], quotes: [], loaded: false });
   const [pulseTick, setPulseTick] = useState(0);
   const [payPeriod, setPayPeriod] = useState<PayPeriodSummary | null>(null);
@@ -224,17 +217,7 @@ export function Dashboard({
         const summary = await fetchPayPeriodSummary(supabase, partner.id);
         if (!cancelled) setPayPeriod(summary);
       } catch {
-        /* no self_bills yet — the card falls back to the standard fortnight */
-      }
-      try {
-        const { data } = await supabase.from("partners").select("trial_ends_at").eq("id", partner.id).maybeSingle();
-        const iso = (data as { trial_ends_at?: string | null } | null)?.trial_ends_at;
-        if (!cancelled && iso) {
-          const ms = new Date(iso).getTime() - Date.now();
-          setTrialDays(ms > 0 ? Math.ceil(ms / 86_400_000) : 0);
-        }
-      } catch {
-        /* mig 196 not applied */
+        /* no statements (self_bills rows) yet: the card falls back to the standard fortnight */
       }
     })();
     return () => {
@@ -469,15 +452,6 @@ export function Dashboard({
             >
               {growth.text}
             </span>
-            {trialDays > 0 && (
-              <span style={{ color: T.slate }}>
-                ·{" "}
-                <span className="fx-mono" style={{ color: T.amber }}>
-                  {trialDays} day{trialDays === 1 ? "" : "s"}
-                </span>{" "}
-                left on trial
-              </span>
-            )}
           </div>
         </div>
         <DateRangeFilter value={dateFilter} onChange={setDateFilter} />
@@ -553,38 +527,6 @@ export function Dashboard({
         </div>
 
       </div>
-
-      {trialDays > 0 && (
-        <Card
-          style={{
-            padding: 14,
-            display: "flex",
-            alignItems: "center",
-            gap: 14,
-            borderColor: T.amber50,
-            background: "linear-gradient(0deg, rgba(196,122,0,0.04), rgba(196,122,0,0.04)), #fff",
-          }}
-        >
-          <div style={{ width: 32, height: 32, borderRadius: 8, background: T.amber50, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
-            <Icon name="zap" size={16} color={T.amber} />
-          </div>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 13.5, fontWeight: 500, color: T.ink }}>
-              You&apos;ve earned{" "}
-              <span className="fx-mono" style={{ color: T.amber }}>
-                {formatGBP(d.fortnightEarnings)}
-              </span>{" "}
-              this {PERIOD_NOUN[d.period.cadence]} on trial. £99/mo keeps it flowing.
-            </div>
-            <div style={{ fontSize: 12, color: T.mute, marginTop: 2 }}>
-              That&apos;s <b>0% commission</b> on your completed work. {trialDays} day{trialDays === 1 ? "" : "s"} left on your trial.
-            </div>
-          </div>
-          <Button variant="secondary" size="sm" onClick={() => onNav("settings:billing")}>
-            Review plan
-          </Button>
-        </Card>
-      )}
 
       {/* Two-column */}
       <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr", gap: 12 }}>
@@ -708,7 +650,7 @@ export function Dashboard({
           title="Pending payout"
           line1={d.pendingPayout > 0 ? `${formatGBP(d.pendingPayout)} awaiting sign-off` : "Nothing pending"}
           line2={`From ${d.awaiting.length} ${d.awaiting.length === 1 ? "job" : "jobs"} in final checks`}
-          cta="View self-bills"
+          cta="View statements"
           onCta={() => onNav("settings:selfbill")}
         />
       </div>

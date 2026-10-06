@@ -7,6 +7,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { T } from "@/lib/tokens";
 import { Button, Icon } from "@/components/ui/primitives";
+import { isPlatformBookingRequiredDoc } from "@/lib/partner-required-docs";
 
 /** The funnel's draft code, sent along so uploads work before the session cookie sticks. */
 export const ONBOARDING_DRAFT_STORAGE_KEY = "fixfy_onboarding_draft_code";
@@ -197,7 +198,12 @@ function DocUploadRow({
         <Icon name={isDone ? "check" : "file-text"} size={18} />
       </span>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 14.5, fontWeight: 600, color: T.ink }}>{doc.name}</div>
+        <div style={{ fontSize: 14.5, fontWeight: 600, color: T.ink }}>
+          {doc.name}
+          {!isDone && isPlatformBookingRequiredDoc(doc) && (
+            <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 600, color: T.coral, whiteSpace: "nowrap" }}>Required for bookings</span>
+          )}
+        </div>
         <div style={{ fontSize: 12.5, color: T.mute, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           {err ? <span style={{ color: T.red }}>{err}</span> : uploaded ? uploaded.fileName : doc.description}
         </div>

@@ -1,6 +1,10 @@
 /**
  * Generates a Supabase migration that seeds Fixfy partner contract HTML (v2026).
  * Run: npx tsx scripts/generate-partner-contracts-migration.mts
+ *
+ * HISTORICAL: this wrote master-os migration 229 (version 2026-06-09) and would
+ * overwrite it if run again. Do not re-run; new contract versions are written
+ * as new migrations in master-os.
  */
 import { writeFileSync } from "fs";
 import { join } from "path";

@@ -31,7 +31,7 @@ Deploy to Railway or Vercel. Build `next build`, start `next start`, Node 20+.
 | `STRIPE_SECRET_KEY` | **LIVE** key in production |
 | `STRIPE_WEBHOOK_SECRET` | from the portal's OWN webhook endpoint (below) |
 | `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` | live publishable key |
-| `STRIPE_PRICE_FIXFY_PRO` | live £99/mo recurring price id |
+| `STRIPE_PRICE_*` | legacy plan price ids, only so the webhook recognises old subscriptions (plans retired 6 Oct 2026) |
 | `RESEND_API_KEY` | partner OTP emails |
 | `RESEND_FROM_EMAIL` | must be on a **verified** Resend domain |
 | `NEXT_PUBLIC_MAPBOX_TOKEN` | job-location map (My jobs → Map); same token as master-os |
@@ -40,7 +40,9 @@ Deploy to Railway or Vercel. Build `next build`, start `next start`, Node 20+.
 
 ## 4. Stripe
 - Switch to **live** mode.
-- Create the £99/mo Product+Price (see `scripts/create-stripe-price.mjs`) → `STRIPE_PRICE_FIXFY_PRO`.
+- Paid partner plans were retired on 6 Oct 2026: do not create plan prices. The billing
+  routes (`/api/billing/checkout`, `activate-subscription`, `setup-intent`, `confirm-setup`)
+  answer 410. The webhook stays so subscriptions that already exist keep syncing.
 - Create a webhook endpoint → `https://<domain>/api/stripe/webhook`, events `checkout.session.completed`, `customer.subscription.*` → signing secret → `STRIPE_WEBHOOK_SECRET`.
 - **Enable Stripe Connect** (Express) on the platform account — required for self-bill payouts.
 
