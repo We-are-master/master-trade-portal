@@ -7,7 +7,7 @@
 import { NextResponse } from "next/server";
 import { getPartnerSession } from "@/lib/partner-auth";
 import { createServiceClient } from "@/lib/supabase/service";
-import { partnerMissingRequiredDocs } from "@/lib/partner-docs-gate";
+import { jobIsPlatformBooking, partnerMissingRequiredDocs, platformDocsEnforced } from "@/lib/partner-docs-gate";
 import { partnerWorkAccessBlocked } from "@/lib/partner-access-gate";
 import { callMasterOsPartnerPortalAccept } from "@/lib/master-os-internal";
 
@@ -43,7 +43,11 @@ export async function POST(req: Request) {
       );
     }
 
-    const missing = await partnerMissingRequiredDocs(svc, session.partnerId);
+    // Platform Booking documents (ID, public liability, trade registration) only
+    // when ENFORCE_PLATFORM_DOCS is on and the job isn't known Client Work; off
+    // by default, so business-client work keeps the OS document rules as before.
+    const platformBooking = platformDocsEnforced() && (await jobIsPlatformBooking(svc, jobId)) !== false;
+    const missing = await partnerMissingRequiredDocs(svc, session.partnerId, { platformBooking });
     if (missing.length) {
       return NextResponse.json(
         { error: `Upload your required documents first: ${missing.join(", ")}.`, code: "docs_required" },
