@@ -29,7 +29,12 @@ import {
 import { SERVICE_CATEGORY_ORDER, serviceCategory } from "@/lib/service-category";
 import { fetchSelfBills, type SelfBill } from "@/lib/queries/self-bills";
 import { fetchPartnerDocuments, type PartnerDoc } from "@/lib/queries/partner-documents";
-import { missingFromChecklist, pickRequiredDocMatch, type RequiredDocDef } from "@/lib/partner-required-docs";
+import {
+  isPlatformBookingRequiredDoc,
+  missingFromChecklist,
+  pickRequiredDocMatch,
+  type RequiredDocDef,
+} from "@/lib/partner-required-docs";
 import { hydrateContractHtml } from "@/lib/contract-branding";
 import { fetchContracts, type PartnerContract } from "@/lib/queries/contracts";
 import { INVOICING_CONTRACT_TYPE } from "@/lib/partner-contract-types";
@@ -1657,6 +1662,10 @@ export function DocsPage({ onChanged }: { onChanged?: () => void } = {}) {
     created_at: new Date(0).toISOString(),
   }));
   const missing = missingFromChecklist(docRows, required);
+  // ID, public liability and the trade registration gate website bookings
+  // (Platform Bookings); the rest of the checklist is for our review.
+  const missingForBookings = missing.filter((d) => isPlatformBookingRequiredDoc(d)).length;
+  const missingOther = missing.length - missingForBookings;
   const extraDocs = docs.filter((d) => !required.some((r) => pickRequiredDocMatch(docRows, r)));
 
   return (
@@ -1686,7 +1695,16 @@ export function DocsPage({ onChanged }: { onChanged?: () => void } = {}) {
             <Icon name={missing.length === 0 ? "shield-check" : "alert-triangle"} size={15} />
             {missing.length === 0
               ? "All required documents are on file. You're cleared to work."
-              : `${missing.length} required document${missing.length === 1 ? "" : "s"} still needed before you can use the platform.`}
+              : [
+                  missingForBookings > 0
+                    ? `Photo ID, public liability insurance and your trade registration are required before you can receive website bookings: ${missingForBookings} still needed.`
+                    : "",
+                  missingOther > 0
+                    ? `${missingOther} ${missingForBookings > 0 ? "other " : ""}required document${missingOther === 1 ? "" : "s"} still needed for our review.`
+                    : "",
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
           </div>
 
           {selfBill && (
