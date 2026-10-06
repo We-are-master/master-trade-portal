@@ -89,12 +89,6 @@ export interface AvailableJob {
   total: number;
   /** "Day rate" / "Half day" when the fixed price was agreed on that basis (jobs.rate_basis). */
   rateBasisLabel?: string | null;
-  /**
-   * Platform Booking breakdown (agent model, Partner Agreement 4.3.1): what the
-   * customer pays and Fixfy's commission; `total` is then the partner's net.
-   * Null for Fixfy Client Work (Partner Fee only) or when the kind is unknown.
-   */
-  platformBooking?: { customerPrice: number; commission: number } | null;
   timing: string;
   /** Janela de chegada ("9am to 12pm"), quando o job tem hora. */
   arrivalWindow?: string | null;
