@@ -652,7 +652,9 @@ export function SectionHeader({
         ...style,
       }}
     >
-      <div style={{ flex: "1 1 260px", minWidth: 0 }}>
+      {/* Base de 260px só na linha (desktop): no celular o cabeçalho é coluna e
+          a base viraria altura, abrindo um buraco embaixo do título. */}
+      <div style={{ flex: isMobile ? "0 0 auto" : "1 1 260px", minWidth: 0 }}>
         <div style={{ fontSize: 20, fontWeight: 550, letterSpacing: "-0.03em", color: T.ink }}>
           {title}
         </div>

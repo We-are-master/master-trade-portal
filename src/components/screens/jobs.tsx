@@ -436,6 +436,10 @@ export function SourceTag({ source }: { source: JobSource }) {
 // LIST
 // ============================================================
 function JobsList({ onOpenJob, jobs }: { onOpenJob: OpenJob; jobs: MyJob[] }) {
+  const isMobile = useIsMobile();
+  // Celular: a tabela de 9 colunas espremia o texto em pé. Lista de uma linha
+  // por job (hora, título, área, status), como na prévia de 15/10/2026.
+  if (isMobile) return <JobsListMobile onOpenJob={onOpenJob} jobs={jobs} />;
   return (
     <Card style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column" }}>
       <div style={{ overflow: "auto", flex: 1 }}>
@@ -469,6 +473,58 @@ function JobsList({ onOpenJob, jobs }: { onOpenJob: OpenJob; jobs: MyJob[] }) {
         </table>
       </div>
     </Card>
+  );
+}
+
+function JobsListMobile({ onOpenJob, jobs }: { onOpenJob: OpenJob; jobs: MyJob[] }) {
+  return (
+    <div
+      style={{
+        flex: 1,
+        overflow: "auto",
+        background: T.white,
+        border: `1px solid ${T.line}`,
+        borderRadius: 12,
+      }}
+    >
+      {jobs.map((j, i) => {
+        const hora = j.scheduleArrivalLabel || j.scheduled || j.completed || "";
+        const area = (j.postcode || "").split(" ")[0];
+        return (
+          <button
+            key={j.uuid}
+            type="button"
+            onClick={() => onOpenJob(j.id)}
+            style={{
+              width: "100%",
+              display: "flex",
+              alignItems: "center",
+              gap: 12,
+              minHeight: 60,
+              padding: "10px 14px",
+              border: "none",
+              borderBottom: i === jobs.length - 1 ? "none" : `1px solid ${T.paper2}`,
+              background: "transparent",
+              textAlign: "left",
+              cursor: "pointer",
+              fontFamily: T.sans,
+            }}
+          >
+            <span style={{ flex: 1, minWidth: 0 }}>
+              <span style={{ display: "block", fontSize: 14, fontWeight: 600, color: T.ink }}>{j.title}</span>
+              <span style={{ display: "block", fontSize: 12, color: T.mute, marginTop: 2 }}>
+                {[j.scheduleStartLabel, hora, area].filter(Boolean).join(" · ")}
+              </span>
+            </span>
+            {j.needsAttention ? (
+              <Badge tone="coral" size="sm">{j.onHoldLabel || "Action required"}</Badge>
+            ) : (
+              <Badge tone={j.status} size="sm">{STATUS_LABELS[j.status]}</Badge>
+            )}
+          </button>
+        );
+      })}
+    </div>
   );
 }
 
