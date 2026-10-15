@@ -88,13 +88,14 @@ export function MyJobsView({
               justifyContent: "flex-end",
             }}
           >
-            <DateRangeFilter value={dateFilter} onChange={setDateFilter} />
+            {/* Views e Export primeiro; o filtro de data fecha a linha, na ponta direita. */}
             <Tabs tabs={tabs} active={view} onChange={setView} variant="pills" iconOnly={isMobile} />
             {isMobile ? (
               <IconButton icon="download" title="Export" tone="secondary" size={34} />
             ) : (
               <Button variant="secondary" icon="download">Export</Button>
             )}
+            <DateRangeFilter value={dateFilter} onChange={setDateFilter} />
           </div>
         }
       />
