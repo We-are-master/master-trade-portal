@@ -28,6 +28,7 @@ import { formatGBP, formatGBPdec } from "@/lib/format";
 import { useMyJobs } from "@/components/jobs-context";
 import { JobReportForm } from "./job-report-form";
 import { OnHoldResponseForm } from "./on-hold-response-form";
+import { ComplaintJournal } from "./complaint-journal";
 import { useToast } from "@/components/ui/toast";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -439,6 +440,8 @@ function OverviewTab({
           <OnHoldResponseForm job={job} onShowToast={onShowToast} onSubmitted={onSubmitted} />
         </Card>
       ) : null}
+      {/* Journal da reclamação (15/10/2026): a conversa com o escritório, registrada no job. */}
+      {job.needsAttention || job.onHoldComplaintDescription ? <ComplaintJournal job={job} onShowToast={onShowToast} /> : null}
       <Card style={{ padding: 0, overflow: "hidden" }}>
         <div
           style={{
