@@ -918,10 +918,16 @@ export function AvailableJobsView({
   onShowToast,
   previewMode = false,
   redactSensitive = false,
+  title = "Available jobs",
+  topSlot,
 }: {
   onShowToast: ShowToast;
   previewMode?: boolean;
   redactSensitive?: boolean;
+  /** Título da página quando a tela vive dentro de Offers. */
+  title?: string;
+  /** Trilho Jobs/Quotes de Offers, acima do título. */
+  topSlot?: ReactNode;
 }) {
   const partner = usePartner();
   const myJobs = useMyJobs();
@@ -1014,8 +1020,9 @@ export function AvailableJobsView({
 
   return (
     <div style={{ padding: 24, display: "flex", flexDirection: "column", gap: 18, flex: 1, overflow: "auto" }}>
+      {topSlot}
       <SectionHeader
-        title="Available jobs"
+        title={title}
         subtitle="Fixfy-quoted work, customer's already signed off. First to accept wins."
         actions={
           <Button variant="secondary" size="sm" icon="refresh-cw" onClick={load}>
@@ -1183,10 +1190,14 @@ export function AvailableQuotesView({
   onShowToast,
   previewMode = false,
   redactSensitive = false,
+  title = "Available quotes",
+  topSlot,
 }: {
   onShowToast: ShowToast;
   previewMode?: boolean;
   redactSensitive?: boolean;
+  title?: string;
+  topSlot?: ReactNode;
 }) {
   const partner = usePartner();
   const [tab, setTab] = useState<QuoteRequestStatus>("to-quote");
@@ -1227,8 +1238,9 @@ export function AvailableQuotesView({
 
   return (
     <div style={{ padding: 24, display: "flex", flexDirection: "column", gap: 18, flex: 1, overflow: "auto" }}>
+      {topSlot}
       <SectionHeader
-        title="Available quotes"
+        title={title}
         subtitle="Fixfy clients needing a custom estimate. Submit a number, win the work."
       />
 

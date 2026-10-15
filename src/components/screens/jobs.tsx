@@ -2,7 +2,7 @@
 
 // My jobs — Board / List / Map. Ported from jobs.jsx.
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { T } from "@/lib/tokens";
 import {
   Badge,
@@ -35,11 +35,14 @@ export function MyJobsView({
   defaultView = "board",
   previewMode = false,
   redactSensitive = false,
+  topSlot,
 }: {
   onOpenJob: OpenJob;
   defaultView?: string;
   previewMode?: boolean;
   redactSensitive?: boolean;
+  /** Trilho List/Calendar de My jobs, acima do título. */
+  topSlot?: ReactNode;
 }) {
   const [view, setView] = useState(defaultView);
   const { jobs, loading, error } = useMyJobs();
@@ -66,6 +69,7 @@ export function MyJobsView({
 
   return (
     <div style={{ padding: 24, display: "flex", flexDirection: "column", gap: 16, flex: 1, overflow: "hidden" }}>
+      {topSlot}
       <SectionHeader
         title="My jobs"
         subtitle={

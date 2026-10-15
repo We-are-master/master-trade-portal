@@ -1,257 +1,183 @@
 "use client";
 
-// Sidebar, UserMiniCard — ported from shell.jsx.
+// Sidebar do desktop, no desenho do OS: faixa da logo com 48px e a linha de
+// baixo alinhada à do topo, quatro destinos e o cartão do parceiro no pé.
+
 import { useState, type CSSProperties } from "react";
-import { AuthWordmark, BrandPanelBackground } from "@/components/brand/auth-wordmark";
 import { T } from "@/lib/tokens";
-import { PartnerRatingInline } from "@/components/ui/partner-rating";
 import { Avatar, Icon } from "@/components/ui/primitives";
-import { usePartnerRating } from "@/hooks/use-partner-rating";
 import { usePartner } from "@/components/partner-context";
-import { useMyJobs } from "@/components/jobs-context";
+import { useOffersCount } from "@/components/offers-context";
 import { createClient } from "@/lib/supabase/client";
+import { NAV_ITEMS } from "./nav-config";
 
-interface NavItem {
-  id: string;
-  label: string;
-  icon: string;
-  badge?: number;
-  hot?: boolean;
-  /** Soft “coming soon” — visible but not a live feature yet. */
-  soon?: boolean;
+export const NAV_BG = "#0A0A28";
+export const SHELL_TOP_H = 48;
+const NAV_LINE = "rgba(255,255,255,0.08)";
+
+export function Wordmark({ height = 26 }: { height?: number }) {
+  // eslint-disable-next-line @next/next/no-img-element
+  return <img src="/logos/fixfy-wordmark-white-coral.png" alt="Fixfy" style={{ height, width: "auto", display: "block" }} />;
 }
 
-// Original section structure kept; only the item labels are renamed. Badges are
-// derived from real data at render time (see Sidebar) — no hardcoded counts.
-const NAV: { section: string; items: NavItem[] }[] = [
-  { section: "Workspace", items: [{ id: "dashboard", label: "Dashboard", icon: "layout-dashboard" }] },
-  {
-    section: "Opportunities",
-    items: [
-      { id: "available", label: "Available Jobs", icon: "wrench" },
-      { id: "quotes", label: "Available Quotes", icon: "file-text" },
-    ],
-  },
-  {
-    section: "Operations",
-    items: [
-      { id: "jobs", label: "Active Jobs", icon: "briefcase" },
-      { id: "schedule", label: "Schedule", icon: "calendar" },
-    ],
-  },
-  { section: "Account", items: [{ id: "settings", label: "Settings", icon: "settings" }] },
-];
-
-export function Wordmark({ color = T.navy, height = 18 }: { color?: string; height?: number }) {
+export function Sidebar({ active, onNav }: { active: string; onNav: (id: string) => void }) {
+  const offers = useOffersCount();
   return (
-    <span
+    <aside
       style={{
-        fontFamily: T.sans,
-        fontSize: height,
-        fontWeight: 600,
-        letterSpacing: -0.5,
-        color,
-        lineHeight: 1,
-      }}
-    >
-      fixfy
-    </span>
-  );
-}
-
-export function Sidebar({
-  active,
-  onNav,
-  density = "comfortable",
-}: {
-  active: string;
-  onNav: (id: string) => void;
-  density?: "comfortable" | "compact";
-  /** @deprecated Locks removed — all active partners share the same nav. Kept for call-site compat. */
-  workLocked?: boolean;
-}) {
-  const isDense = density === "compact";
-  const { jobs } = useMyJobs();
-  const activeJobs = jobs.filter((j) => j.status === "scheduled" || j.status === "in_progress").length;
-  // Real, derived badges only (no fabricated counts). Available/quotes/leads would need their
-  // own fetch, so they stay unbadged until there's a shared count source.
-  const badgeFor = (id: string): number | undefined => (id === "jobs" && activeJobs > 0 ? activeJobs : undefined);
-
-  function Row({ item }: { item: NavItem }) {
-    const sel = item.id === active;
-    const [h, setH] = useState(false);
-    return (
-      <div
-        onClick={() => onNav(item.id)}
-        onMouseEnter={() => setH(true)}
-        onMouseLeave={() => setH(false)}
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 10,
-          padding: isDense ? "6px 10px" : "7px 10px",
-          borderRadius: 8,
-          background: sel ? "rgba(255,255,255,0.09)" : h ? "rgba(255,255,255,0.05)" : "transparent",
-          color: sel ? T.white : "rgba(255,255,255,0.66)",
-          fontSize: 13,
-          fontWeight: sel ? 500 : 400,
-          cursor: "pointer",
-          justifyContent: "space-between",
-          position: "relative",
-        }}
-      >
-        {sel && (
-          <span
-            style={{
-              position: "absolute",
-              left: -12,
-              top: 6,
-              bottom: 6,
-              width: 2.5,
-              background: T.coral,
-              borderRadius: 9999,
-            }}
-          />
-        )}
-        <span style={{ display: "inline-flex", alignItems: "center", gap: 10 }}>
-          <Icon name={item.icon} size={16} color={sel ? T.white : item.hot ? T.coral : "rgba(255,255,255,0.5)"} />
-          {item.label}
-        </span>
-        <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-          {item.soon ? (
-            <span
-              style={{
-                fontSize: 9,
-                fontWeight: 700,
-                letterSpacing: 0.6,
-                textTransform: "uppercase",
-                padding: "2px 6px",
-                borderRadius: 4,
-                background: "rgba(237,75,0,0.22)",
-                color: T.coral,
-              }}
-            >
-              Soon
-            </span>
-          ) : null}
-          {item.badge != null && (
-            <span
-              style={{
-                fontFamily: T.mono,
-                fontSize: 10.5,
-                padding: "1px 6px",
-                background: T.coral,
-                color: T.white,
-                borderRadius: 9999,
-                fontWeight: 500,
-              }}
-            >
-              {item.badge}
-            </span>
-          )}
-        </span>
-      </div>
-    );
-  }
-
-  return (
-    <BrandPanelBackground
-      style={{
-        width: 240,
-        flex: "0 0 240px",
+        width: 216,
+        flex: "0 0 216px",
         height: "100vh",
-        borderRight: `1px solid rgba(255,255,255,0.06)`,
+        background: NAV_BG,
         display: "flex",
         flexDirection: "column",
-        padding: "14px 12px 12px",
+        fontFamily: T.sans,
       }}
     >
-      <div style={{ padding: "4px 8px 16px" }}>
-        <AuthWordmark light size={18} />
+      <div
+        style={{
+          height: SHELL_TOP_H,
+          flexShrink: 0,
+          display: "flex",
+          alignItems: "center",
+          padding: "0 20px",
+          borderBottom: `1px solid ${NAV_LINE}`,
+          boxSizing: "border-box",
+        }}
+      >
+        <Wordmark />
       </div>
 
-      {/* Nav sections */}
-      <div style={{ flex: 1, overflow: "auto", display: "flex", flexDirection: "column", gap: 14 }}>
-        {NAV.map((section, si) => (
-          <div key={si}>
-            {section.section ? (
-              <div
-                style={{
-                  fontSize: 10,
-                  letterSpacing: 0.6,
-                  textTransform: "uppercase",
-                  color: "rgba(255,255,255,0.4)",
-                  padding: "0 10px 6px",
-                  fontWeight: 500,
-                }}
-              >
-                {section.section}
-              </div>
-            ) : null}
-            <nav style={{ display: "flex", flexDirection: "column", gap: 1 }}>
-              {section.items.map((i) => {
-                const badge = badgeFor(i.id);
-                return <Row key={i.id} item={badge != null ? { ...i, badge } : i} />;
-              })}
-            </nav>
-          </div>
+      <nav aria-label="Main" style={{ display: "flex", flexDirection: "column", gap: 2, padding: 12, flex: 1, overflow: "auto" }}>
+        {NAV_ITEMS.map((item) => (
+          <SideItem
+            key={item.id}
+            label={item.label}
+            icon={item.icon}
+            selected={item.id === active}
+            count={item.id === "offers" && offers > 0 ? offers : undefined}
+            onClick={() => onNav(item.id)}
+          />
         ))}
-      </div>
+      </nav>
 
-      <UserMiniCard onSettings={() => onNav("settings")} />
-    </BrandPanelBackground>
+      <PartnerCard selected={active === "settings"} onAccount={() => onNav("settings")} />
+    </aside>
   );
 }
 
-function UserMiniCard({ onSettings }: { onSettings: () => void }) {
+function SideItem({
+  label,
+  icon,
+  selected,
+  count,
+  onClick,
+}: {
+  label: string;
+  icon: string;
+  selected: boolean;
+  count?: number;
+  onClick: () => void;
+}) {
+  const [h, setH] = useState(false);
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      onMouseEnter={() => setH(true)}
+      onMouseLeave={() => setH(false)}
+      aria-current={selected ? "page" : undefined}
+      style={{
+        position: "relative",
+        display: "flex",
+        alignItems: "center",
+        gap: 10,
+        height: 36,
+        padding: "0 12px",
+        border: "none",
+        borderRadius: 6,
+        background: selected ? "rgba(255,255,255,0.08)" : h ? "rgba(255,255,255,0.05)" : "transparent",
+        color: selected || h ? T.white : "rgba(255,255,255,0.62)",
+        fontFamily: T.sans,
+        fontSize: 14,
+        fontWeight: 500,
+        cursor: "pointer",
+        textAlign: "left",
+      }}
+    >
+      {selected && (
+        <span style={{ position: "absolute", left: 0, top: 8, bottom: 8, width: 3, borderRadius: 2, background: T.coral }} />
+      )}
+      <Icon name={icon} size={16} />
+      <span style={{ flex: 1 }}>{label}</span>
+      {count != null && (
+        <span
+          style={{
+            minWidth: 20,
+            height: 18,
+            padding: "0 6px",
+            boxSizing: "border-box",
+            borderRadius: 6,
+            background: "rgba(237,75,0,0.18)",
+            color: "#FFB08A",
+            fontSize: 11,
+            fontWeight: 600,
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          {count > 99 ? "99+" : count}
+        </span>
+      )}
+    </button>
+  );
+}
+
+function PartnerCard({ selected, onAccount }: { selected: boolean; onAccount: () => void }) {
   const [open, setOpen] = useState(false);
   const partner = usePartner();
-  const { rating } = usePartnerRating(partner.rating);
   const signOut = async () => {
     await createClient().auth.signOut();
     window.location.href = "/login";
   };
+  const name = `${partner.firstName ?? ""} ${partner.lastName ?? ""}`.trim() || "Your account";
   return (
-    <div style={{ position: "relative" }}>
+    <div style={{ position: "relative", margin: 12 }}>
       <button
+        type="button"
         onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
         style={{
           width: "100%",
           display: "flex",
           alignItems: "center",
           gap: 10,
-          padding: "8px 10px",
-          borderRadius: 8,
-          border: `1px solid rgba(255,255,255,0.1)`,
-          background: "rgba(255,255,255,0.05)",
+          padding: 12,
+          border: "none",
+          borderRadius: 10,
+          background: selected ? "rgba(255,255,255,0.10)" : "rgba(255,255,255,0.06)",
           cursor: "pointer",
           textAlign: "left",
+          fontFamily: T.sans,
         }}
       >
-        <Avatar initials={partner.initials} size={28} bg={T.coral} />
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div
-            style={{
-              fontSize: 12.5,
-              fontWeight: 500,
-              color: T.white,
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
-            }}
+        <Avatar initials={partner.initials} size={32} bg={T.coral} />
+        <span style={{ flex: 1, minWidth: 0 }}>
+          <span
+            title={name}
+            style={{ display: "block", fontSize: 13, fontWeight: 600, color: T.white, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
           >
-            {partner.firstName} {partner.lastName}
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-            <span style={{ fontSize: 11, color: "rgba(255,255,255,0.5)" }}>{partner.primaryTrade}</span>
-            <PartnerRatingInline rating={rating} size="xs" dark />
-          </div>
-        </div>
+            {name}
+          </span>
+          <span style={{ display: "block", fontSize: 11, color: "rgba(255,255,255,0.62)" }}>Account and documents</span>
+        </span>
         <Icon name="chevrons-up-down" size={14} color="rgba(255,255,255,0.5)" />
       </button>
       {open && (
         <div
           className="fx-rise"
+          onMouseLeave={() => setOpen(false)}
           style={{
             position: "absolute",
             bottom: "calc(100% + 6px)",
@@ -260,14 +186,12 @@ function UserMiniCard({ onSettings }: { onSettings: () => void }) {
             background: T.white,
             border: `1px solid ${T.line}`,
             borderRadius: 10,
-            boxShadow: "0 8px 24px rgba(2,0,64,0.10), 0 2px 6px rgba(2,0,64,0.06)",
+            boxShadow: "0 4px 6px -2px rgba(10,10,31,0.20)",
             padding: 6,
             zIndex: 50,
           }}
-          onMouseLeave={() => setOpen(false)}
         >
-          <MenuItem icon="user" label="Profile" onClick={() => { onSettings(); setOpen(false); }} />
-          <MenuItem icon="life-buoy" label="Help & support" />
+          <MenuItem icon="user" label="Account" onClick={() => { onAccount(); setOpen(false); }} />
           <div style={{ height: 1, background: T.line, margin: "6px 4px" }} />
           <MenuItem icon="log-out" label="Sign out" onClick={signOut} />
         </div>
@@ -288,14 +212,13 @@ function MenuItem({ icon, label, onClick }: { icon: string; label: string; onCli
     border: "none",
     background: h ? T.paper : "transparent",
     color: T.ink,
-    fontSize: 12.5,
-    fontWeight: 400,
+    fontSize: 13,
     cursor: "pointer",
     textAlign: "left",
     fontFamily: T.sans,
   };
   return (
-    <button onClick={onClick} onMouseEnter={() => setH(true)} onMouseLeave={() => setH(false)} style={style}>
+    <button type="button" onClick={onClick} onMouseEnter={() => setH(true)} onMouseLeave={() => setH(false)} style={style}>
       <Icon name={icon} size={14} color={T.mute} />
       <span>{label}</span>
     </button>

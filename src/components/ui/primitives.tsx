@@ -644,12 +644,15 @@ export function SectionHeader({
         // title on a phone — they squeeze it to one letter per line.
         flexDirection: isMobile ? "column" : "row",
         alignItems: isMobile ? "stretch" : "flex-end",
+        // Janela estreita: as ações descem para a linha de baixo em vez de
+        // espremer o título numa coluna de uma palavra.
+        flexWrap: "wrap",
         gap: isMobile ? 10 : 16,
         ...style,
       }}
     >
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: isMobile ? 19 : 22, fontWeight: 600, letterSpacing: -0.3, color: T.navy }}>
+      <div style={{ flex: "1 1 260px", minWidth: 0 }}>
+        <div style={{ fontSize: 20, fontWeight: 550, letterSpacing: "-0.03em", color: T.ink }}>
           {title}
         </div>
         {subtitle && <div style={{ fontSize: 13, color: T.mute, marginTop: 4 }}>{subtitle}</div>}

@@ -63,14 +63,13 @@ export interface SettingsPage {
 
 export const SETTINGS_PAGES: SettingsPage[] = [
   { id: "profile", label: "Profile", icon: "user" },
-  { id: "trades", label: "Trades & skills", icon: "wrench" },
+  { id: "trades", label: "Trades and skills", icon: "wrench" },
   { id: "rates", label: "Rate card", icon: "banknote" },
   { id: "availability", label: "Availability", icon: "calendar-clock" },
   { id: "area", label: "Service area", icon: "map-pin" },
   { id: "preferences", label: "Job preferences", icon: "sliders-horizontal" },
-  // Route id stays "selfbill" so old links (settings:selfbill) keep working.
-  { id: "selfbill", label: "Statements", icon: "receipt" },
-  { id: "docs", label: "Documents", icon: "shield-check" },
+  // Statements e Documents moram em Money desde o redesign (15/10/2026); os
+  // links antigos settings:selfbill e settings:docs caem lá (nav-config).
   { id: "policies", label: "Policies", icon: "gavel" },
 ];
 
@@ -101,7 +100,7 @@ export function SettingsView({ initial = "profile" }: { initial?: string }) {
       {!isMobile && (
       <div style={{ borderRight: `1px solid ${T.line}`, padding: 16, overflow: "auto", background: T.white }}>
         <div style={{ fontSize: 11, letterSpacing: 0.5, color: T.mute, fontWeight: 500, textTransform: "uppercase", padding: "0 10px 8px" }}>
-          Settings
+          Account
         </div>
         {pages.map((p) => {
           const sel = p.id === page;
