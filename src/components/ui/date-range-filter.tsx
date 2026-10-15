@@ -111,10 +111,13 @@ export function DateRangeFilter({
         <div
           style={{
             position: "absolute",
-            right: 0,
+            // Celular: abre para a direita, a partir do começo do filtro; ancorado
+            // à direita ele saía pela borda esquerda da tela.
+            ...(isMobile ? { left: 0 } : { right: 0 }),
             top: "calc(100% + 6px)",
             zIndex: 50,
             width: isMobile ? 240 : 260,
+            maxWidth: "calc(100vw - 28px)",
             borderRadius: 12,
             border: `1px solid ${T.line}`,
             background: T.white,

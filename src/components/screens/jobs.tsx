@@ -81,17 +81,17 @@ export function MyJobsView({
           <div
             style={{
               display: "flex",
-              gap: isMobile ? 6 : 8,
+              gap: 6,
               alignItems: "center",
-              // Celular: uma linha só (filtro curto, views e Export só com ícone).
+              // Celular: uma linha só, os três grupos juntos à direita.
               flexWrap: isMobile ? "nowrap" : "wrap",
-              justifyContent: isMobile ? "space-between" : "flex-end",
+              justifyContent: "flex-end",
             }}
           >
             <DateRangeFilter value={dateFilter} onChange={setDateFilter} />
             <Tabs tabs={tabs} active={view} onChange={setView} variant="pills" iconOnly={isMobile} />
             {isMobile ? (
-              <IconButton icon="download" title="Export" tone="secondary" />
+              <IconButton icon="download" title="Export" tone="secondary" size={34} />
             ) : (
               <Button variant="secondary" icon="download">Export</Button>
             )}
