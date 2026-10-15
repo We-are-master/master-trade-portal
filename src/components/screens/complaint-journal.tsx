@@ -104,10 +104,10 @@ export function ComplaintJournal({ job, onShowToast }: { job: MyJob; onShowToast
           onChange={(e) => setTexto(e.target.value)}
           rows={3}
           placeholder="Reply to the Fixfy team: what happened, what you can do"
-          style={{ width: "100%", border: 0, outline: "none", resize: "vertical", fontSize: 13, color: T.ink, background: "transparent" }}
+          style={{ width: "100%", border: 0, outline: "none", resize: "vertical", fontFamily: T.sans, fontSize: 13, lineHeight: 1.45, color: T.ink, background: "transparent", boxSizing: "border-box" }}
         />
         <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", borderTop: `1px solid ${T.line}`, paddingTop: 8 }}>
-          <label style={{ fontSize: 12, fontWeight: 600, color: T.coral, cursor: "pointer" }}>
+          <label style={{ display: "inline-flex", alignItems: "center", gap: 6, height: 30, padding: "0 10px", borderRadius: 8, border: `1px solid ${T.lineStrong}`, fontSize: 12, fontWeight: 550, color: T.ink, cursor: "pointer" }}>
             Add photos{fotos.length ? ` (${fotos.length})` : ""}
             <input
               type="file"
