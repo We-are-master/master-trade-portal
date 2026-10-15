@@ -96,8 +96,9 @@ type ButtonVariant =
   | "ghost_dark";
 
 const BTN_VARIANTS: Record<ButtonVariant, { bg: string; fg: string; bd: string; hover: string; press: string }> = {
-  primary: { bg: T.coral, fg: T.white, bd: "transparent", hover: T.coralHover, press: T.coralPress },
-  secondary: { bg: T.white, fg: T.navy, bd: T.line, hover: T.paper, press: T.paper2 },
+  // Navy é a massa (Fixfy OS UNO, 15/10/2026): não existe botão laranja.
+  primary: { bg: T.navy, fg: T.white, bd: "transparent", hover: T.navySoft, press: T.navyDeep },
+  secondary: { bg: T.white, fg: T.ink, bd: T.lineStrong, hover: T.paper, press: T.paper2 },
   ghost: { bg: "transparent", fg: T.navy, bd: "transparent", hover: T.paper, press: T.paper2 },
   dark: { bg: T.navy, fg: T.white, bd: "transparent", hover: T.navySoft, press: T.navyDeep },
   danger: { bg: T.red, fg: T.white, bd: "transparent", hover: "#B20E29", press: "#A30C25" },
@@ -132,8 +133,8 @@ export function Button({
   const sizes = {
     xs: { h: 24, px: 8, fs: 11, r: 6, ig: 4, is: 12 },
     sm: { h: 30, px: 10, fs: 12, r: 8, ig: 5, is: 14 },
-    md: { h: 36, px: 14, fs: 13, r: 10, ig: 6, is: 16 },
-    lg: { h: 44, px: 18, fs: 14, r: 10, ig: 8, is: 18 },
+    md: { h: 36, px: 14, fs: 13, r: 8, ig: 6, is: 16 },
+    lg: { h: 44, px: 18, fs: 14, r: 8, ig: 8, is: 18 },
   } as const;
   const s = sizes[size];
   const [h, setH] = useState(false);
@@ -163,7 +164,7 @@ export function Button({
         color: disabled ? T.mute : v.fg,
         fontFamily: T.sans,
         fontSize: s.fs,
-        fontWeight: 500,
+        fontWeight: 550,
         letterSpacing: 0,
         cursor: disabled ? "not-allowed" : "pointer",
         transition: `background 120ms ${T.ease}`,
