@@ -32,6 +32,8 @@ const TITLES: Record<string, string> = {
 export function TradePortalApp() {
   const [route, setRoute] = useState("dashboard");
   const [drawerJobId, setDrawerJobId] = useState<string | null>(null);
+  /** Aba com que a gaveta abre (o link do report abre direto em "signoff"). */
+  const [drawerTab, setDrawerTab] = useState<string | null>(null);
   const [moreOpen, setMoreOpen] = useState(false);
   const partner = usePartner();
   const toast = useToast();
@@ -45,7 +47,13 @@ export function TradePortalApp() {
     // Link do e-mail da oferta: ?screen=opportunities abre direto nas ofertas.
     const tela = params.get("screen");
     if (tela && /^[a-z-]+(:[a-z-]+)?$/.test(tela)) setRoute(tela);
-    if (params.get("submitted") === "1" || params.get("welcome") === "1" || tela) {
+    // Link do report no e-mail: ?job=<id>&tab=report abre a gaveta do job na aba Report.
+    const jobDoLink = params.get("job");
+    if (jobDoLink && /^[0-9a-zA-Z-]{6,64}$/.test(jobDoLink)) {
+      setDrawerJobId(jobDoLink);
+      setDrawerTab(params.get("tab") === "report" ? "signoff" : null);
+    }
+    if (params.get("submitted") === "1" || params.get("welcome") === "1" || tela || jobDoLink) {
       window.history.replaceState(null, "", window.location.pathname);
     }
   }, []);
@@ -116,7 +124,17 @@ export function TradePortalApp() {
         <MoreSheet active={page} onNav={onNav} onClose={() => setMoreOpen(false)} />
       )}
 
-      {drawerJobId && <JobDrawer jobId={drawerJobId} onClose={() => setDrawerJobId(null)} onShowToast={toast} />}
+      {drawerJobId && (
+        <JobDrawer
+          jobId={drawerJobId}
+          initialTab={drawerTab ?? undefined}
+          onClose={() => {
+            setDrawerJobId(null);
+            setDrawerTab(null);
+          }}
+          onShowToast={toast}
+        />
+      )}
 
     </div>
   );

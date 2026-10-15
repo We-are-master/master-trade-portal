@@ -23,8 +23,14 @@ export async function GET(req: NextRequest) {
 
   try {
     const admin = createServiceClient();
-    const redirectUrl = new URL("/", req.url);
-    redirectUrl.searchParams.set("welcome", "1");
+    /**
+     * Destino depois de entrar (15/10/2026): o link do report no e-mail manda o parceiro
+     * direto para a aba Report do job. Só caminho interno, nada de outro domínio.
+     */
+    const next = params.get("next") ?? "";
+    const destinoInterno = next.startsWith("/") && !next.startsWith("//") && !next.includes("\\");
+    const redirectUrl = new URL(destinoInterno ? next : "/", req.url);
+    if (!destinoInterno) redirectUrl.searchParams.set("welcome", "1");
     let response = NextResponse.redirect(redirectUrl);
 
     const supabase = await createClientForRoute(response);

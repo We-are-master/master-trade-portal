@@ -44,16 +44,20 @@ type ShowToast = (t: ToastInput) => void;
 
 export function JobDrawer({
   jobId,
+  initialTab,
   onClose,
   onShowToast,
 }: {
   jobId: string;
+  /** Aba de abertura (o link do report no e-mail abre em "signoff"). */
+  initialTab?: string;
   onClose: () => void;
   onShowToast: ShowToast;
 }) {
   const { jobs, refresh } = useMyJobs();
-  const job = jobs.find((j) => j.id === jobId); // real jobs only; unknown id → drawer closed
-  const [tab, setTab] = useState("overview");
+  // O link do e-mail traz o uuid do job; a lista usa a referência. Aceita os dois.
+  const job = jobs.find((j) => j.id === jobId || j.uuid === jobId); // real jobs only; unknown id → drawer closed
+  const [tab, setTab] = useState(initialTab ?? "overview");
   const [closing, setClosing] = useState(false);
   const isMobile = useIsMobile();
   const [starting, setStarting] = useState(false);
