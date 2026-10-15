@@ -1,5 +1,5 @@
 // Journal da reclamação no portal (15/10/2026). Mesma tabela que o OS lê
-// (job_complaint_messages, mig 330 do OS).
+// (job_complaint_messages, mig 333 do OS).
 //   GET  ?jobId=<uuid>                     → reclamação + mensagens que o parceiro pode ver
 //   POST multipart { jobId, body, photos[] } → mensagem do parceiro
 
