@@ -314,12 +314,18 @@ export function JobDrawer({
             </div>
           )}
           <div style={{ flex: 1 }} />
-          {job.status === "scheduled" && !cancelInfo && (
+          {/* Job pausado (reclamação, acesso…): nada de começar ou desistir; a resposta é no journal/formulário acima. */}
+          {job.needsAttention && (
+            <span style={{ fontSize: 13, color: T.slate }}>
+              {job.onHoldComplaintDescription ? "Reply to the complaint in the journal above." : "Send the update above so the job can move on."}
+            </span>
+          )}
+          {job.status === "scheduled" && !job.needsAttention && !cancelInfo && (
             <Button variant="secondary" size="lg" onClick={askCancel} disabled={cancelBusy || starting}>
               {cancelBusy ? "Checking…" : "Can't make it"}
             </Button>
           )}
-          {job.status === "scheduled" && (
+          {job.status === "scheduled" && !job.needsAttention && (
             <Button variant="primary" icon="play" size="lg" onClick={startJob} disabled={starting}>
               {starting ? "Starting…" : "Start job"}
             </Button>
@@ -363,7 +369,9 @@ function OverviewTab({
 
   return (
     <div style={{ padding: 20, display: "flex", flexDirection: "column", gap: 14 }}>
-      {job.needsAttention ? (
+      {/* Reclamação responde no journal (abaixo); o formulário fica só para as outras pausas
+          (acesso, material, reagendar). Dois lugares para responder a mesma coisa confundia. */}
+      {job.needsAttention && !job.onHoldComplaintDescription ? (
         <Card
           style={{
             padding: 16,

@@ -18,7 +18,7 @@ type Svc = NonNullable<ReturnType<typeof tryCreateServiceClient>>;
 async function jobDoParceiro(svc: Svc, jobId: string, partnerId: string) {
   const { data } = await svc
     .from("jobs")
-    .select("id, partner_id, on_hold_at, on_hold_reason, on_hold_complaint_description")
+    .select("id, partner_id, status, on_hold_at, on_hold_reason, on_hold_complaint_description, on_hold_submission_at")
     .eq("id", jobId)
     .is("deleted_at", null)
     .maybeSingle();
@@ -99,5 +99,23 @@ export async function POST(req: Request) {
     visible_to_partner: true,
   });
   if (error) return NextResponse.json({ error: "Could not send. Try again." }, { status: 500 });
+
+  /**
+   * A resposta no journal vale como "parceiro respondeu" (15/10/2026): o OS e o Today do
+   * portal leem on_hold_submission_at. Só a primeira resposta da pausa marca; as fotos
+   * ficam no journal (bucket job-photos), o resumo aqui leva o texto.
+   */
+  const j = job as { status?: string | null; on_hold_submission_at?: string | null };
+  if (j.status === "on_hold" && !j.on_hold_submission_at) {
+    const agora = new Date().toISOString();
+    await svc
+      .from("jobs")
+      .update({
+        on_hold_submission: { notes: body || "(photos in the complaint journal)", partner_id: session.partnerId, submitted_at: agora, via: "journal" },
+        on_hold_submission_at: agora,
+        updated_at: agora,
+      })
+      .eq("id", jobId);
+  }
   return NextResponse.json({ ok: true });
 }
