@@ -4,7 +4,7 @@
 // Events are grouped by jobs.scheduled_date; times come from scheduled_start/end_at
 // (rendered in Europe/London). Month/Week/Day navigate via a single date cursor.
 
-import { Fragment, useMemo, useState } from "react";
+import { Fragment, useMemo, useState, type ReactNode } from "react";
 import { T } from "@/lib/tokens";
 import { Badge, Button, Card, Icon, IconButton, SectionHeader, STATUS_LABELS, Tabs } from "@/components/ui/primitives";
 import { formatGBP } from "@/lib/format";
@@ -65,10 +65,14 @@ export function ScheduleView({
   onOpenJob,
   previewMode = false,
   redactSensitive = false,
+  title = "Schedule",
+  topSlot,
 }: {
   onOpenJob: OpenJob;
   previewMode?: boolean;
   redactSensitive?: boolean;
+  title?: string;
+  topSlot?: ReactNode;
 }) {
   const { jobs, loading, error, refresh } = useMyJobs();
   const isMobile = useIsMobile();
@@ -155,8 +159,9 @@ export function ScheduleView({
 
   return (
     <div style={{ padding: 24, display: "flex", flexDirection: "column", gap: isMobile ? 12 : 16, flex: 1, overflow: "hidden" }}>
+      {topSlot}
       <SectionHeader
-        title="Schedule"
+        title={title}
         subtitle={`${monthLabel} · ${eventsInMonth} scheduled ${eventsInMonth === 1 ? "job" : "jobs"} this month`}
         actions={<Tabs tabs={tabs} active={effectiveView} onChange={setView} variant="pills" />}
         style={isMobile ? { flexDirection: "column", alignItems: "stretch", gap: 10 } : undefined}

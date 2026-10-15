@@ -96,8 +96,9 @@ type ButtonVariant =
   | "ghost_dark";
 
 const BTN_VARIANTS: Record<ButtonVariant, { bg: string; fg: string; bd: string; hover: string; press: string }> = {
-  primary: { bg: T.coral, fg: T.white, bd: "transparent", hover: T.coralHover, press: T.coralPress },
-  secondary: { bg: T.white, fg: T.navy, bd: T.line, hover: T.paper, press: T.paper2 },
+  // Navy é a massa (Fixfy OS UNO, 15/10/2026): não existe botão laranja.
+  primary: { bg: T.navy, fg: T.white, bd: "transparent", hover: T.navySoft, press: T.navyDeep },
+  secondary: { bg: T.white, fg: T.ink, bd: T.lineStrong, hover: T.paper, press: T.paper2 },
   ghost: { bg: "transparent", fg: T.navy, bd: "transparent", hover: T.paper, press: T.paper2 },
   dark: { bg: T.navy, fg: T.white, bd: "transparent", hover: T.navySoft, press: T.navyDeep },
   danger: { bg: T.red, fg: T.white, bd: "transparent", hover: "#B20E29", press: "#A30C25" },
@@ -132,8 +133,8 @@ export function Button({
   const sizes = {
     xs: { h: 24, px: 8, fs: 11, r: 6, ig: 4, is: 12 },
     sm: { h: 30, px: 10, fs: 12, r: 8, ig: 5, is: 14 },
-    md: { h: 36, px: 14, fs: 13, r: 10, ig: 6, is: 16 },
-    lg: { h: 44, px: 18, fs: 14, r: 10, ig: 8, is: 18 },
+    md: { h: 36, px: 14, fs: 13, r: 8, ig: 6, is: 16 },
+    lg: { h: 44, px: 18, fs: 14, r: 8, ig: 8, is: 18 },
   } as const;
   const s = sizes[size];
   const [h, setH] = useState(false);
@@ -163,7 +164,7 @@ export function Button({
         color: disabled ? T.mute : v.fg,
         fontFamily: T.sans,
         fontSize: s.fs,
-        fontWeight: 500,
+        fontWeight: 550,
         letterSpacing: 0,
         cursor: disabled ? "not-allowed" : "pointer",
         transition: `background 120ms ${T.ease}`,
@@ -207,6 +208,7 @@ export function IconButton({
   return (
     <button
       title={title}
+      aria-label={title}
       onClick={onClick}
       onMouseEnter={() => setH(true)}
       onMouseLeave={() => setH(false)}
@@ -459,12 +461,15 @@ export function Tabs({
   onChange,
   style,
   variant = "underline",
+  iconOnly = false,
 }: {
   tabs: TabDef[];
   active: string;
   onChange: (id: string) => void;
   style?: CSSProperties;
   variant?: "underline" | "pills";
+  /** Só o ícone (o rótulo vai para aria-label e title): usado no celular. */
+  iconOnly?: boolean;
 }) {
   if (variant === "pills") {
     return (
@@ -485,11 +490,13 @@ export function Tabs({
             <button
               key={t.id}
               onClick={() => onChange(t.id)}
+              aria-label={iconOnly ? t.label : undefined}
+              title={iconOnly ? t.label : undefined}
               style={{
                 display: "inline-flex",
                 alignItems: "center",
                 gap: 6,
-                padding: "5px 12px",
+                padding: iconOnly ? "5px 8px" : "5px 12px",
                 borderRadius: 6,
                 border: "none",
                 cursor: "pointer",
@@ -503,7 +510,7 @@ export function Tabs({
               }}
             >
               {t.icon && <Icon name={t.icon} size={14} />}
-              {t.label}
+              {!iconOnly && t.label}
               {t.count != null && (
                 <span
                   style={{
@@ -644,12 +651,17 @@ export function SectionHeader({
         // title on a phone — they squeeze it to one letter per line.
         flexDirection: isMobile ? "column" : "row",
         alignItems: isMobile ? "stretch" : "flex-end",
+        // Janela estreita: as ações descem para a linha de baixo em vez de
+        // espremer o título numa coluna de uma palavra.
+        flexWrap: "wrap",
         gap: isMobile ? 10 : 16,
         ...style,
       }}
     >
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: isMobile ? 19 : 22, fontWeight: 600, letterSpacing: -0.3, color: T.navy }}>
+      {/* Base de 260px só na linha (desktop): no celular o cabeçalho é coluna e
+          a base viraria altura, abrindo um buraco embaixo do título. */}
+      <div style={{ flex: isMobile ? "0 0 auto" : "1 1 260px", minWidth: 0 }}>
+        <div style={{ fontSize: 20, fontWeight: 550, letterSpacing: "-0.03em", color: T.ink }}>
           {title}
         </div>
         {subtitle && <div style={{ fontSize: 13, color: T.mute, marginTop: 4 }}>{subtitle}</div>}

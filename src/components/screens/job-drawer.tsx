@@ -1,7 +1,7 @@
 "use client";
 
 // Job drawer — slides from right, 5 tabs (Overview, Checklist, Photos, Notes, Sign-off),
-// sticky progress footer. Ported from job-drawer.jsx.
+// action footer. Ported from job-drawer.jsx.
 
 import {
   useEffect,
@@ -28,6 +28,7 @@ import { formatGBP, formatGBPdec } from "@/lib/format";
 import { useMyJobs } from "@/components/jobs-context";
 import { JobReportForm } from "./job-report-form";
 import { OnHoldResponseForm } from "./on-hold-response-form";
+import { ComplaintJournal } from "./complaint-journal";
 import { useToast } from "@/components/ui/toast";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -44,16 +45,20 @@ type ShowToast = (t: ToastInput) => void;
 
 export function JobDrawer({
   jobId,
+  initialTab,
   onClose,
   onShowToast,
 }: {
   jobId: string;
+  /** Aba de abertura (o link do report no e-mail abre em "signoff"). */
+  initialTab?: string;
   onClose: () => void;
   onShowToast: ShowToast;
 }) {
   const { jobs, refresh } = useMyJobs();
-  const job = jobs.find((j) => j.id === jobId); // real jobs only; unknown id → drawer closed
-  const [tab, setTab] = useState("overview");
+  // O link do e-mail traz o uuid do job; a lista usa a referência. Aceita os dois.
+  const job = jobs.find((j) => j.id === jobId || j.uuid === jobId); // real jobs only; unknown id → drawer closed
+  const [tab, setTab] = useState(initialTab ?? "overview");
   const [closing, setClosing] = useState(false);
   const isMobile = useIsMobile();
   const [starting, setStarting] = useState(false);
@@ -139,15 +144,6 @@ export function JobDrawer({
     completed: "completed",
   };
 
-  const progressTotal =
-    (job.checklistDone || 0) +
-    Math.min(2, job.beforePhotos || 0) +
-    Math.min(2, job.afterPhotos || 0) +
-    (job.notesAdded ? 2 : 0) +
-    (job.signed ? 3 : 0);
-  const progressMax = (job.checklistTotal || 0) + 2 + 2 + 2 + 3;
-  const progress = Math.min(1, progressTotal / progressMax);
-
   const tabs = [
     { id: "overview", label: "Overview", icon: "layout-grid" },
     { id: "signoff", label: "Report", icon: "file-text" },
@@ -194,19 +190,7 @@ export function JobDrawer({
                 <span>·</span>
                 <span>{job.postcode || "—"}</span>
               </div>
-              <div
-                style={{
-                  fontSize: 17,
-                  fontWeight: 500,
-                  color: T.navy,
-                  marginTop: 2,
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                {job.title}
-              </div>
+              <div style={{ fontSize: 16, fontWeight: 600, color: T.ink, marginTop: 2, lineHeight: 1.3 }}>{job.title}</div>
             </div>
             <Badge
               tone={job.needsAttention ? "coral" : statusTone[job.status]}
@@ -224,20 +208,19 @@ export function JobDrawer({
             >
               {job.needsAttention ? "Needs attention" : STATUS_LABELS[job.status]}
             </Badge>
-            <IconButton icon="more-horizontal" size={32} tone="ghost" />
           </div>
 
           {job.needsAttention && (
             <div
               style={{
                 padding: "10px 20px",
-                background: "#FFF5F2",
-                color: T.coral,
+                background: "#FDE6EA",
+                color: "#7D0A1C",
                 display: "flex",
                 alignItems: "flex-start",
                 gap: 10,
                 fontSize: 12.5,
-                borderBottom: `1px solid rgba(237,75,0,0.15)`,
+                borderBottom: `1px solid rgba(200,16,46,0.15)`,
               }}
             >
               <span
@@ -245,7 +228,7 @@ export function JobDrawer({
                   width: 6,
                   height: 6,
                   borderRadius: 9999,
-                  background: T.coral,
+                  background: T.red,
                   marginTop: 5,
                   flexShrink: 0,
                   animation: "fx-pulse 1.6s ease-in-out infinite",
@@ -262,52 +245,26 @@ export function JobDrawer({
             </div>
           )}
           {job.status === "in_progress" && (
-            <div style={{ padding: "10px 20px", background: T.coralTint, color: T.coral, display: "flex", alignItems: "center", gap: 10, fontSize: 12.5 }}>
-              <span style={{ width: 6, height: 6, borderRadius: 9999, background: T.coral, animation: "fx-pulse 1.6s ease-in-out infinite" }} />
+            <div style={{ padding: "10px 20px", background: "#E7EEFF", color: "#07379A", display: "flex", alignItems: "center", gap: 10, fontSize: 12.5 }}>
+              <Icon name="timer" size={14} />
               <span>
-                <b style={{ fontWeight: 600 }}>You&apos;re on the clock.</b> Started 09:42 ·{" "}
-                <span className="fx-mono">{job.elapsed}</span> elapsed.
+                <b style={{ fontWeight: 600 }}>Job in progress.</b>
+                {job.elapsed ? (
+                  <>
+                    {" "}
+                    <span style={{ fontVariantNumeric: "tabular-nums" }}>{job.elapsed}</span> on the clock.
+                  </>
+                ) : null}{" "}
+                Send the report when you finish.
               </span>
-              <span style={{ flex: 1 }} />
-              <button
-                style={{
-                  background: T.white,
-                  color: T.coral,
-                  border: `1px solid ${T.coral}`,
-                  borderRadius: 6,
-                  padding: "3px 10px",
-                  fontSize: 12,
-                  fontWeight: 500,
-                  cursor: "pointer",
-                  fontFamily: T.sans,
-                }}
-              >
-                Pause timer
-              </button>
             </div>
           )}
           {job.status === "final_check" && (
-            <div style={{ padding: "10px 20px", background: T.amber50, color: T.amber, display: "flex", alignItems: "center", gap: 10, fontSize: 12.5 }}>
+            <div style={{ padding: "10px 20px", background: "#FFEFD6", color: "#573600", display: "flex", alignItems: "center", gap: 10, fontSize: 12.5 }}>
               <Icon name="hourglass" size={14} />
               <span>
-                <b style={{ fontWeight: 600 }}>Waiting on the customer to sign.</b> Link sent 22 May 12:24.
+                <b style={{ fontWeight: 600 }}>Report sent.</b> The office is checking it before payment.
               </span>
-              <span style={{ flex: 1 }} />
-              <button
-                style={{
-                  background: T.white,
-                  color: T.amber,
-                  border: `1px solid ${T.amber}`,
-                  borderRadius: 6,
-                  padding: "3px 10px",
-                  fontSize: 12,
-                  fontWeight: 500,
-                  cursor: "pointer",
-                  fontFamily: T.sans,
-                }}
-              >
-                Resend link
-              </button>
             </div>
           )}
 
@@ -352,28 +309,13 @@ export function JobDrawer({
               />
               <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
                 <Button variant="ghost" onClick={() => setCancelInfo(null)} disabled={cancelBusy}>Keep the job</Button>
-                <Button variant="primary" onClick={confirmCancel} disabled={cancelBusy}>{cancelBusy ? "Cancelling…" : "Cancel job"}</Button>
+                <Button variant="danger" onClick={confirmCancel} disabled={cancelBusy}>{cancelBusy ? "Cancelling…" : "Cancel job"}</Button>
               </div>
             </div>
           )}
-          <div style={{ flex: 1 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 5 }}>
-              <span style={{ fontSize: 11.5, color: T.mute, letterSpacing: 0.3 }}>JOB PROGRESS</span>
-              <span style={{ fontSize: 11.5, color: T.ink, fontFamily: T.mono }}>{Math.round(progress * 100)}%</span>
-            </div>
-            <div style={{ height: 5, borderRadius: 9999, background: T.line, overflow: "hidden" }}>
-              <div
-                style={{
-                  width: `${progress * 100}%`,
-                  height: "100%",
-                  background: progress === 1 ? T.green : T.coral,
-                  transition: `width 200ms ${T.ease}`,
-                }}
-              />
-            </div>
-          </div>
+          <div style={{ flex: 1 }} />
           {job.status === "scheduled" && !cancelInfo && (
-            <Button variant="ghost" size="lg" onClick={askCancel} disabled={cancelBusy || starting}>
+            <Button variant="secondary" size="lg" onClick={askCancel} disabled={cancelBusy || starting}>
               {cancelBusy ? "Checking…" : "Can't make it"}
             </Button>
           )}
@@ -389,7 +331,7 @@ export function JobDrawer({
           )}
           {job.status === "final_check" && (
             <Button variant="primary" icon="send" size="lg" onClick={() => setTab("signoff")}>
-              Open sign-off
+              See report
             </Button>
           )}
           {job.status === "completed" && (
@@ -435,6 +377,8 @@ function OverviewTab({
           <OnHoldResponseForm job={job} onShowToast={onShowToast} onSubmitted={onSubmitted} />
         </Card>
       ) : null}
+      {/* Journal da reclamação (15/10/2026): a conversa com o escritório, registrada no job. */}
+      {job.needsAttention || job.onHoldComplaintDescription ? <ComplaintJournal job={job} onShowToast={onShowToast} /> : null}
       <Card style={{ padding: 0, overflow: "hidden" }}>
         <div
           style={{

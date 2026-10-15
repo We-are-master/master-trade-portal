@@ -2,7 +2,7 @@
 
 // My jobs — Board / List / Map. Ported from jobs.jsx.
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { T } from "@/lib/tokens";
 import {
   Badge,
@@ -35,11 +35,14 @@ export function MyJobsView({
   defaultView = "board",
   previewMode = false,
   redactSensitive = false,
+  topSlot,
 }: {
   onOpenJob: OpenJob;
   defaultView?: string;
   previewMode?: boolean;
   redactSensitive?: boolean;
+  /** Trilho List/Calendar de My jobs, acima do título. */
+  topSlot?: ReactNode;
 }) {
   const [view, setView] = useState(defaultView);
   const { jobs, loading, error } = useMyJobs();
@@ -66,6 +69,7 @@ export function MyJobsView({
 
   return (
     <div style={{ padding: 24, display: "flex", flexDirection: "column", gap: 16, flex: 1, overflow: "hidden" }}>
+      {topSlot}
       <SectionHeader
         title="My jobs"
         subtitle={
@@ -77,17 +81,21 @@ export function MyJobsView({
           <div
             style={{
               display: "flex",
-              gap: 8,
+              gap: 6,
               alignItems: "center",
-              flexWrap: "wrap",
-              // Right-aligned beside the title on desktop; on mobile the header
-              // stacks, so the controls read left-to-right like the rest.
-              justifyContent: isMobile ? "flex-start" : "flex-end",
+              // Celular: uma linha só, os três grupos juntos à direita.
+              flexWrap: isMobile ? "nowrap" : "wrap",
+              justifyContent: "flex-end",
             }}
           >
+            {/* Views e Export primeiro; o filtro de data fecha a linha, na ponta direita. */}
+            <Tabs tabs={tabs} active={view} onChange={setView} variant="pills" iconOnly={isMobile} />
+            {isMobile ? (
+              <IconButton icon="download" title="Export" tone="secondary" size={34} />
+            ) : (
+              <Button variant="secondary" icon="download">Export</Button>
+            )}
             <DateRangeFilter value={dateFilter} onChange={setDateFilter} />
-            <Tabs tabs={tabs} active={view} onChange={setView} variant="pills" />
-            <Button variant="secondary" icon="download">Export</Button>
           </div>
         }
       />
@@ -432,6 +440,10 @@ export function SourceTag({ source }: { source: JobSource }) {
 // LIST
 // ============================================================
 function JobsList({ onOpenJob, jobs }: { onOpenJob: OpenJob; jobs: MyJob[] }) {
+  const isMobile = useIsMobile();
+  // Celular: a tabela de 9 colunas espremia o texto em pé. Lista de uma linha
+  // por job (hora, título, área, status), como na prévia de 15/10/2026.
+  if (isMobile) return <JobsListMobile onOpenJob={onOpenJob} jobs={jobs} />;
   return (
     <Card style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column" }}>
       <div style={{ overflow: "auto", flex: 1 }}>
@@ -465,6 +477,58 @@ function JobsList({ onOpenJob, jobs }: { onOpenJob: OpenJob; jobs: MyJob[] }) {
         </table>
       </div>
     </Card>
+  );
+}
+
+function JobsListMobile({ onOpenJob, jobs }: { onOpenJob: OpenJob; jobs: MyJob[] }) {
+  return (
+    <div
+      style={{
+        flex: 1,
+        overflow: "auto",
+        background: T.white,
+        border: `1px solid ${T.line}`,
+        borderRadius: 12,
+      }}
+    >
+      {jobs.map((j, i) => {
+        const hora = j.scheduleArrivalLabel || j.scheduled || j.completed || "";
+        const area = (j.postcode || "").split(" ")[0];
+        return (
+          <button
+            key={j.uuid}
+            type="button"
+            onClick={() => onOpenJob(j.id)}
+            style={{
+              width: "100%",
+              display: "flex",
+              alignItems: "center",
+              gap: 12,
+              minHeight: 60,
+              padding: "10px 14px",
+              border: "none",
+              borderBottom: i === jobs.length - 1 ? "none" : `1px solid ${T.paper2}`,
+              background: "transparent",
+              textAlign: "left",
+              cursor: "pointer",
+              fontFamily: T.sans,
+            }}
+          >
+            <span style={{ flex: 1, minWidth: 0 }}>
+              <span style={{ display: "block", fontSize: 14, fontWeight: 600, color: T.ink }}>{j.title}</span>
+              <span style={{ display: "block", fontSize: 12, color: T.mute, marginTop: 2 }}>
+                {[j.scheduleStartLabel, hora, area].filter(Boolean).join(" · ")}
+              </span>
+            </span>
+            {j.needsAttention ? (
+              <Badge tone="coral" size="sm">{j.onHoldLabel || "Action required"}</Badge>
+            ) : (
+              <Badge tone={j.status} size="sm">{STATUS_LABELS[j.status]}</Badge>
+            )}
+          </button>
+        );
+      })}
+    </div>
   );
 }
 

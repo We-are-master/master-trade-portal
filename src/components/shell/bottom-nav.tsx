@@ -1,61 +1,38 @@
 "use client";
 
-// BottomNav — the mobile navigation. Replaces the sidebar below the mobile
-// breakpoint and behaves like a native tab bar: five destinations with the
-// dashboard raised in the middle. Settings and the account live in MoreSheet,
-// opened from the top bar's overflow button so the five tabs stay symmetrical.
+// BottomNav — a navegação do celular (redesign 15/10/2026): quatro destinos
+// numa barra branca, o ativo marcado pela linha laranja no topo. A conta
+// (perfil, áreas, documentos) abre pela folha do avatar no topo.
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { T } from "@/lib/tokens";
 import { Avatar, Icon } from "@/components/ui/primitives";
 import { PartnerRatingInline } from "@/components/ui/partner-rating";
 import { usePartner } from "@/components/partner-context";
 import { usePartnerRating } from "@/hooks/use-partner-rating";
-import { useMyJobs } from "@/components/jobs-context";
+import { useOffersCount } from "@/components/offers-context";
 import { createClient } from "@/lib/supabase/client";
+import { FIXFY_PHONE_LABEL, FIXFY_PHONE_TEL, FIXFY_WHATSAPP_URL, NAV_ITEMS } from "./nav-config";
 
 /** Height of the bar itself, before the home-indicator inset. */
-export const BOTTOM_NAV_HEIGHT = 62;
-
-interface Tab {
-  id: string;
-  label: string;
-  icon: string;
-}
-
-// Order mirrors the workflow: find work on the left, run work on the right,
-// with the dashboard as the home button in the middle.
-const LEFT_TABS: Tab[] = [
-  { id: "available", label: "Jobs", icon: "wrench" },
-  { id: "quotes", label: "Quotes", icon: "file-text" },
-];
-const RIGHT_TABS: Tab[] = [
-  { id: "jobs", label: "Active", icon: "briefcase" },
-  { id: "schedule", label: "Schedule", icon: "calendar" },
-];
-
+export const BOTTOM_NAV_HEIGHT = 64;
 
 const MORE_ITEMS: { id: string; label: string; icon: string; hint: string }[] = [
   { id: "settings:profile", label: "Profile", icon: "user", hint: "What customers see on your reports" },
-  { id: "settings:trades", label: "Trades & skills", icon: "wrench", hint: "The work you take on" },
+  { id: "settings:trades", label: "Trades and skills", icon: "wrench", hint: "The work you take on" },
   { id: "settings:rates", label: "Rate card", icon: "credit-card", hint: "Your call-out and hourly rates" },
   { id: "settings:availability", label: "Availability", icon: "calendar-clock", hint: "When you can work" },
   { id: "settings:area", label: "Service area", icon: "map-pin", hint: "Where you travel to" },
-  { id: "settings:selfbill", label: "Statements", icon: "receipt", hint: "Payout statements and commission invoices" },
-  { id: "settings:docs", label: "Documents", icon: "shield-check", hint: "Insurance and certificates" },
   { id: "settings:policies", label: "Policies", icon: "gavel", hint: "Agreements and payment rules" },
 ];
 
 export function BottomNav({ active, onNav }: { active: string; onNav: (id: string) => void }) {
-  const { jobs } = useMyJobs();
-  const activeJobs = jobs.filter((j) => j.status === "scheduled" || j.status === "in_progress").length;
-
+  const offers = useOffersCount();
   // Fixed, so it never scrolls away — the page reserves room for it instead.
   return (
     <nav
       aria-label="Main"
-      // fx-keep-grid: the mobile stylesheet collapses grids to one column;
-      // the tab bar is the one grid that must stay five across.
+      // fx-keep-grid: the mobile stylesheet collapses grids to one column.
       className="fx-keep-grid"
       style={{
         position: "fixed",
@@ -64,151 +41,72 @@ export function BottomNav({ active, onNav }: { active: string; onNav: (id: strin
         bottom: 0,
         zIndex: 60,
         display: "grid",
-        gridTemplateColumns: "repeat(5, 1fr)",
-        alignItems: "flex-end",
-        height: BOTTOM_NAV_HEIGHT,
+        gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+        height: `calc(${BOTTOM_NAV_HEIGHT}px + env(safe-area-inset-bottom))`,
         paddingBottom: "env(safe-area-inset-bottom)",
-        background: "rgba(2,0,64,0.94)",
-        backdropFilter: "blur(14px)",
-        WebkitBackdropFilter: "blur(14px)",
-        borderTop: "1px solid rgba(255,255,255,0.08)",
+        boxSizing: "border-box",
+        background: T.white,
+        borderTop: `1px solid ${T.line}`,
         fontFamily: T.sans,
       }}
     >
-      {LEFT_TABS.map((t) => (
-        <TabButton key={t.id} tab={t} active={active} onNav={onNav} />
-      ))}
-
-      <HomeButton active={active === "dashboard"} onNav={() => onNav("dashboard")} />
-
-      <TabButton
-        tab={RIGHT_TABS[0]}
-        active={active}
-        onNav={onNav}
-        badge={activeJobs > 0 ? activeJobs : undefined}
-      />
-      <TabButton tab={RIGHT_TABS[1]} active={active} onNav={onNav} />
-    </nav>
-  );
-}
-
-function TabButton({
-  tab,
-  active,
-  onNav,
-  badge,
-}: {
-  tab: Tab;
-  active: string;
-  onNav: (id: string) => void;
-  badge?: number;
-}) {
-  const sel = active === tab.id;
-  return (
-    <button
-      onClick={() => onNav(tab.id)}
-      aria-current={sel ? "page" : undefined}
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "center",
-        gap: 3,
-        height: BOTTOM_NAV_HEIGHT,
-        border: "none",
-        background: "transparent",
-        cursor: "pointer",
-        padding: 0,
-        color: sel ? T.white : "rgba(255,255,255,0.5)",
-        WebkitTapHighlightColor: "transparent",
-      }}
-    >
-      <span style={{ position: "relative", display: "inline-flex" }}>
-        <Icon name={tab.icon} size={21} />
-        {badge != null && (
-          <span
+      {NAV_ITEMS.map((t) => {
+        const sel = active === t.id;
+        const badge = t.id === "offers" && offers > 0 ? offers : undefined;
+        return (
+          <button
+            key={t.id}
+            type="button"
+            onClick={() => onNav(t.id)}
+            aria-current={sel ? "page" : undefined}
             style={{
-              position: "absolute",
-              top: -5,
-              right: -9,
-              minWidth: 16,
-              height: 16,
-              padding: "0 4px",
-              borderRadius: 9999,
-              background: T.coral,
-              color: T.white,
-              fontFamily: T.mono,
-              fontSize: 10,
-              fontWeight: 500,
-              display: "inline-flex",
+              position: "relative",
+              display: "flex",
+              flexDirection: "column",
               alignItems: "center",
               justifyContent: "center",
-              border: "1.5px solid #020040",
+              gap: 4,
+              height: BOTTOM_NAV_HEIGHT,
+              border: "none",
+              background: "transparent",
+              cursor: "pointer",
+              padding: 0,
+              color: sel ? T.ink : T.mute,
+              WebkitTapHighlightColor: "transparent",
             }}
           >
-            {badge > 9 ? "9+" : badge}
-          </span>
-        )}
-      </span>
-      <span style={{ fontSize: 10, fontWeight: sel ? 600 : 500, letterSpacing: -0.1 }}>{tab.label}</span>
-    </button>
-  );
-}
-
-/** The raised dashboard button — the anchor of the bar. */
-function HomeButton({ active, onNav }: { active: boolean; onNav: () => void }) {
-  return (
-    <button
-      onClick={onNav}
-      aria-label="Dashboard"
-      aria-current={active ? "page" : undefined}
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "flex-end",
-        height: BOTTOM_NAV_HEIGHT,
-        border: "none",
-        background: "transparent",
-        cursor: "pointer",
-        padding: 0,
-        WebkitTapHighlightColor: "transparent",
-      }}
-    >
-      <span
-        style={{
-          width: 52,
-          height: 52,
-          marginTop: -22,
-          borderRadius: 9999,
-          background: T.coral,
-          color: T.white,
-          display: "inline-flex",
-          alignItems: "center",
-          justifyContent: "center",
-          // The ring is the bar's own navy, so the circle reads as punched out of it.
-          boxShadow: active
-            ? "0 0 0 4px #020040, 0 6px 20px rgba(237,75,0,0.5)"
-            : "0 0 0 4px #020040, 0 5px 14px rgba(237,75,0,0.3)",
-          opacity: active ? 1 : 0.92,
-          transition: `opacity 160ms ${T.ease}, box-shadow 160ms ${T.ease}`,
-        }}
-      >
-        <Icon name="layout-dashboard" size={23} />
-      </span>
-      <span
-        style={{
-          fontSize: 10,
-          fontWeight: active ? 600 : 500,
-          color: active ? T.white : "rgba(255,255,255,0.5)",
-          marginTop: 3,
-          marginBottom: 7,
-          letterSpacing: -0.1,
-        }}
-      >
-        Home
-      </span>
-    </button>
+            {sel && <span style={{ position: "absolute", top: 0, left: "24%", right: "24%", height: 2, background: T.coral }} />}
+            <span style={{ position: "relative", display: "inline-flex" }}>
+              <Icon name={t.icon} size={20} />
+              {badge != null && (
+                <span
+                  style={{
+                    position: "absolute",
+                    top: -6,
+                    right: -10,
+                    minWidth: 16,
+                    height: 16,
+                    padding: "0 4px",
+                    boxSizing: "border-box",
+                    borderRadius: 9999,
+                    background: T.navy,
+                    color: T.white,
+                    fontSize: 10,
+                    fontWeight: 600,
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  {badge > 9 ? "9+" : badge}
+                </span>
+              )}
+            </span>
+            <span style={{ fontSize: 11, fontWeight: sel ? 600 : 500 }}>{t.label}</span>
+          </button>
+        );
+      })}
+    </nav>
   );
 }
 
@@ -256,7 +154,7 @@ export function MoreSheet({
       <div
         onClick={(e) => e.stopPropagation()}
         role="dialog"
-        aria-label="More"
+        aria-label="Account"
         style={{
           background: T.white,
           borderTopLeftRadius: 18,
@@ -327,6 +225,17 @@ export function MoreSheet({
           })}
         </div>
 
+        <div className="fx-keep-grid" style={{ borderTop: `1px solid ${T.line}`, padding: "12px 16px", display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8 }}>
+          <a href={FIXFY_PHONE_TEL} style={contactBtn}>
+            <Icon name="phone" size={16} />
+            <span style={{ fontVariantNumeric: "tabular-nums" }}>{FIXFY_PHONE_LABEL}</span>
+          </a>
+          <a href={FIXFY_WHATSAPP_URL} target="_blank" rel="noreferrer" style={contactBtn}>
+            <Icon name="message-circle" size={16} color="#0E8A5F" />
+            <span>WhatsApp</span>
+          </a>
+        </div>
+
         <div style={{ borderTop: `1px solid ${T.line}`, padding: "10px 22px 4px" }}>
           <button
             onClick={signOut}
@@ -352,3 +261,18 @@ export function MoreSheet({
     </div>
   );
 }
+
+const contactBtn = {
+  height: 44,
+  borderRadius: 8,
+  border: `1px solid ${T.lineStrong}`,
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  gap: 8,
+  fontSize: 14,
+  fontWeight: 550,
+  color: T.ink,
+  textDecoration: "none",
+  fontFamily: T.sans,
+} as const;

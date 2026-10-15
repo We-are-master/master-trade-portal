@@ -17,6 +17,9 @@ import { useIsMobile } from "@/hooks/use-media-query";
  */
 const MOBILE_INLINE_OPTIONS = 3;
 
+/** Rótulo curto no celular, para o filtro caber na mesma linha das views. */
+const MOBILE_SHORT: Partial<Record<DateFilterMode, string>> = { tomorrow: "Tmrw", week: "Week", month: "Month" };
+
 export function DateRangeFilter({
   value,
   onChange,
@@ -52,15 +55,18 @@ export function DateRangeFilter({
   // menu, the button wears its label instead.
   const overflowActive = isCustom || !!hiddenSelection;
 
+  const label = (opt: { id: DateFilterMode; label: string }) => (isMobile && MOBILE_SHORT[opt.id]) || opt.label;
+  // Escolhido em navy, como o trilho do topo (laranja é só sinal no UNO).
   const chip = (active: boolean): CSSProperties => ({
-    padding: "5px 12px",
+    padding: isMobile ? "5px 9px" : "5px 12px",
     borderRadius: 6,
-    fontSize: 12.5,
-    fontWeight: 500,
+    fontSize: isMobile ? 12 : 12.5,
+    fontWeight: 550,
     fontFamily: T.sans,
+    whiteSpace: "nowrap",
     cursor: "pointer",
-    border: `1px solid ${active ? T.coral : T.line}`,
-    background: active ? T.coral : T.white,
+    border: `1px solid ${active ? T.navy : "transparent"}`,
+    background: active ? T.navy : "transparent",
     color: active ? T.white : T.slate,
     transition: `all 120ms ${T.ease}`,
   });
@@ -70,8 +76,8 @@ export function DateRangeFilter({
       <div
         style={{
           display: "inline-flex",
-          flexWrap: "wrap",
-          gap: 4,
+          flexWrap: isMobile ? "nowrap" : "wrap",
+          gap: isMobile ? 2 : 4,
           padding: 3,
           borderRadius: 8,
           background: T.paper2,
@@ -80,7 +86,7 @@ export function DateRangeFilter({
       >
         {inlineOptions.map((opt) => (
           <button key={opt.id} type="button" onClick={() => selectQuick(opt.id)} style={chip(value.mode === opt.id)}>
-            {opt.label}
+            {label(opt)}
           </button>
         ))}
         <button
@@ -96,7 +102,7 @@ export function DateRangeFilter({
             gap: 5,
           }}
         >
-          {hiddenSelection ? hiddenSelection.label : null}
+          {hiddenSelection ? label(hiddenSelection) : null}
           <Icon name="more-horizontal" size={14} color={overflowActive ? T.white : T.slate} />
         </button>
       </div>
@@ -105,10 +111,12 @@ export function DateRangeFilter({
         <div
           style={{
             position: "absolute",
+            // O filtro fica na ponta direita: o menu abre alinhado à direita, para dentro da tela.
             right: 0,
             top: "calc(100% + 6px)",
             zIndex: 50,
             width: isMobile ? 240 : 260,
+            maxWidth: "calc(100vw - 28px)",
             borderRadius: 12,
             border: `1px solid ${T.line}`,
             background: T.white,
