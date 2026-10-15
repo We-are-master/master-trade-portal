@@ -208,6 +208,7 @@ export function IconButton({
   return (
     <button
       title={title}
+      aria-label={title}
       onClick={onClick}
       onMouseEnter={() => setH(true)}
       onMouseLeave={() => setH(false)}
@@ -460,12 +461,15 @@ export function Tabs({
   onChange,
   style,
   variant = "underline",
+  iconOnly = false,
 }: {
   tabs: TabDef[];
   active: string;
   onChange: (id: string) => void;
   style?: CSSProperties;
   variant?: "underline" | "pills";
+  /** Só o ícone (o rótulo vai para aria-label e title): usado no celular. */
+  iconOnly?: boolean;
 }) {
   if (variant === "pills") {
     return (
@@ -486,11 +490,13 @@ export function Tabs({
             <button
               key={t.id}
               onClick={() => onChange(t.id)}
+              aria-label={iconOnly ? t.label : undefined}
+              title={iconOnly ? t.label : undefined}
               style={{
                 display: "inline-flex",
                 alignItems: "center",
                 gap: 6,
-                padding: "5px 12px",
+                padding: iconOnly ? "5px 8px" : "5px 12px",
                 borderRadius: 6,
                 border: "none",
                 cursor: "pointer",
@@ -504,7 +510,7 @@ export function Tabs({
               }}
             >
               {t.icon && <Icon name={t.icon} size={14} />}
-              {t.label}
+              {!iconOnly && t.label}
               {t.count != null && (
                 <span
                   style={{

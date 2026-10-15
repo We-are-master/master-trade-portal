@@ -81,17 +81,20 @@ export function MyJobsView({
           <div
             style={{
               display: "flex",
-              gap: 8,
+              gap: isMobile ? 6 : 8,
               alignItems: "center",
-              flexWrap: "wrap",
-              // Right-aligned beside the title on desktop; on mobile the header
-              // stacks, so the controls read left-to-right like the rest.
-              justifyContent: isMobile ? "flex-start" : "flex-end",
+              // Celular: uma linha só (filtro curto, views e Export só com ícone).
+              flexWrap: isMobile ? "nowrap" : "wrap",
+              justifyContent: isMobile ? "space-between" : "flex-end",
             }}
           >
             <DateRangeFilter value={dateFilter} onChange={setDateFilter} />
-            <Tabs tabs={tabs} active={view} onChange={setView} variant="pills" />
-            <Button variant="secondary" icon="download">Export</Button>
+            <Tabs tabs={tabs} active={view} onChange={setView} variant="pills" iconOnly={isMobile} />
+            {isMobile ? (
+              <IconButton icon="download" title="Export" tone="secondary" />
+            ) : (
+              <Button variant="secondary" icon="download">Export</Button>
+            )}
           </div>
         }
       />
