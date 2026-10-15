@@ -12,7 +12,7 @@ import { usePartner } from "@/components/partner-context";
 import { usePartnerRating } from "@/hooks/use-partner-rating";
 import { useOffersCount } from "@/components/offers-context";
 import { createClient } from "@/lib/supabase/client";
-import { NAV_ITEMS } from "./nav-config";
+import { FIXFY_PHONE_LABEL, FIXFY_PHONE_TEL, FIXFY_WHATSAPP_URL, NAV_ITEMS } from "./nav-config";
 
 /** Height of the bar itself, before the home-indicator inset. */
 export const BOTTOM_NAV_HEIGHT = 64;
@@ -225,6 +225,17 @@ export function MoreSheet({
           })}
         </div>
 
+        <div className="fx-keep-grid" style={{ borderTop: `1px solid ${T.line}`, padding: "12px 16px", display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8 }}>
+          <a href={FIXFY_PHONE_TEL} style={contactBtn}>
+            <Icon name="phone" size={16} />
+            <span style={{ fontVariantNumeric: "tabular-nums" }}>{FIXFY_PHONE_LABEL}</span>
+          </a>
+          <a href={FIXFY_WHATSAPP_URL} target="_blank" rel="noreferrer" style={contactBtn}>
+            <Icon name="message-circle" size={16} color="#0E8A5F" />
+            <span>WhatsApp</span>
+          </a>
+        </div>
+
         <div style={{ borderTop: `1px solid ${T.line}`, padding: "10px 22px 4px" }}>
           <button
             onClick={signOut}
@@ -250,3 +261,18 @@ export function MoreSheet({
     </div>
   );
 }
+
+const contactBtn = {
+  height: 44,
+  borderRadius: 8,
+  border: `1px solid ${T.lineStrong}`,
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  gap: 8,
+  fontSize: 14,
+  fontWeight: 550,
+  color: T.ink,
+  textDecoration: "none",
+  fontFamily: T.sans,
+} as const;

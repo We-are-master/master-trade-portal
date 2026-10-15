@@ -9,7 +9,7 @@ import { Avatar, Icon } from "@/components/ui/primitives";
 import { useIsMobile } from "@/hooks/use-media-query";
 import { usePartner } from "@/components/partner-context";
 import { NAV_BG, SHELL_TOP_H, Wordmark } from "./sidebar";
-import { FIXFY_PHONE_TEL } from "./nav-config";
+import { FIXFY_PHONE_LABEL, FIXFY_PHONE_TEL, FIXFY_WHATSAPP_URL } from "./nav-config";
 
 export function TopBar({
   title,
@@ -73,23 +73,33 @@ export function TopBar({
         <span style={{ fontWeight: 600, color: T.ink }}>{title}</span>
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <a href={FIXFY_PHONE_TEL} aria-label="Call Fixfy" title="Call Fixfy" style={iconBtn}>
-          <Icon name="phone" size={16} />
+        <a href={FIXFY_PHONE_TEL} title="Call Fixfy" style={pillBtn}>
+          <Icon name="phone" size={14} />
+          <span style={{ fontVariantNumeric: "tabular-nums" }}>{FIXFY_PHONE_LABEL}</span>
+        </a>
+        <a href={FIXFY_WHATSAPP_URL} target="_blank" rel="noreferrer" title="WhatsApp support" style={pillBtn}>
+          <Icon name="message-circle" size={14} color="#0E8A5F" />
+          <span>WhatsApp support</span>
         </a>
       </div>
     </header>
   );
 }
 
-const iconBtn = {
-  width: 32,
+const pillBtn = {
   height: 32,
+  padding: "0 12px",
+  gap: 8,
+  fontSize: 13,
+  fontWeight: 550,
+  fontFamily: T.sans,
+  whiteSpace: "nowrap",
   borderRadius: 8,
   border: `1px solid ${T.line}`,
   background: T.white,
   display: "inline-flex",
   alignItems: "center",
   justifyContent: "center",
-  color: T.slate,
+  color: T.ink,
   textDecoration: "none",
 } as const;

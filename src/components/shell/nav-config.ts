@@ -48,5 +48,7 @@ export function normalizeRoute(route: string): string {
   return sub && !alias.includes(":") ? `${alias}:${sub}` : alias;
 }
 
-/** Fixfy: WhatsApp e ligações. */
+/** Fixfy: o mesmo número atende ligação e WhatsApp (Zendesk Talk). */
+export const FIXFY_PHONE_LABEL = "020 4538 4668";
 export const FIXFY_PHONE_TEL = "tel:+442045384668";
+export const FIXFY_WHATSAPP_URL = "https://wa.me/442045384668";
