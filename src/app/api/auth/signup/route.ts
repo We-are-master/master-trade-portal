@@ -146,7 +146,8 @@ export async function POST(req: NextRequest) {
   const { data: created, error: createErr } = await admin.auth.admin.createUser({
     email,
     email_confirm: true,
-    user_metadata: { full_name: fullName, company, role: "external_partner" },
+    // user_type: o trigger do OS (handle_new_user) só deixa de criar perfil de equipe com ele.
+    user_metadata: { full_name: fullName, company, role: "external_partner", user_type: "external_partner" },
   });
   if (createErr || !created?.user) {
     const msg = (createErr?.message ?? "").toLowerCase();
