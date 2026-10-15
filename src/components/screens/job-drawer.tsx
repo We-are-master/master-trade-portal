@@ -531,7 +531,7 @@ function OverviewTab({
       ) : null}
 
       {job.referencePhotos && job.referencePhotos.length > 0 ? (
-        <DrawerSection title="Site reference photos" icon="image">
+        <DrawerSection title="Site photos" icon="image">
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(88px, 1fr))", gap: 8 }}>
             {job.referencePhotos.map((url) => (
               <a
@@ -549,7 +549,7 @@ function OverviewTab({
         </DrawerSection>
       ) : null}
 
-      <DrawerSection title="Your net" icon="banknote">
+      <DrawerSection title="Your pay" icon="banknote">
         <div
           style={{
             display: "grid",
@@ -990,7 +990,7 @@ function PhotosTab({ job }: { job: MyJob }) {
         <Card style={{ padding: 0 }}>
           <div style={{ padding: "12px 16px", borderBottom: `1px solid ${T.line}`, display: "flex", alignItems: "center", gap: 10 }}>
             <Icon name="image" size={14} color={T.navy} />
-            <span style={{ fontSize: 13, fontWeight: 500, color: T.navy }}>Site reference photos</span>
+            <span style={{ fontSize: 13, fontWeight: 500, color: T.navy }}>Site photos</span>
             <Badge tone="neutral" size="sm">{reference.length}</Badge>
             <span style={{ flex: 1 }} />
             <span style={{ fontSize: 11.5, color: T.mute }}>From the job brief</span>

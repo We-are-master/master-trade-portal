@@ -259,7 +259,7 @@ export function LeadsView({
     <div style={{ padding: 24, display: "flex", flexDirection: "column", gap: 16, flex: 1, overflow: "auto" }}>
       <SectionHeader
         title="Leads"
-        subtitle="Customer enquiries Fixfy has sent your way. Reach out fast — first contact wins the work."
+        help="Review customer enquiries and record your interest in suitable work."
         actions={
           <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
             {tab === "new" && (
@@ -1023,7 +1023,7 @@ export function AvailableJobsView({
       {topSlot}
       <SectionHeader
         title={title}
-        subtitle="Fixfy-quoted work, customer's already signed off. First to accept wins."
+        help="Review the scope, schedule and your pay before accepting an available job."
         actions={
           <Button variant="secondary" size="sm" icon="refresh-cw" onClick={load}>
             Refresh
@@ -1241,7 +1241,7 @@ export function AvailableQuotesView({
       {topSlot}
       <SectionHeader
         title={title}
-        subtitle="Fixfy clients needing a custom estimate. Submit a number, win the work."
+        help="Review quote requests, submit your pricing and track the outcome."
       />
 
       <Tabs tabs={tabs} active={tab} onChange={(id) => setTab(id as QuoteRequestStatus)} variant="pills" />
@@ -1261,7 +1261,7 @@ export function AvailableQuotesView({
         ) : segments[tab].length === 0 ? (
           <EmptyState
             icon="file-text"
-            title={tab === "lost" ? "Nothing lost recently" : "Nothing here yet"}
+            title={tab === "lost" ? "No unsuccessful quotes" : "Nothing here yet"}
             hint={
               tab === "lost"
                 ? "When a customer picks someone else, those quotes land here."

@@ -54,7 +54,7 @@ function dayTag(ymd: string | undefined, today: string): { label: string; today:
   const d = new Date(`${ymd}T12:00:00Z`);
   const t = new Date(`${today}T12:00:00Z`);
   const diff = Math.round((d.getTime() - t.getTime()) / 86_400_000);
-  if (diff === 1) return { label: "Tmrw", today: false };
+  if (diff === 1) return { label: "Tomorrow", today: false };
   if (diff > 1 && diff < 7) return { label: d.toLocaleDateString("en-GB", { weekday: "short", timeZone: "UTC" }), today: false };
   return { label: d.toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" }), today: false };
 }
@@ -201,6 +201,7 @@ export function TodayView({
     <div data-screen-scroll style={{ flex: 1, overflow: "auto", padding: isMobile ? 16 : "20px 24px 56px", fontFamily: T.sans }}>
       <div style={{ maxWidth: 1180, margin: "0 auto", display: "flex", flexDirection: "column", gap: 16 }}>
         <UViewHead
+          help="Review today’s jobs, outstanding reports, new offers and your next payment."
           title={isMobile ? "Today" : `${greeting()}${firstName ? `, ${firstName}` : ""}`}
           meta={
             isMobile

@@ -1,5 +1,7 @@
 "use client";
 
+import { HelpHint } from "@/components/ui/help-hint";
+
 // Shared primitives — ported from the design prototype (primitives.jsx).
 // Badge, Button, IconButton, Card, Avatar, Input, Toggle, Tabs, EmptyState,
 // SectionHeader, StatCard, StatusDot, Modal, Field. Styled with the `T` tokens.
@@ -636,7 +638,9 @@ export function SectionHeader({
   subtitle,
   actions,
   style,
+  help,
 }: {
+  help?: string;
   title: ReactNode;
   subtitle?: ReactNode;
   actions?: ReactNode;
@@ -662,7 +666,7 @@ export function SectionHeader({
           a base viraria altura, abrindo um buraco embaixo do título. */}
       <div style={{ flex: isMobile ? "0 0 auto" : "1 1 260px", minWidth: 0 }}>
         <div style={{ fontSize: 20, fontWeight: 550, letterSpacing: "-0.03em", color: T.ink }}>
-          {title}
+          {title} {help && <HelpHint label={typeof title === "string" ? title : "This section"} text={help} />}
         </div>
         {subtitle && <div style={{ fontSize: 13, color: T.mute, marginTop: 4 }}>{subtitle}</div>}
       </div>
@@ -850,8 +854,8 @@ export function StatusDot({ status }: { status: string }) {
 export const STATUS_LABELS: Record<string, string> = {
   scheduled: "Scheduled",
   in_progress: "In progress",
-  awaiting: "Final checks",
-  final_check: "Final checks",
+  awaiting: "Final review",
+  final_check: "Final review",
   completed: "Completed",
   cancelled: "Cancelled",
   block: "Time blocked",

@@ -11,14 +11,14 @@ export const NAV_ITEMS: NavItem[] = [
   { id: "today", label: "Today", icon: "house" },
   { id: "offers", label: "Offers", icon: "inbox" },
   { id: "jobs", label: "My jobs", icon: "briefcase" },
-  { id: "money", label: "Money", icon: "wallet" },
+  { id: "money", label: "Payments", icon: "wallet" },
 ];
 
 export const PAGE_TITLES: Record<string, string> = {
   today: "Today",
   offers: "Offers",
   jobs: "My jobs",
-  money: "Money",
+  money: "Payments",
   settings: "Account",
 };
 

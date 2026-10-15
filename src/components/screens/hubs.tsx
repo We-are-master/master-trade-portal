@@ -34,6 +34,7 @@ export function OffersHub({
   const rail = (
     <USegmented
       label="Offer type"
+      help={tab === "quotes" ? "Requests requiring your pricing. Track quotes from submission to outcome." : "Available jobs with a defined scope and pay. Review an offer before accepting."}
       value={tab}
       onChange={onSub}
       options={[
@@ -71,6 +72,7 @@ export function JobsHub({
   const rail = (
     <USegmented
       label="Jobs view"
+      help={tab === "calendar" ? "Your scheduled jobs arranged by date." : "Your assigned jobs and their current status."}
       value={tab}
       onChange={onSub}
       options={[
@@ -93,7 +95,8 @@ export function MoneyHub({ sub, onSub }: { sub: string; onSub: (s: string) => vo
     <div data-screen-scroll style={{ flex: 1, overflow: "auto", padding: isMobile ? 16 : "20px 24px 56px", fontFamily: T.sans }}>
       <div style={{ maxWidth: 1000, display: "flex", flexDirection: "column", gap: 16 }}>
         <USegmented
-          label="Money"
+          label="Payments"
+          help={tab === "docs" ? "Insurance, certificates and agreements required to work with Fixfy." : "Your payment details, payout statements and commission invoices."}
           value={tab}
           onChange={onSub}
           options={[

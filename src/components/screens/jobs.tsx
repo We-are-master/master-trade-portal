@@ -72,6 +72,7 @@ export function MyJobsView({
       {topSlot}
       <SectionHeader
         title="My jobs"
+        help="Track your assigned jobs from scheduling to final review and completion. Open a job to view its details and submit a report."
         subtitle={
           loading
             ? "Loading…"
@@ -129,7 +130,7 @@ export function MyJobsView({
 const BASE_BOARD_COLUMNS = [
   { id: "scheduled", label: "Scheduled", accent: T.blue },
   { id: "in_progress", label: "In progress", accent: T.coral },
-  { id: "final_check", label: "Final checks", accent: T.amber },
+  { id: "final_check", label: "Final review", accent: T.amber },
   { id: "completed", label: "Completed", accent: T.green },
   { id: "cancelled", label: "Cancelled", accent: T.mute },
 ] as const;
@@ -408,7 +409,7 @@ function BoardCard({ job, onClick }: { job: MyJob; onClick: () => void }) {
 
       <div style={{ display: "flex", alignItems: "center", gap: 8, paddingTop: 6, borderTop: `1px solid ${T.line}` }}>
         <span style={{ fontFamily: T.mono, fontSize: 13, fontWeight: 500, color: T.navy }}>{formatGBP(job.total)}</span>
-        {job.status === "final_check" && <Badge tone="warning" size="sm">Final checks</Badge>}
+        {job.status === "final_check" && <Badge tone="warning" size="sm">Final review</Badge>}
         {job.status === "completed" && job.rating && (
           <span style={{ display: "inline-flex", alignItems: "center", gap: 3, fontSize: 11, color: T.amber }}>
             <Icon name="star" size={11} /> {job.rating}
@@ -697,8 +698,8 @@ function JobsMap({ onOpenJob, jobs }: { onOpenJob: OpenJob; jobs: MyJob[] }) {
           {[
             { s: "in_progress", label: "In progress" },
             { s: "scheduled", label: "Scheduled" },
-            { s: "final_check", label: "Final checks" },
-            { s: "completed", label: "Done" },
+            { s: "final_check", label: "Final review" },
+            { s: "completed", label: "Completed" },
           ].map((l) => (
             <span key={l.s} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
               <span style={{ width: 8, height: 8, borderRadius: 9999, background: dotColor(l.s) }} />

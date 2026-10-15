@@ -1,5 +1,7 @@
 "use client";
 
+import { HelpHint } from "@/components/ui/help-hint";
+
 // Peças do desenho novo do portal (Fixfy OS UNO): cartão, chip de estado,
 // quadradinho de ícone colorido, botões e cabeçalho de cartão. Navy é a massa,
 // laranja só sinal; cada estado usa o fundo claro com a tinta escura dele.
@@ -199,13 +201,16 @@ export function USegmented<T extends string>({
   value,
   onChange,
   label,
+  help,
 }: {
+  help?: string;
   options: { id: T; label: string }[];
   value: T;
   onChange: (v: T) => void;
   label: string;
 }) {
   return (
+    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
     <div
       role="tablist"
       aria-label={label}
@@ -241,15 +246,17 @@ export function USegmented<T extends string>({
         );
       })}
     </div>
+    {help && <HelpHint label={label} text={help} />}
+    </div>
   );
 }
 
 /** Cabeçalho de página: título à esquerda, ações à direita, na mesma linha. */
-export function UViewHead({ title, meta, actions }: { title: string; meta?: ReactNode; actions?: ReactNode }) {
+export function UViewHead({ title, meta, actions, help }: { title: string; meta?: ReactNode; actions?: ReactNode; help?: string }) {
   return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap", minHeight: 38 }}>
       <div style={{ minWidth: 0 }}>
-        <h1 style={{ margin: 0, fontSize: 20, fontWeight: 550, letterSpacing: "-0.03em", color: T.ink }}>{title}</h1>
+        <h1 style={{ margin: 0, fontSize: 20, fontWeight: 550, letterSpacing: "-0.03em", color: T.ink }}>{title} {help && <HelpHint label={title} text={help} />}</h1>
         {meta ? <p style={{ margin: "2px 0 0", fontSize: 13, color: UNO.ink3 }}>{meta}</p> : null}
       </div>
       {actions ? <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>{actions}</div> : null}
