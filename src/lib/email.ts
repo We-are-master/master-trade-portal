@@ -58,10 +58,10 @@ function otpEmailHtml(code: string): string {
                   Sign-in code
                 </p>
                 <h1 style="margin:0 0 12px;font-size:24px;font-weight:700;letter-spacing:-0.02em;color:${T.navy};line-height:1.25;">
-                  Enter this to continue
+                  Your sign-in code
                 </h1>
                 <p style="margin:0 0 24px;font-size:14px;color:${T.slate};line-height:1.55;">
-                  Paste the code below into the Fixfy Trade portal. It expires in a few minutes and only works once — for your safety, don&#39;t share it with anyone.
+                  Enter this code in Fixfy Trade to sign in. It expires in a few minutes and can only be used once. Do not share it with anyone.
                 </p>
 
                 <!-- Code block -->
@@ -75,7 +75,7 @@ function otpEmailHtml(code: string): string {
                 </div>
 
                 <p style="margin:26px 0 0;font-size:12px;color:${T.mute};line-height:1.55;">
-                  Didn&#39;t try to sign in? You can safely ignore this email — no one can use the code without your inbox.
+                  If you did not request this code, ignore this email. Do not share the code or enter it on a page you did not open yourself.
                 </p>
               </td>
             </tr>
@@ -85,7 +85,7 @@ function otpEmailHtml(code: string): string {
               <td style="background:#ffffff;border-top:1px solid ${T.line};border-left:1px solid ${T.line};border-right:1px solid ${T.line};border-bottom:1px solid ${T.line};border-radius:0 0 18px 18px;padding:18px 32px 22px;">
                 <p style="margin:0;font-size:11px;color:${T.mute};line-height:1.55;">
                   Fixfy Ltd — the partner network behind Fixfy home services.<br />
-                  Questions? Reply to this email and a human will pick it up.
+                  Need help? Reply to this email to contact the Fixfy team.
                 </p>
                 <p style="margin:10px 0 0;font-size:10px;color:${T.mute};letter-spacing:0.04em;">
                   © ${year} Fixfy Ltd · London, United Kingdom
@@ -125,9 +125,9 @@ function newPartnerAdminHtml(p: { email: string; contactName: string; companyNam
   return `
 <!doctype html>
 <html lang="en">
-  <head><meta charset="utf-8" /><meta name="viewport" content="width=device-width,initial-scale=1" /><title>New Fixfy Trade signup</title></head>
+  <head><meta charset="utf-8" /><meta name="viewport" content="width=device-width,initial-scale=1" /><title>New trade registration</title></head>
   <body style="margin:0;padding:0;background:${T.paper};font-family:'Inter','Segoe UI',-apple-system,BlinkMacSystemFont,sans-serif;color:${T.ink};">
-    <div style="display:none;overflow:hidden;line-height:1px;opacity:0;max-height:0;max-width:0;">New partner registered — review & activate.</div>
+    <div style="display:none;overflow:hidden;line-height:1px;opacity:0;max-height:0;max-width:0;">A new partner has registered. Review their profile before activation.</div>
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:${T.paper};padding:32px 16px;">
       <tr><td align="center">
         <table role="presentation" width="480" cellpadding="0" cellspacing="0" border="0" style="max-width:480px;width:100%;">
@@ -145,8 +145,8 @@ function newPartnerAdminHtml(p: { email: string; contactName: string; companyNam
               ${row("Email", p.email)}
             </table>
             <p style="margin:22px 0 0;font-size:13px;color:${T.slate};line-height:1.55;">
-              They're in the portal now with <strong>restricted access</strong> until you approve them.
-              Open <strong>Master OS → Partners</strong>, find this partner and hit <strong>Activate</strong> —
+              This partner has <strong>restricted portal access</strong> pending approval.
+              Open <strong>Master OS → Partners</strong>, review this partner’s details and required documents, then select <strong>Activate</strong> when approved —
               that unlocks their account and emails them automatically.
             </p>
           </td></tr>
@@ -175,7 +175,7 @@ export async function sendNewPartnerAdminNotification(p: {
   await resend.emails.send({
     from,
     to,
-    subject: `New Fixfy Trade signup: ${p.companyName}`,
+    subject: `New trade registration: ${p.companyName}`,
     html: newPartnerAdminHtml(p),
   });
 }
