@@ -162,6 +162,7 @@ export function ScheduleView({
       {topSlot}
       <SectionHeader
         title={title}
+        help="View scheduled jobs by date. Select a job to open its details."
         subtitle={`${monthLabel} · ${eventsInMonth} scheduled ${eventsInMonth === 1 ? "job" : "jobs"} this month`}
         actions={<Tabs tabs={tabs} active={effectiveView} onChange={setView} variant="pills" />}
         style={isMobile ? { flexDirection: "column", alignItems: "stretch", gap: 10 } : undefined}

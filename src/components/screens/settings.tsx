@@ -1,5 +1,7 @@
 "use client";
 
+import { HelpHint } from "@/components/ui/help-hint";
+
 // Settings — 10 sub-pages with a left sub-nav. Ported from settings.jsx.
 // Several pages (Trades, Service area, Availability, Rate card, Documents) are reused
 // by the onboarding flow, so they're exported.
@@ -147,8 +149,7 @@ export function SettingsHeader({ title, subtitle, saved = false }: { title: stri
   return (
     <div style={{ display: "flex", alignItems: "flex-end", marginBottom: 18 }}>
       <div style={{ flex: 1 }}>
-        <div style={{ fontSize: 22, fontWeight: 600, letterSpacing: -0.3, color: T.navy }}>{title}</div>
-        {subtitle && <div style={{ fontSize: 13, color: T.mute, marginTop: 4 }}>{subtitle}</div>}
+        <div style={{ fontSize: 22, fontWeight: 600, letterSpacing: -0.3, color: T.navy }}>{title} {subtitle && <HelpHint label={title} text={subtitle} />}</div>
       </div>
       {saved && (
         <Badge tone="success" icon="check" size="md">
@@ -174,8 +175,7 @@ export function PageCard({
     <Card style={{ marginBottom: 14 }}>
       <div style={{ padding: "14px 18px", borderBottom: `1px solid ${T.line}`, display: "flex", alignItems: "flex-start", gap: 12 }}>
         <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 14, fontWeight: 500, color: T.navy }}>{title}</div>
-          {subtitle && <div style={{ fontSize: 12, color: T.mute, marginTop: 3 }}>{subtitle}</div>}
+          <div style={{ fontSize: 14, fontWeight: 500, color: T.navy }}>{title} {subtitle && <HelpHint label={title} text={subtitle} />}</div>
         </div>
         {action}
       </div>
@@ -289,13 +289,13 @@ function ProfilePage() {
         <Row label="Phone" hint="For the office and job updates">
           <Input value={form.phone} onChange={set("phone")} icon="phone" placeholder="07…" />
         </Row>
-        <Row label="Trading name" hint="Sole trader name OR limited company name">
+        <Row label="Trading name" hint="Your sole trader or registered company name">
           <Input value={form.tradingName} onChange={set("tradingName")} />
         </Row>
-        <Row label="Years experience">
+        <Row label="Years of experience">
           <Input value={form.years} onChange={set("years")} placeholder="e.g. 12" suffix="years" />
         </Row>
-        <Row label="Public bio" hint="Shows on customer-facing reports">
+        <Row label="Profile summary" hint="Shows on customer-facing reports">
           <textarea
             value={form.bio}
             onChange={(e) => set("bio")(e.target.value)}
@@ -477,7 +477,7 @@ export function TradesPage() {
   return (
     <>
       {!inOnboarding && (
-        <SettingsHeader title="Trades & skills" subtitle="The services you offer. Pick the ones you do and set one as your primary — we only send work matching your enabled trades." />
+        <SettingsHeader title="Trades and skills" subtitle="Select the services you offer and choose your primary trade. These settings help match you with work." />
       )}
       <PageCard title="Your services" subtitle="All off by default — turn on only what you offer. Pick one as your primary trade.">
         {loading ? (
@@ -588,13 +588,13 @@ export function RatesPage() {
         <PageCard title="Services">
           <div style={{ fontSize: 13, color: T.mute }}>
             {tradeCount === 0
-              ? "Add your trades first (Trades & skills) — the matching services then appear here to price."
-              : "No catalog services match your trades yet. Once Fixfy has services for your trades, they'll appear here."}
+              ? "Add your trades first (Trades and skills) — the matching services then appear here to price."
+              : "No catalogue services match your trades yet. Once Fixfy has services for your trades, they'll appear here."}
           </div>
         </PageCard>
       ) : (
         <>
-          <PageCard title="Your services" subtitle="Standard pay comes from the Fixfy catalog. Turn off Use standard to set your own rate per size, time and add-on.">
+          <PageCard title="Your services" subtitle="Standard pay comes from the Fixfy catalogue. Turn off Use standard to set your own rate per size, time and add-on.">
             <RateCardEditor rows={rows} onChange={setRows} />
           </PageCard>
           {!inOnboarding && (
@@ -663,7 +663,7 @@ export function AvailabilityPage() {
       }
     }
     if (!(av.maxJobsPerDay >= 1)) {
-      toast({ text: "Max jobs per day must be at least 1", icon: "alert-triangle", tone: "coral" });
+      toast({ text: "Daily job limit must be at least 1", icon: "alert-triangle", tone: "coral" });
       return;
     }
     setSaving(true);
@@ -682,7 +682,7 @@ export function AvailabilityPage() {
   if (loading || !av) {
     return (
       <>
-        <SettingsHeader title="Availability" subtitle="When you're working. We only dispatch within these windows." />
+        <SettingsHeader title="Availability" subtitle="Set your working hours and days off to keep your availability up to date." />
         <div style={{ padding: 8, color: T.mute, fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}>
           <Icon name="loader" size={14} color={T.mute} /> Loading availability…
         </div>
@@ -692,7 +692,7 @@ export function AvailabilityPage() {
 
   return (
     <>
-      <SettingsHeader title="Availability" subtitle="When you're working. We only dispatch within these windows." />
+      <SettingsHeader title="Availability" subtitle="Set your working hours and days off to keep your availability up to date." />
       <PageCard title="Working hours">
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {DAYS.map(({ key, label }) => {
@@ -767,8 +767,8 @@ export function AvailabilityPage() {
       </PageCard>
 
       {/* Intervalo, almoço e emergência 24/7 saíram (29/09/2026): o OS não usa, e opção que não faz nada engana. */}
-      <PageCard title="How many jobs">
-        <Row label="Max jobs per day">
+      <PageCard title="Daily capacity">
+        <Row label="Daily job limit">
           <Input value={String(av.maxJobsPerDay)} onChange={(v) => setAv((a) => (a ? { ...a, maxJobsPerDay: Number(v.replace(/\D/g, "")) || 0 } : a))} suffix="jobs" />
         </Row>
       </PageCard>
@@ -1040,7 +1040,7 @@ function PreferencesPage() {
   if (loading || !prefs || !notif) {
     return (
       <>
-        <SettingsHeader title="Job preferences" subtitle="The kinds of work you want — and don't." />
+        <SettingsHeader title="Job preferences" subtitle="Set job value and capacity limits, and manage automatic acceptance." />
         <div style={{ padding: 8, color: T.mute, fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}>
           <Icon name="loader" size={14} color={T.mute} /> Loading preferences…
         </div>
@@ -1050,14 +1050,14 @@ function PreferencesPage() {
 
   return (
     <>
-      <SettingsHeader title="Job preferences" subtitle="The kinds of work you want — and don't." />
+      <SettingsHeader title="Job preferences" subtitle="Set job value and capacity limits, and manage automatic acceptance." />
       {/* "What you accept" saiu (29/09/2026): leads ficam ocultos (a Fixfy só envia jobs; o dado continua
           salvo), e emergência, vários dias e só seguro não eram usados pelo OS. */}
       <PageCard title="Limits">
         <Row label="Minimum job value">
           <Input value={String(prefs.minJobValue)} onChange={(v) => setPref({ minJobValue: Number(v.replace(/\D/g, "")) || 0 })} prefix="£" />
         </Row>
-        <Row label="Max simultaneous active jobs">
+        <Row label="Active job limit">
           <Input value={String(prefs.maxActiveJobs)} onChange={(v) => setPref({ maxActiveJobs: Number(v.replace(/\D/g, "")) || 0 })} suffix="jobs" />
         </Row>
       </PageCard>
@@ -1179,7 +1179,7 @@ export function PaymentHowItWorksCard() {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
       {/* Simple rule */}
-      <PageCard title="How you get paid">
+      <PageCard title="Payment terms">
         <div
           style={{
             padding: "14px 16px",
@@ -1209,7 +1209,7 @@ export function PaymentHowItWorksCard() {
       </PageCard>
 
       {/* Schedule table */}
-      <PageCard title="Next payment dates" subtitle="Same system every 2 weeks after this.">
+      <PageCard title="Next payment dates" subtitle="Payment dates repeat every two weeks.">
         <div style={{ borderRadius: 10, border: `1px solid ${T.line}`, overflow: "hidden" }}>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1.4fr", background: T.paper2, borderBottom: `1px solid ${T.line}` }}>
             <div style={{ padding: "10px 14px", fontSize: 11, fontWeight: 600, color: T.mute, letterSpacing: 0.4 }}>PAID ON</div>
@@ -1233,7 +1233,7 @@ export function PaymentHowItWorksCard() {
       </PageCard>
 
       {/* Example */}
-      <PageCard title="Easy example">
+      <PageCard title="Payment example">
         <div style={{ padding: "16px 18px", borderRadius: 10, background: T.paper, border: `1px solid ${T.line}` }}>
           <p style={{ fontSize: 14, color: T.ink, lineHeight: 1.65, margin: "0 0 14px" }}>
             You finish a <span className="fx-mono" style={{ fontWeight: 700, color: T.coral }}>{formatGBPdec(exampleAmount)}</span> job on{" "}
@@ -1395,8 +1395,8 @@ function PayoutsCardInner({ handleRef }: { handleRef: RefObject<PayoutsCardHandl
 
   return (
     <PageCard
-      title="Payouts"
-      subtitle="Where you receive payment for jobs completed through the platform. Bank details are held securely by Stripe."
+      title="Payment details"
+      subtitle="Choose how to receive payment and manage your bank details."
       action={enabled ? <Badge tone="success" icon="check">Payouts active</Badge> : started ? <Badge tone="warning">Setup incomplete</Badge> : undefined}
     >
       {loading ? (
@@ -1526,8 +1526,8 @@ export function SelfBillPage() {
     <>
       {!inOnboarding && (
         <SettingsHeader
-          title="Statements"
-          subtitle="Payout statements and commission invoices. Your agreements live in Documents; how payment works is in Policies."
+          title="Payments"
+          subtitle="Manage your payment details and view statements. Read payment terms in Policies."
         />
       )}
 
@@ -1669,7 +1669,7 @@ export function DocsPage({ onChanged }: { onChanged?: () => void } = {}) {
 
   return (
     <>
-      {!inOnboarding && <SettingsHeader title="Documents & certifications" subtitle="What we need on file before you can pick up work." />}
+      {!inOnboarding && <SettingsHeader title="Documents" subtitle="Upload and track the insurance, certificates and agreements required for your work." />}
       {loading ? (
         <div style={{ padding: 8, color: T.mute, fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}>
           <Icon name="loader" size={14} color={T.mute} /> Loading documents…
@@ -2086,7 +2086,7 @@ export function PoliciesPage() {
 
   return (
     <>
-      {!inOnboarding && <SettingsHeader title="Policies & contracts" subtitle="The agreements that govern working with Fixfy. Read them any time." />}
+      {!inOnboarding && <SettingsHeader title="Policies" subtitle="The agreements that govern working with Fixfy. Read them any time." />}
       {loading ? (
         <div style={{ padding: 8, color: T.mute, fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}>
           <Icon name="loader" size={14} color={T.mute} /> Loading policies…
@@ -2113,7 +2113,7 @@ export function PoliciesPage() {
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
             <PolicyDocCard
               icon="wallet"
-              title="How you get paid"
+              title="Payment terms"
               meta="Payment schedule & rules"
               onRead={() => setReadingPayment(true)}
             />
@@ -2193,7 +2193,7 @@ export function PoliciesPage() {
       )}
 
       {readingPayment && (
-        <Modal title="How you get paid" onClose={() => setReadingPayment(false)} width={680}>
+        <Modal title="Payment terms" onClose={() => setReadingPayment(false)} width={680}>
           <div style={{ padding: 20, maxHeight: "60vh", overflow: "auto" }}>
             <PaymentHowItWorksCard />
           </div>

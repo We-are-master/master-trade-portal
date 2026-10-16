@@ -20,7 +20,7 @@ export const BOTTOM_NAV_HEIGHT = 64;
 const MORE_ITEMS: { id: string; label: string; icon: string; hint: string }[] = [
   { id: "settings:profile", label: "Profile", icon: "user", hint: "What customers see on your reports" },
   { id: "settings:trades", label: "Trades and skills", icon: "wrench", hint: "The work you take on" },
-  { id: "settings:rates", label: "Rate card", icon: "credit-card", hint: "Your call-out and hourly rates" },
+  { id: "settings:rates", label: "Rate card", icon: "credit-card", hint: "Your pay rates for each service" },
   { id: "settings:availability", label: "Availability", icon: "calendar-clock", hint: "When you can work" },
   { id: "settings:area", label: "Service area", icon: "map-pin", hint: "Where you travel to" },
   { id: "settings:policies", label: "Policies", icon: "gavel", hint: "Agreements and payment rules" },

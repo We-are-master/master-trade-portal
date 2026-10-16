@@ -370,7 +370,7 @@ export function Dashboard({
           id: `a-${j.id}`,
           icon: "clock",
           tone: "amber",
-          text: `Final checks — ${job.title}`,
+          text: `Final review — ${job.title}`,
           meta: `${job.customer.name} · ${formatGBP(job.total)}`,
           when: j.scheduled ?? "",
           sortKey: j.scheduledDate ?? "9999",
@@ -509,7 +509,7 @@ export function Dashboard({
             onClick={() => onNav("jobs")}
           />
           <StatCard
-            label="Final checks"
+            label="Final review"
             value={d.awaiting.length}
             hint={d.pendingPayout > 0 ? `${formatGBP(d.pendingPayout)} pending` : undefined}
             accent="coral"
