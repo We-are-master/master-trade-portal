@@ -1,4 +1,4 @@
-// POST /api/partner/onboarding-availability  { days: ["mon",...], start, end, maxJobsPerDay }
+// POST /api/partner/onboarding-availability  { days: ["mon",...], start, end, maxJobsPerDay, receiveQuotes? }
 // "When can you work?" step of /get-started, right after tools & materials.
 // It is what the OS uses to count daily capacity and to decide who gets an
 // offer: a partner with no working days gets no jobs (29/09/2026).
@@ -16,7 +16,7 @@ const HORA = /^([01]\d|2[0-3]):[0-5]\d$/;
 export async function POST(req: NextRequest) {
   const session = await getPartnerSession();
   if (!session) return NextResponse.json({ error: "Not signed in" }, { status: 401 });
-  const body = (await req.json().catch(() => null)) as { days?: unknown; start?: unknown; end?: unknown; maxJobsPerDay?: unknown } | null;
+  const body = (await req.json().catch(() => null)) as { days?: unknown; start?: unknown; end?: unknown; maxJobsPerDay?: unknown; receiveQuotes?: unknown } | null;
   const dias = Array.isArray(body?.days) ? (body!.days as unknown[]).filter((d): d is DayKey => DAYS.some((x) => x.key === d)) : [];
   const start = typeof body?.start === "string" ? body.start : "";
   const end = typeof body?.end === "string" ? body.end : "";
@@ -30,7 +30,14 @@ export async function POST(req: NextRequest) {
     days: Object.fromEntries(DAYS.map(({ key }) => [key, { on: dias.includes(key), start, end }])) as Availability["days"],
     maxJobsPerDay: max,
   };
-  const { error } = await createServiceClient().from("partners").update({ availability }).eq("id", session.partnerId);
+  const sb = createServiceClient();
+  const patch: Record<string, unknown> = { availability };
+  // Quote ou só job fechado: mesma chave do Settings ("Receive quote requests") e do OS.
+  if (typeof body?.receiveQuotes === "boolean") {
+    const { data: atual } = await sb.from("partners").select("job_preferences").eq("id", session.partnerId).maybeSingle();
+    patch.job_preferences = { ...((atual?.job_preferences as Record<string, unknown> | null) ?? {}), receiveLeads: body.receiveQuotes };
+  }
+  const { error } = await sb.from("partners").update(patch).eq("id", session.partnerId);
   if (error) {
     console.error("[partner/onboarding-availability]", error);
     return NextResponse.json({ error: "Couldn't save your availability." }, { status: 500 });
