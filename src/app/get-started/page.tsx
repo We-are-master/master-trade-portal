@@ -557,6 +557,8 @@ function GetStartedFunnel() {
   const [workStart, setWorkStart] = useState("08:00");
   const [workEnd, setWorkEnd] = useState("18:00");
   const [workMax, setWorkMax] = useState(3);
+  // Quote ou só job fechado (dono, 26/10/2026): "não" = nunca recebe convite para orçar.
+  const [receiveQuotes, setReceiveQuotes] = useState<boolean | null>(true);
   const saveAvailabilityAndContinue = async () => {
     setError(null);
     setBusy(true);
@@ -565,7 +567,7 @@ function GetStartedFunnel() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "same-origin",
-        body: JSON.stringify({ days: [...workDays], start: workStart, end: workEnd, maxJobsPerDay: workMax }),
+        body: JSON.stringify({ days: [...workDays], start: workStart, end: workEnd, maxJobsPerDay: workMax, receiveQuotes: receiveQuotes !== false }),
       });
       const d = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
       if (!res.ok || !d.ok) throw new Error(d.error || "Couldn't save your availability.");
@@ -1444,6 +1446,12 @@ function GetStartedFunnel() {
                   </select>{" "}
                   jobs a day
                 </label>
+                <YesNoQuestion
+                  question="Do you want to quote for jobs too?"
+                  hint="We send you quote requests to price. Say no to get booked jobs only."
+                  value={receiveQuotes}
+                  onChange={setReceiveQuotes}
+                />
               </div>
             </StepShell>
           )}
