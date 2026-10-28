@@ -10,7 +10,8 @@ import { createServiceClient } from "@/lib/supabase/service";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-const BID_WINDOW_HOURS = 12;
+// Prazo do lance igual ao convite do OS (PARTNER_QUOTE_BID_INVITE_EXPIRY_HOURS), 48h desde 28/10/2026.
+const BID_WINDOW_HOURS = 48;
 const LONDON = "Europe/London";
 
 function fmtDeadline(iso: string | null): string {
