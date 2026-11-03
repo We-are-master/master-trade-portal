@@ -28,8 +28,14 @@ export async function POST(req: NextRequest) {
     const { error } = await supabase.auth.verifyOtp({ email, token, type: "email" });
     if (error) {
       const msg = (error.message ?? "").toLowerCase();
+      // O Gotrue responde "token has expired or is invalid" para código vencido, dígito
+      // errado E código antigo (cada pedido novo cancela o anterior). Dizer só "expired"
+      // levou parceiro a achar que o e-mail demorava (Top Freeze, 03/11/2026).
       if (msg.includes("expired")) {
-        return NextResponse.json({ error: "That code expired. Request a new one." }, { status: 410 });
+        return NextResponse.json(
+          { error: "That code isn't valid anymore. Use the code from your latest email, or request a new one." },
+          { status: 410 },
+        );
       }
       return NextResponse.json({ error: "That code is invalid. Check the digits or request a new one." }, { status: 401 });
     }
